@@ -40,7 +40,7 @@ orc spawn-goal <project> <goal-name>
 
 **IMPORTANT:** Pass only the bare goal name (e.g., `hierarchical-pane-layout`), NOT the full branch name (e.g., `task/hierarchical-pane-layout`). The type prefix (`feat/`, `fix/`, `task/`) is resolved automatically by the CLI.
 
-This creates a tmux pane for the goal orchestrator inside the project window, launches the agent with the goal-orchestrator persona, and the goal orchestrator will handle planning, bead creation, engineer dispatching, and review within its scope.
+This creates a tmux pane for the goal orchestrator inside the project window (or an overflow window like `{project}:2` if the project window is full), launches the agent with the goal-orchestrator persona, and the goal orchestrator will handle planning, bead creation, engineer dispatching, and review within its scope. The pane title is set to `"goal: <goal-name>"` for identification.
 
 Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:
 
@@ -96,7 +96,7 @@ Always pass the goal name so engineers branch from the goal branch:
 orc spawn <project> <bead-id> <goal>
 ```
 
-This creates the worktree, launches the agent, and delivers the assignment via `.orch-assignment.md`.
+This creates the worktree, launches the agent as a pane in the goal window (title: `"eng: <bead>"`), and delivers the assignment via `.orch-assignment.md`. If the goal window doesn't exist yet, it is created automatically. If the goal window is full, the engineer goes into an overflow window (e.g., `{project}/{goal}:2`).
 
 Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:
 

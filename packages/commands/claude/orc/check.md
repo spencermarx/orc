@@ -4,18 +4,23 @@
 
 Check on all active workers, handle status changes, and summarize. The behavior depends on your role:
 
-- **Project orchestrator**: Poll goal orchestrator statuses (goal-level windows).
-- **Goal orchestrator**: Poll engineer statuses (bead-level worktrees).
+- **Project orchestrator**: Poll goal orchestrator statuses (goal panes in the project window and overflow windows).
+- **Goal orchestrator**: Poll engineer statuses (engineer panes in the goal window and overflow windows).
 
 ## Instructions (Project Orchestrator)
 
 ### Step 1 — List Active Goal Orchestrators
 
-Find all active goal orchestrator windows for this project by listing tmux windows matching `<project>/<goal>` pattern (one level deep, not `<project>/<goal>/<bead>`).
+Find all active goal orchestrator panes in the project window (and any overflow windows like `<project>:2`, `<project>:3`). Goal orchestrator panes have titles matching `"goal: <name>"`. List panes with:
+```bash
+tmux list-panes -t "orc:<project>" -F '#{pane_index}:#{pane_title}' | grep "^.*:goal: "
+# Also check overflow windows
+tmux list-panes -t "orc:<project>:2" -F '#{pane_index}:#{pane_title}' 2>/dev/null | grep "^.*:goal: "
+```
 
 ### Step 2 — Read Status for Each Goal Orchestrator
 
-For each active goal orchestrator window, check if the agent is still running and read its `.worker-status` file (at the project root, not in a worktree).
+For each active goal orchestrator pane, check if the agent is still running (capture pane output) and read its `.worker-status` file (at the project root, not in a worktree).
 
 #### Status: `working` (or agent is actively running)
 No action needed. Note elapsed time if available.
@@ -24,7 +29,7 @@ No action needed. Note elapsed time if available.
 The goal orchestrator has completed all beads and is signaling for review.
 1. Inspect the goal branch — check `git log` and `git diff main..<goal-branch>` to understand what was implemented.
 2. Assess whether the implementation satisfies the original request.
-3. **If satisfied:** Mark the goal as complete. Teardown the goal orchestrator window if appropriate.
+3. **If satisfied:** Mark the goal as complete. Teardown the goal orchestrator pane if appropriate.
 4. **If not satisfied:** Write specific feedback to the goal orchestrator's `.worker-feedback` file so it can address the issues.
 
 #### Status: `blocked: <reason>`
@@ -37,9 +42,9 @@ The goal orchestrator is stuck.
 3. If resolved, clear `.worker-status` back to `working` and notify the goal orchestrator.
 
 #### Status: `dead` (or no running agent process)
-The agent has crashed or exited unexpectedly.
+The agent pane has crashed or exited unexpectedly.
 1. Report the dead goal orchestrator with any available context.
-2. Suggest options: relaunch with `orc spawn-goal`, teardown, or manual inspection.
+2. Suggest options: relaunch with `orc spawn-goal`, teardown the pane, or manual inspection.
 
 ### Step 3 — Summarize
 
@@ -59,7 +64,12 @@ Suggest next actions if any items need attention.
 
 ### Step 1 — List Active Worktrees
 
-Find all active worktrees for this project by listing windows matching `<project>/<goal>/*` pattern, or by scanning the `.worktrees/` directory.
+Find all active engineer panes in the goal window (and any overflow windows like `<project>/<goal>:2`). Engineer panes have titles matching `"eng: <bead>"`. Also scan the `.worktrees/` directory for worktree paths.
+```bash
+tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}:#{pane_title}' | grep "^.*:eng: "
+# Also check overflow windows
+tmux list-panes -t "orc:<project>/<goal>:2" -F '#{pane_index}:#{pane_title}' 2>/dev/null | grep "^.*:eng: "
+```
 
 ### Step 2 — Read Status for Each Worker
 
