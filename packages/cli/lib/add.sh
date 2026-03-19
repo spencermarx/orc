@@ -35,7 +35,7 @@ printf '\n[projects.%s]\npath = "%s"\n' "$key" "$path" >> "$projects_file"
 # Bootstrap beads if not initialized
 if command -v bd &>/dev/null && [[ ! -d "$path/.beads" ]]; then
   _info "Initializing beads in $path..."
-  bd -C "$path" init 2>/dev/null || _warn "Could not initialize beads. Run 'bd init' in the project manually."
+  (cd "$path" && bd init) 2>/dev/null || _warn "Could not initialize beads. Run 'bd init' in the project manually."
 fi
 
 _info "Added project '$key' → $path"
