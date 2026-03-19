@@ -1,10 +1,54 @@
-# /orc:dispatch — Spawn Engineers for Ready Beads
+# /orc:dispatch — Spawn Goal Orchestrators or Engineers
 
 **Role:** Orchestrator (project or goal)
 
-Check for ready beads and spawn engineer agents in isolated worktrees.
+The behavior depends on your role:
 
-## Instructions
+- **Project orchestrator**: Spawn goal orchestrators for planned goals.
+- **Goal orchestrator**: Spawn engineers for ready beads.
+
+## Instructions (Project Orchestrator)
+
+### Step 1 — Identify Ready Goals
+
+Check which goals have their branches created and are ready to be worked on. If goals have dependencies on other goals, only dispatch goals whose dependencies are complete.
+
+If no goals are ready:
+- Check if any are blocked by incomplete dependencies
+- Report the current state and suggest waiting or re-planning
+
+### Step 2 — Check Spawn Approval
+
+Run `echo $ORC_YOLO` to check the mode.
+
+**If `ORC_YOLO=1` (YOLO mode):** Do NOT ask for confirmation. Do NOT present a table and ask "Shall I proceed?". Just immediately run `orc spawn-goal` for every ready goal. No questions, no delays.
+
+**If `ORC_YOLO` is not `1` (normal mode):** Present the list and ask:
+```
+Ready to spawn N goal orchestrators:
+  <goal-name>  (<type>) — <brief description>
+
+Spawn these goal orchestrators? [Y/n]
+```
+
+### Step 3 — Spawn Goal Orchestrators
+
+For each approved goal:
+```bash
+orc spawn-goal <project> <goal-name>
+```
+
+This creates a tmux window for the goal orchestrator, launches the agent with the goal-orchestrator persona, and the goal orchestrator will handle planning, bead creation, engineer dispatching, and review within its scope.
+
+Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:
+
+1. Wait ~60 seconds for goal orchestrators to start planning
+2. Run `/orc:check` to poll statuses
+3. Handle any signals (review, blocked, dead)
+4. Wait ~90 seconds, poll again
+5. Repeat until all goal orchestrators are done or blocked
+
+## Instructions (Goal Orchestrator)
 
 ### Step 1 — Find Ready Beads
 
@@ -45,16 +89,9 @@ Spawn these engineers? [Y/n]
 
 ### Step 5 — Spawn Engineers
 
-For each approved bead, determine the correct spawn command based on your role:
-
-**Goal orchestrator** — always pass the goal name so engineers branch from the goal branch:
+Always pass the goal name so engineers branch from the goal branch:
 ```bash
 orc spawn <project> <bead-id> <goal>
-```
-
-**Project orchestrator** — spawn without a goal (engineers branch from HEAD):
-```bash
-orc spawn <project> <bead-id>
 ```
 
 This creates the worktree, launches the agent, and delivers the assignment via `.orch-assignment.md`.

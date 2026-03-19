@@ -38,6 +38,11 @@ Admin:
   board <project>                 Open board view
   leave                           Detach from tmux
 
+Internal:
+  spawn <project> <bead> [goal]   Create worktree + launch engineer
+  spawn-goal <project> <goal>     Launch goal orchestrator session
+  review <project> <bead>         Launch review pane in worktree
+
 Options:
   --yolo                          Skip agent permission prompts
   --help, -h                      Show this help
