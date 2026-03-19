@@ -492,6 +492,150 @@ _tmux_set_pane_title() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Pane layout engine — auto-tiling, registry, min-size, rebalancing
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Registry dir lives inside the orc tmp space, keyed by window name.
+_pane_registry_dir() {
+  local window="$1"
+  # Sanitize window name for filesystem (replace / and spaces)
+  local safe_name="${window//\//_}"
+  safe_name="${safe_name// /_}"
+  echo "${TMPDIR:-/tmp}/orc-pane-registry/${safe_name}"
+}
+
+# Add a pane to the registry for a window.
+# Usage: _pane_registry_add "window-name" "pane-id" "role" [min_width] [min_height]
+_pane_registry_add() {
+  local window="$1"
+  local pane_id="$2"
+  local role="$3"
+  local min_width="${4:-20}"
+  local min_height="${5:-10}"
+  local dir
+  dir="$(_pane_registry_dir "$window")"
+  mkdir -p "$dir"
+  printf '%s\n' "role=${role}" "min_width=${min_width}" "min_height=${min_height}" > "$dir/${pane_id}"
+}
+
+# Remove a pane from the registry.
+# Usage: _pane_registry_remove "window-name" "pane-id"
+_pane_registry_remove() {
+  local window="$1"
+  local pane_id="$2"
+  local dir
+  dir="$(_pane_registry_dir "$window")"
+  rm -f "$dir/${pane_id}" 2>/dev/null || true
+}
+
+# List registered panes for a window (prints "pane_id|role|min_width|min_height" per line).
+_pane_registry_list() {
+  local window="$1"
+  local dir
+  dir="$(_pane_registry_dir "$window")"
+  [[ -d "$dir" ]] || return 0
+  local f
+  for f in "$dir"/*; do
+    [[ -f "$f" ]] || continue
+    local pane_id role min_width min_height
+    pane_id="$(basename "$f")"
+    role="$(grep '^role=' "$f" | cut -d= -f2-)"
+    min_width="$(grep '^min_width=' "$f" | cut -d= -f2-)"
+    min_height="$(grep '^min_height=' "$f" | cut -d= -f2-)"
+    printf '%s|%s|%s|%s\n' "$pane_id" "$role" "$min_width" "$min_height"
+  done
+}
+
+# Clear the entire registry for a window (e.g., on window teardown).
+_pane_registry_clear() {
+  local window="$1"
+  local dir
+  dir="$(_pane_registry_dir "$window")"
+  rm -rf "$dir" 2>/dev/null || true
+}
+
+# Check minimum size constraints for all registered panes in a window.
+# Returns 0 if all panes meet their min-size, 1 if any violate.
+# Prints violations to stderr.
+# Usage: _pane_min_size_check "window-name"
+_pane_min_size_check() {
+  local window="$1"
+  local target
+  target="$(_tmux_target "$window")"
+  local violations=0
+
+  while IFS='|' read -r pane_id role min_width min_height; do
+    [[ -z "$pane_id" ]] && continue
+    # Get actual pane dimensions
+    local actual_width actual_height
+    actual_width="$(tmux display-message -t "${target}.${pane_id}" -p '#{pane_width}' 2>/dev/null || echo 0)"
+    actual_height="$(tmux display-message -t "${target}.${pane_id}" -p '#{pane_height}' 2>/dev/null || echo 0)"
+    if [[ "$actual_width" -lt "$min_width" ]] || [[ "$actual_height" -lt "$min_height" ]]; then
+      _warn "Pane ${pane_id} (${role}): ${actual_width}x${actual_height} below minimum ${min_width}x${min_height}"
+      ((violations++))
+    fi
+  done < <(_pane_registry_list "$window")
+
+  [[ "$violations" -eq 0 ]]
+}
+
+# Auto-tile panes in a window using an appropriate layout.
+# Picks the best tmux layout based on pane count and window dimensions.
+# Usage: _tmux_tile_panes "window-name" [layout-hint: "columns"|"rows"|"auto"]
+_tmux_tile_panes() {
+  local window="$1"
+  local hint="${2:-auto}"
+  local target
+  target="$(_tmux_target "$window")"
+
+  local pane_count
+  pane_count="$(_tmux_pane_count "$window")"
+
+  # Single pane — nothing to tile
+  [[ "$pane_count" -le 1 ]] && return 0
+
+  local layout
+  if [[ "$hint" == "columns" ]]; then
+    layout="even-horizontal"
+  elif [[ "$hint" == "rows" ]]; then
+    layout="even-vertical"
+  else
+    # Auto: pick layout based on pane count and window aspect ratio
+    local win_width win_height
+    win_width="$(tmux display-message -t "$target" -p '#{window_width}' 2>/dev/null || echo 120)"
+    win_height="$(tmux display-message -t "$target" -p '#{window_height}' 2>/dev/null || echo 40)"
+    if [[ "$pane_count" -eq 2 ]]; then
+      # 2 panes: prefer side-by-side if wide enough, else stacked
+      if [[ "$win_width" -ge 160 ]]; then
+        layout="even-horizontal"
+      else
+        layout="even-vertical"
+      fi
+    elif [[ "$pane_count" -le 4 ]]; then
+      layout="tiled"
+    else
+      layout="tiled"
+    fi
+  fi
+
+  tmux select-layout -t "$target" "$layout" 2>/dev/null || true
+}
+
+# Rebalance panes after adding or removing a pane.
+# Re-applies tiling and checks min-size constraints.
+# Usage: _tmux_rebalance "window-name" [layout-hint]
+_tmux_rebalance() {
+  local window="$1"
+  local hint="${2:-auto}"
+
+  # Re-tile
+  _tmux_tile_panes "$window" "$hint"
+
+  # Check constraints — warn but don't fail
+  _pane_min_size_check "$window" || true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Agent adapter
 # ─────────────────────────────────────────────────────────────────────────────
 
