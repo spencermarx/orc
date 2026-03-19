@@ -241,6 +241,8 @@ _tmux_ensure_session() {
   fi
 
   # ── Functional settings (idempotent — safe to re-apply) ──────────
+  tmux set-option -t "$ORC_TMUX_SESSION" history-limit 50000
+  tmux set-option -t "$ORC_TMUX_SESSION" alternate-screen off
   tmux set-option -t "$ORC_TMUX_SESSION" base-index 1
   tmux set-option -t "$ORC_TMUX_SESSION" renumber-windows on
   tmux set-option -t "$ORC_TMUX_SESSION" allow-rename off
