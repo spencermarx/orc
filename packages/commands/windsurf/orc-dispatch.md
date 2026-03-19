@@ -54,11 +54,11 @@ orc spawn <project> <bead-id>
 
 This creates the worktree, launches the agent, and delivers the assignment via `.orch-assignment.md`.
 
-Report results:
-```
-Spawned:
-  bd-XXXX  <title>   — worktree created, agent launched
-  bd-XXXX  <title>   — worktree created, agent launched
+Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:
 
-Run `/orc:check` to monitor progress.
-```
+1. Wait ~30 seconds for engineers to start
+2. Run `/orc:check` to poll statuses
+3. Handle any signals (review, blocked, dead)
+4. Wait ~60 seconds, poll again
+5. Repeat until all engineers are done or blocked
+6. When a wave completes, check `bd ready` and dispatch the next wave

@@ -58,7 +58,9 @@ orc_spawn() {
 
   local persona
   persona="$(_resolve_persona "engineer" "$project_path")"
-  _launch_agent_in_window "$window_name" "$persona" "$project_path"
+  local init_prompt
+  init_prompt="Read your assignment in .orch-assignment.md now. Investigate the relevant code, then implement the work described. When done, run /orc:done."
+  _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"
 
   _info "Engineer spawned for bead '$bead' in project '$project'."
 }

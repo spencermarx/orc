@@ -41,13 +41,30 @@ orc teardown <project> <bead>  # Remove worktree + clean up
 ## Dispatching
 
 1. Run `bd ready` to find beads with all dependencies met
-2. For each ready bead, propose spawning an engineer: `orc spawn <project> <bead>`
-3. Wait for user approval (unless `spawn` gate is set to `"auto"`)
-4. Write `.orch-assignment.md` into the worktree with the bead context
+2. For each ready bead, spawn an engineer: `orc spawn <project> <bead>`
+3. If `$ORC_YOLO` is `1`, skip confirmation. Otherwise wait for approval.
+
+## After Dispatching: Autonomous Monitoring
+
+**After spawning engineers, you MUST immediately begin monitoring them.** Do not wait for the user to run `/orc:check`. Start a monitor loop:
+
+1. Wait ~30 seconds (let the engineers start working)
+2. Run `/orc:check` to poll all worker statuses
+3. Handle any signals (review, blocked, found, dead)
+4. Wait ~60 seconds
+5. Poll again
+6. Repeat until all active engineers are either done or blocked
+
+When all beads in the current wave are done:
+- Check `bd ready` for newly unblocked beads
+- Dispatch the next wave automatically
+- Continue monitoring
+
+This loop runs until all beads are complete or you need to escalate to the human. You are an autonomous coordinator, not a passive responder.
 
 ## The Review Loop
 
-When polling with `/orc:check`:
+When `/orc:check` detects a review signal:
 
 1. **Detect review signal:** Read `.worker-status` in each active worktree. When it contains `review`:
 2. **Launch review pane:** Run `orc review <project> <bead>` to create the ephemeral review pane (vertical split, right side, 40% width)
