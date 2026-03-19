@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/orc-ascii.svg" alt="orc" width="480" />
+  <img src="assets/orc-cover.png" alt="orc" width="800" />
 </p>
-
-<h1 align="center">orc</h1>
 
 <p align="center">
   <strong>Command a horde of AI coding agents across your projects.</strong>
