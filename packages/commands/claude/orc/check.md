@@ -20,7 +20,7 @@ tmux list-panes -t "orc:<project>:2" -F '#{pane_index}:#{pane_title}' 2>/dev/nul
 
 ### Step 2 — Read Status for Each Goal Orchestrator
 
-For each active goal orchestrator pane, check if the agent is still running (capture pane output) and read its `.worker-status` file (at the project root, not in a worktree).
+For each active goal orchestrator pane, derive the goal name from the pane title (e.g., `"goal: auth-bug"` → `auth-bug`). Check if the agent is still running (capture pane output) and read its per-goal status file at `.goals/{goal}/.worker-status`.
 
 #### Status: `working` (or agent is actively running)
 No action needed. Note elapsed time if available.
@@ -30,16 +30,16 @@ The goal orchestrator has completed all beads and is signaling for review.
 1. Inspect the goal branch — check `git log` and `git diff main..<goal-branch>` to understand what was implemented.
 2. Assess whether the implementation satisfies the original request.
 3. **If satisfied:** Mark the goal as complete. Teardown the goal orchestrator pane if appropriate.
-4. **If not satisfied:** Write specific feedback to the goal orchestrator's `.worker-feedback` file so it can address the issues.
+4. **If not satisfied:** Write specific feedback to `.goals/{goal}/.worker-feedback` so the goal orchestrator can address the issues.
 
 #### Status: `blocked: <reason>`
 The goal orchestrator is stuck.
-1. Read the block reason.
+1. Read the block reason from `.goals/{goal}/.worker-status`.
 2. Evaluate if you can resolve it:
    - **Clarification needed**: Provide the answer and clear the block.
    - **Dependency issue**: Check if the blocking goal is close to done.
    - **Out of scope**: Escalate to the human.
-3. If resolved, clear `.worker-status` back to `working` and notify the goal orchestrator.
+3. If resolved, clear `.goals/{goal}/.worker-status` back to `working` and notify the goal orchestrator.
 
 #### Status: `dead` (or no running agent process)
 The agent pane has crashed or exited unexpectedly.
