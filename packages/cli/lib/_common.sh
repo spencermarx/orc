@@ -933,9 +933,17 @@ _merge_bead_to_goal() {
 # Find the goal branch for a given goal name by checking all type prefixes.
 # Usage: _find_goal_branch <project_path> <goal_name>
 # Prints the branch name (e.g., "feat/my-goal") or exits with error.
+# Tolerates receiving the full branch name (e.g., "feat/my-goal") — strips
+# known type prefixes before searching so agents can pass either format.
 _find_goal_branch() {
   local project_path="$1"
   local goal_name="$2"
+
+  # Strip type prefix if the caller accidentally passed the full branch name
+  goal_name="${goal_name#feat/}"
+  goal_name="${goal_name#fix/}"
+  goal_name="${goal_name#task/}"
+
   local prefix
   for prefix in feat/ fix/ task/; do
     local candidate="${prefix}${goal_name}"
@@ -949,9 +957,16 @@ _find_goal_branch() {
 
 # Check if a goal branch exists for a given goal name (any type prefix).
 # Returns 0 if found, 1 if not.
+# Tolerates receiving the full branch name — strips known type prefixes.
 _goal_branch_exists() {
   local project_path="$1"
   local goal_name="$2"
+
+  # Strip type prefix if the caller accidentally passed the full branch name
+  goal_name="${goal_name#feat/}"
+  goal_name="${goal_name#fix/}"
+  goal_name="${goal_name#task/}"
+
   local prefix
   for prefix in feat/ fix/ task/; do
     if git -C "$project_path" show-ref --verify --quiet "refs/heads/${prefix}${goal_name}" 2>/dev/null; then
