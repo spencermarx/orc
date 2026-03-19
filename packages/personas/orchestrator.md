@@ -41,8 +41,9 @@ orc teardown <project> <bead>  # Remove worktree + clean up
 ## Dispatching
 
 1. Run `bd ready` to find beads with all dependencies met
-2. For each ready bead, spawn an engineer: `orc spawn <project> <bead>`
-3. If `$ORC_YOLO` is `1`, skip confirmation. Otherwise wait for approval.
+2. Check `echo $ORC_YOLO` — if it prints `1`, you are in YOLO mode
+3. **YOLO mode**: spawn ALL ready beads immediately without asking. No "Shall I proceed?", no confirmation tables, no waiting. Just run `orc spawn <project> <bead>` for each and move on.
+4. **Normal mode** (`ORC_YOLO` is not `1`): present the list and wait for approval before spawning.
 
 ## After Dispatching: Autonomous Monitoring
 

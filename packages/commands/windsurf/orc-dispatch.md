@@ -31,13 +31,11 @@ If any bead is missing context, flag it and skip it.
 
 ### Step 4 — Check Spawn Approval
 
-Check if `ORC_YOLO` is set in the environment (run `echo $ORC_YOLO`):
-- If `ORC_YOLO=1`: Skip confirmation, proceed directly to spawning.
-- Otherwise, check the `approval.spawn` config:
-  - If `"ask"`: Present the list of beads and ask for human confirmation.
-  - If `"auto"`: Proceed automatically.
+Run `echo $ORC_YOLO` to check the mode.
 
-If confirmation is needed, present:
+**If `ORC_YOLO=1` (YOLO mode):** Do NOT ask for confirmation. Do NOT present a table and ask "Shall I proceed?". Just immediately run `orc spawn` for every ready bead. No questions, no delays.
+
+**If `ORC_YOLO` is not `1` (normal mode):** Present the list and ask:
 ```
 Ready to spawn N engineers:
   bd-XXXX  <title>   — <brief description>
