@@ -60,21 +60,35 @@ orc_spawn() {
   # Install slash commands into worktree
   _install_commands "$worktree" "$project_path"
 
-  # Find the last window in this project group for hierarchical insertion
-  local after
-  after="$(_last_project_window "$project")"
-
-  _tmux_new_window "$window_name" "$worktree" "$after"
-
-  # Set engineering pane title and window status indicator
-  _tmux_set_pane_title "$window_name" "0" "eng: ${window_name}"
-  _tmux_set_window_status "$window_name" "●"
-
   local persona
   persona="$(_resolve_persona "engineer" "$project_path")"
   local init_prompt
   init_prompt="Read your assignment in .orch-assignment.md now. Investigate the relevant code, then implement the work described. When done, run /orc:done."
-  _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"
+
+  if [[ -n "$goal" ]]; then
+    # ── Goal-aware: spawn engineer as a pane in the goal window ──
+    local goal_window="${project}/${goal}"
+    local target_window
+    target_window="$(_tmux_pane_target "$goal_window" "$project_path")"
+
+    _tmux_split_with_agent "$target_window" "eng: ${bead}" "$persona" \
+      "$project_path" "$init_prompt" "$worktree"
+
+    # Set window status indicator on the target window
+    _tmux_set_window_status "$target_window" "●"
+  else
+    # ── Legacy: spawn engineer in its own window ──
+    local after
+    after="$(_last_project_window "$project")"
+
+    _tmux_new_window "$window_name" "$worktree" "$after"
+
+    # Set engineering pane title and window status indicator
+    _tmux_set_pane_title "$window_name" "0" "eng: ${window_name}"
+    _tmux_set_window_status "$window_name" "●"
+
+    _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"
+  fi
 
   _info "Engineer spawned for bead '$bead'${goal:+ (goal: $goal)} in project '$project'."
 }
