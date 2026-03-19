@@ -54,10 +54,10 @@ Signal completion to the project orchestrator:
 
 1. Derive the goal name from your goal branch by stripping the type prefix (`feat/`, `fix/`, `task/`). For example, `fix/auth-bug` → `auth-bug`.
 
-2. Write `review` to your per-goal status file at `.goals/{goal}/.worker-status`:
+2. Write `review` to your per-goal status file at `.worktrees/.orc-state/goals/{goal}/.worker-status`:
    ```bash
    # Example: goal branch "fix/auth-bug" → goal name "auth-bug"
-   echo "review" > .goals/<goal-name>/.worker-status
+   echo "review" > .worktrees/.orc-state/goals/<goal-name>/.worker-status
    ```
 
 3. Present a summary of what was accomplished:
@@ -106,7 +106,7 @@ Push the goal branch and create a PR:
 
 4. Report the PR URL and signal completion (derive goal name by stripping branch type prefix):
    ```bash
-   echo "done" > .goals/<goal-name>/.worker-status
+   echo "done" > .worktrees/.orc-state/goals/<goal-name>/.worker-status
    ```
 
 ### Step 6 — STOP

@@ -292,7 +292,11 @@ _teardown_project() {
     done <<< "$goals_seen"
   fi
 
-  # Remove any remaining .goals/ subdirectories not covered by tracked worktrees
+  # Remove orc runtime state inside the gitignored .worktrees/ directory
+  if [[ -d "$project_path/.worktrees/.orc-state" ]]; then
+    rm -rf "$project_path/.worktrees/.orc-state"
+  fi
+  # Clean up legacy .goals/ if present (from earlier versions)
   if [[ -d "$project_path/.goals" ]]; then
     rm -rf "$project_path/.goals"
   fi

@@ -16,9 +16,9 @@ if [[ "${1:-}" == "--line" ]]; then
   goal_review=0; goal_blocked=0; goal_done=0
   for key in $(_project_keys); do
     path="$(_project_path "$key")"
-    # Count goals and their statuses from .goals/ directory
-    if [[ -d "$path/.goals" ]]; then
-      for gd in "$path/.goals"/*/; do
+    # Count goals and their statuses from orc-state directory
+    if [[ -d "$path/.worktrees/.orc-state/goals" ]]; then
+      for gd in "$path/.worktrees/.orc-state/goals"/*/; do
         [[ -d "$gd" ]] || continue
         ((goals++)) || true
         gs="$(head -1 "$gd/.worker-status" 2>/dev/null || echo "unknown")"
@@ -29,8 +29,8 @@ if [[ "${1:-}" == "--line" ]]; then
         esac
       done
     fi
-    # Fall back to branch counting if this project has no .goals/ dir
-    if [[ ! -d "$path/.goals" ]]; then
+    # Fall back to branch counting if no orc-state exists
+    if [[ ! -d "$path/.worktrees/.orc-state/goals" ]]; then
       goal_branches="$(git -C "$path" for-each-ref --format='%(refname:short)' \
         'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 2>/dev/null || true)"
       if [[ -n "$goal_branches" ]]; then
@@ -228,9 +228,9 @@ ${entry}"
       *)         goal_indicator="? $goal_status" ;;
     esac
 
-    # Goal elapsed time from .goals/<goal>/.worker-status
+    # Goal elapsed time from orc-state
     goal_elapsed=""
-    goal_status_file="$path/.goals/$goal_name/.worker-status"
+    goal_status_file="$path/.worktrees/.orc-state/goals/$goal_name/.worker-status"
     goal_elapsed="$(_format_elapsed "$goal_status_file")"
 
     printf '  ┌ goal: %s' "$goal_name"
