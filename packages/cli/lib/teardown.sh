@@ -242,6 +242,14 @@ _teardown_goal() {
     _info "Deleted branch '${goal_branch}'."
   fi
 
+  # ── 6. Remove goal status directory ──
+
+  local goal_status_dir
+  goal_status_dir="$(_goal_status_dir "$project_path" "$goal")"
+  if [[ -d "$goal_status_dir" ]]; then
+    rm -rf "$goal_status_dir"
+  fi
+
   _info "Torn down goal '$goal' in project '$project'."
 }
 
@@ -272,11 +280,16 @@ _teardown_project() {
     done
   fi
 
-  # Teardown each goal (handles engineer panes, goal windows, goal panes)
+  # Teardown each goal (handles engineer panes, goal windows, goal panes, goal status dirs)
   local goal_name
   for goal_name in "${!goals_seen[@]}"; do
     _teardown_goal "$project" "$goal_name"
   done
+
+  # Remove any remaining .goals/ subdirectories not covered by tracked worktrees
+  if [[ -d "$project_path/.goals" ]]; then
+    rm -rf "$project_path/.goals"
+  fi
 
   # Kill any remaining goal windows (pattern: project/<goal> and overflow)
   local remaining_windows

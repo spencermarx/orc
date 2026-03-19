@@ -1190,6 +1190,24 @@ _install_commands() {
 # Worker helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+_goal_status_dir() {
+  local project_path="$1"
+  local goal="$2"
+  echo "$project_path/.goals/$goal"
+}
+
+_goal_worker_status() {
+  local project_path="$1"
+  local goal="$2"
+  local status_file
+  status_file="$(_goal_status_dir "$project_path" "$goal")/.worker-status"
+  if [[ -f "$status_file" ]]; then
+    head -1 "$status_file"
+  else
+    echo "unknown"
+  fi
+}
+
 _worker_count() {
   local project_path="$1"
   local worktrees_dir="$project_path/.worktrees"

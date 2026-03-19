@@ -60,7 +60,7 @@ Signal completion to the project orchestrator:
    echo "review" > .goals/<goal-name>/.worker-status
    ```
 
-2. Present a summary of what was accomplished:
+3. Present a summary of what was accomplished:
    ```
    Goal complete: <goal name>
    Branch: <goal-branch>
@@ -71,7 +71,7 @@ Signal completion to the project orchestrator:
    Ready for review. The project orchestrator will inspect this branch.
    ```
 
-3. **STOP.** Wait for the project orchestrator to review the goal branch.
+4. **STOP.** Wait for the project orchestrator to review the goal branch.
 
 ### Step 5b — PR Mode
 
@@ -104,7 +104,7 @@ Push the goal branch and create a PR:
 
    The target branch is determined by the `[delivery] target_strategy` config. If not set, default to `main`.
 
-4. Report the PR URL and signal completion:
+4. Report the PR URL and signal completion (derive goal name by stripping branch type prefix):
    ```bash
    echo "done" > .goals/<goal-name>/.worker-status
    ```

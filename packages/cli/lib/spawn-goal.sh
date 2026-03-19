@@ -45,6 +45,12 @@ orc_spawn_goal() {
 
   _check_approval "spawn" "$project_path" || exit "$EXIT_OK"
 
+  # ── Create goal status directory ─────────────────────────────────────────
+  local goal_status_dir
+  goal_status_dir="$(_goal_status_dir "$project_path" "$goal")"
+  mkdir -p "$goal_status_dir"
+  echo "working" > "$goal_status_dir/.worker-status"
+
   _tmux_ensure_session
 
   # Install slash commands into the project (goal orch runs from project root)
