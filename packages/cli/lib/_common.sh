@@ -1180,7 +1180,9 @@ _install_commands() {
   case "$agent_cmd" in
     claude)
       local cmd_source="$source_dir/claude/orc"
-      local cmd_target="$target_dir/.claude/commands/orc"
+      # Install to user-level ~/.claude/commands/orc/ — available globally,
+      # zero footprint in any project directory.
+      local cmd_target="$HOME/.claude/commands/orc"
       [[ -d "$cmd_source" ]] || return 0
       mkdir -p "$cmd_target"
       for f in "$cmd_source"/*.md; do
@@ -1190,7 +1192,7 @@ _install_commands() {
       ;;
     windsurf)
       local cmd_source="$source_dir/windsurf"
-      local cmd_target="$target_dir/.windsurf/commands"
+      local cmd_target="$HOME/.windsurf/commands"
       [[ -d "$cmd_source" ]] || return 0
       mkdir -p "$cmd_target"
       for f in "$cmd_source"/orc-*.md; do
@@ -1204,6 +1206,34 @@ _install_commands() {
   esac
 }
 
+# Ensure all orc runtime directories are excluded from git in the target project.
+# Uses .git/info/exclude — git's built-in per-repo ignore that doesn't touch .gitignore.
+_orc_git_exclude() {
+  local project_path="$1"
+
+  local git_dir
+  git_dir="$(git -C "$project_path" rev-parse --git-dir 2>/dev/null || true)"
+  [[ -n "$git_dir" ]] || return 0
+
+  # Resolve to absolute path
+  if [[ "$git_dir" != /* ]]; then
+    git_dir="$project_path/$git_dir"
+  fi
+
+  local exclude_file="$git_dir/info/exclude"
+  mkdir -p "$(dirname "$exclude_file")"
+  touch "$exclude_file"
+
+  # All orc runtime paths that may appear in a registered project
+  local patterns=(".beads/" ".worktrees/" ".goals/")
+  local pattern
+  for pattern in "${patterns[@]}"; do
+    if ! grep -qxF "$pattern" "$exclude_file" 2>/dev/null; then
+      echo "$pattern" >> "$exclude_file"
+    fi
+  done
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Worker helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1211,7 +1241,7 @@ _install_commands() {
 _goal_status_dir() {
   local project_path="$1"
   local goal="$2"
-  echo "$project_path/.goals/$goal"
+  echo "$project_path/.worktrees/.orc-state/goals/$goal"
 }
 
 _goal_worker_status() {

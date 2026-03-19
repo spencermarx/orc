@@ -38,4 +38,8 @@ if command -v bd &>/dev/null && [[ ! -d "$path/.beads" ]]; then
   (cd "$path" && bd init) 2>/dev/null || _warn "Could not initialize beads. Run 'bd init' in the project manually."
 fi
 
+# Exclude orc runtime directories from git via .git/info/exclude.
+# This keeps orc invisible in the project without touching .gitignore.
+_orc_git_exclude "$path"
+
 _info "Added project '$key' → $path"
