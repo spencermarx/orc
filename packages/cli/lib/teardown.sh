@@ -28,20 +28,91 @@ _teardown_bead() {
     actual_branch="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   fi
 
-  # Detect the correct window name by checking if branch follows work/<goal>/<bead> pattern
-  local window_name="${project}/${bead}"
-  if [[ "$actual_branch" == work/*//* ]]; then
-    # Should not happen — but guard against double-slash
-    :
-  elif [[ "$actual_branch" == work/*/* ]]; then
-    # Branch is work/<goal>/<bead> — window is <project>/<goal>/<bead>
-    local goal_from_branch="${actual_branch#work/}"
+  # Detect goal from branch pattern work/<goal>/<bead>
+  local goal_from_branch=""
+  if [[ "$actual_branch" == work/*/* ]] && [[ "$actual_branch" != work/*//* ]]; then
+    goal_from_branch="${actual_branch#work/}"
     goal_from_branch="${goal_from_branch%/*}"
-    window_name="${project}/${goal_from_branch}/${bead}"
   fi
 
-  # Kill the entire window (kills all panes — engineering + any review panes)
-  _tmux_kill_window "$window_name"
+  if [[ -n "$goal_from_branch" ]]; then
+    # ── Pane-based: engineer is a pane inside the goal window ──
+    local goal_window="${project}/${goal_from_branch}"
+    local pane_title="eng: ${bead}"
+
+    # Search goal window and overflow windows for the engineer pane
+    local found_window="" found_pane=""
+    _find_eng_pane() {
+      local win="$1"
+      local idx
+      idx="$(_tmux_find_pane "$win" "$pane_title")"
+      if [[ -n "$idx" ]]; then
+        found_window="$win"
+        found_pane="$idx"
+        return 0
+      fi
+      return 1
+    }
+
+    if _tmux_window_exists "$goal_window" && _find_eng_pane "$goal_window"; then
+      : # found in primary goal window
+    else
+      # Check overflow windows for the goal window
+      local overflow
+      overflow="$(_tmux_overflow_windows "$goal_window")"
+      while IFS= read -r win; do
+        [[ -z "$win" ]] && continue
+        if _find_eng_pane "$win"; then
+          break
+        fi
+      done <<< "$overflow"
+    fi
+
+    if [[ -n "$found_pane" ]]; then
+      # Kill the engineer pane (and any review pane associated with it)
+      # First kill any review pane for this bead
+      _tmux_kill_pane_by_title "$found_window" "review: ${project}/${bead}"
+
+      # Re-discover the engineer pane index (may have shifted after killing review pane)
+      found_pane="$(_tmux_find_pane "$found_window" "$pane_title")"
+      if [[ -n "$found_pane" ]]; then
+        _pane_registry_remove "$found_window" "$found_pane"
+        _tmux_kill_pane "$found_window" "$found_pane"
+      fi
+
+      # Rebalance the window (if it still has panes)
+      if _tmux_window_exists "$found_window"; then
+        local remaining
+        remaining="$(_tmux_pane_count "$found_window")"
+        if [[ "$remaining" -gt 0 ]]; then
+          _tmux_rebalance "$found_window"
+        fi
+      fi
+
+      # If the goal window (or overflow) is now empty, tmux kills it automatically.
+      # Clean up any empty overflow windows that linger.
+      local overflow_win
+      overflow="$(_tmux_overflow_windows "$goal_window")"
+      while IFS= read -r overflow_win; do
+        [[ -z "$overflow_win" ]] && continue
+        if _tmux_window_exists "$overflow_win"; then
+          local oc
+          oc="$(_tmux_pane_count "$overflow_win")"
+          if [[ "$oc" -le 1 ]]; then
+            # Single idle shell — no agents left, safe to remove
+            if ! _tmux_is_pane_alive "$overflow_win" 0 2>/dev/null; then
+              _tmux_kill_window "$overflow_win"
+              _pane_registry_clear "$overflow_win"
+            fi
+          fi
+        fi
+      done <<< "$overflow"
+    fi
+  else
+    # ── Legacy: engineer owns its own window ──
+    local window_name="${project}/${bead}"
+    _tmux_kill_window "$window_name"
+  fi
 
   # Remove git worktree
   if [[ -d "$worktree" ]]; then
@@ -52,7 +123,7 @@ _teardown_bead() {
   local branch_to_delete="${actual_branch:-work/$bead}"
   git -C "$project_path" branch -D "$branch_to_delete" 2>/dev/null || true
 
-  _info "Torn down '$window_name'."
+  _info "Torn down bead '$bead'${goal_from_branch:+ (goal: $goal_from_branch)} in project '$project'."
 }
 
 _teardown_goal() {
@@ -61,8 +132,10 @@ _teardown_goal() {
   local project_path
   project_path="$(_require_project "$project")"
   local worktrees_dir="$project_path/.worktrees"
+  local goal_window="${project}/${goal}"
 
-  # Teardown all beads belonging to this goal
+  # ── 1. Kill all engineer panes + remove worktrees + delete branches ──
+
   if [[ -d "$worktrees_dir" ]]; then
     for d in "$worktrees_dir"/*/; do
       [[ -d "$d" ]] || continue
@@ -72,16 +145,56 @@ _teardown_goal() {
       local wt_branch
       wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
       if [[ "$wt_branch" == "work/${goal}/"* ]]; then
-        # Kill window, remove worktree, delete branch
-        _tmux_kill_window "${project}/${goal}/${bead_name}"
+        # Kill engineer pane by title (in goal window or overflow)
+        local pane_title="eng: ${bead_name}"
+        local eng_win eng_pane
+
+        # Search goal window and overflows for the engineer pane
+        for search_win in "$goal_window" $(_tmux_overflow_windows "$goal_window"); do
+          [[ -z "$search_win" ]] && continue
+          _tmux_window_exists "$search_win" || continue
+          eng_pane="$(_tmux_find_pane "$search_win" "$pane_title")"
+          if [[ -n "$eng_pane" ]]; then
+            eng_win="$search_win"
+            break
+          fi
+        done
+
+        if [[ -n "${eng_pane:-}" ]]; then
+          # Kill review pane first (if any)
+          _tmux_kill_pane_by_title "$eng_win" "review: ${project}/${bead_name}"
+          # Re-find engineer pane (index may have shifted)
+          eng_pane="$(_tmux_find_pane "$eng_win" "$pane_title")"
+          [[ -n "$eng_pane" ]] && {
+            _pane_registry_remove "$eng_win" "$eng_pane"
+            _tmux_kill_pane "$eng_win" "$eng_pane"
+          }
+        fi
+
+        # Remove worktree and branch
         git -C "$project_path" worktree remove ".worktrees/$bead_name" --force 2>/dev/null || true
         git -C "$project_path" branch -D "$wt_branch" 2>/dev/null || true
-        _info "Torn down '${project}/${goal}/${bead_name}'."
+        _info "Torn down engineer '$bead_name'."
       fi
     done
   fi
 
-  # Delete any remaining work/<goal>/* branches (orphaned, already merged, etc.)
+  # ── 2. Kill goal window and any overflow windows ──
+
+  # Kill overflow windows first
+  local overflow_win
+  for overflow_win in $(_tmux_overflow_windows "$goal_window"); do
+    [[ -z "$overflow_win" ]] && continue
+    _tmux_kill_window "$overflow_win"
+    _pane_registry_clear "$overflow_win"
+  done
+
+  # Kill the primary goal window (if it still exists — may already be gone if all panes were killed)
+  _tmux_kill_window "$goal_window"
+  _pane_registry_clear "$goal_window"
+
+  # ── 3. Delete any remaining work/<goal>/* branches (orphaned, already merged) ──
+
   local remaining_branches
   remaining_branches="$(git -C "$project_path" for-each-ref --format='%(refname:short)' "refs/heads/work/${goal}/" 2>/dev/null || true)"
   if [[ -n "$remaining_branches" ]]; then
@@ -90,10 +203,38 @@ _teardown_goal() {
     done <<< "$remaining_branches"
   fi
 
-  # Kill goal orchestrator window
-  _tmux_kill_window "${project}/${goal}"
+  # ── 4. Kill goal orchestrator pane in project window ──
 
-  # Delete the goal branch itself
+  local goal_pane_title="goal: ${goal}"
+  local proj_win proj_pane
+
+  # Search project window and overflows
+  for search_win in "$project" $(_tmux_overflow_windows "$project"); do
+    [[ -z "$search_win" ]] && continue
+    _tmux_window_exists "$search_win" || continue
+    proj_pane="$(_tmux_find_pane "$search_win" "$goal_pane_title")"
+    if [[ -n "$proj_pane" ]]; then
+      proj_win="$search_win"
+      break
+    fi
+  done
+
+  if [[ -n "${proj_pane:-}" ]]; then
+    _pane_registry_remove "$proj_win" "$proj_pane"
+    _tmux_kill_pane "$proj_win" "$proj_pane"
+
+    # Rebalance project window
+    if _tmux_window_exists "$proj_win"; then
+      local remaining
+      remaining="$(_tmux_pane_count "$proj_win")"
+      if [[ "$remaining" -gt 0 ]]; then
+        _tmux_rebalance "$proj_win"
+      fi
+    fi
+  fi
+
+  # ── 5. Delete the goal branch itself ──
+
   local goal_branch
   goal_branch="$(_find_goal_branch "$project_path" "$goal" 2>/dev/null || true)"
   if [[ -n "$goal_branch" ]]; then
@@ -110,28 +251,47 @@ _teardown_project() {
   project_path="$(_require_project "$project")"
   local worktrees_dir="$project_path/.worktrees"
 
-  # Teardown all beads (handles both goal and non-goal beads)
+  # Collect goals to teardown (deduplicating via goal names)
+  local -A goals_seen=()
+
   if [[ -d "$worktrees_dir" ]]; then
     for d in "$worktrees_dir"/*/; do
       [[ -d "$d" ]] || continue
       local bead
       bead="$(basename "$d")"
-      _teardown_bead "$project" "$bead"
+      local wt_branch
+      wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+      if [[ "$wt_branch" == work/*/* ]] && [[ "$wt_branch" != work/*//* ]]; then
+        local goal_name="${wt_branch#work/}"
+        goal_name="${goal_name%/*}"
+        goals_seen["$goal_name"]=1
+      else
+        # Legacy non-goal bead — teardown directly
+        _teardown_bead "$project" "$bead"
+      fi
     done
   fi
 
-  # Kill any goal orchestrator windows (pattern: project/*)
-  local goal_windows
-  goal_windows="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+  # Teardown each goal (handles engineer panes, goal windows, goal panes)
+  local goal_name
+  for goal_name in "${!goals_seen[@]}"; do
+    _teardown_goal "$project" "$goal_name"
+  done
+
+  # Kill any remaining goal windows (pattern: project/<goal> and overflow)
+  local remaining_windows
+  remaining_windows="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
     | grep -E "^${project}/[^/]+$" || true)"
-  if [[ -n "$goal_windows" ]]; then
+  if [[ -n "$remaining_windows" ]]; then
     while IFS= read -r win; do
-      [[ -n "$win" ]] && _tmux_kill_window "$win"
-    done <<< "$goal_windows"
+      [[ -n "$win" ]] && {
+        _tmux_kill_window "$win"
+        _pane_registry_clear "$win"
+      }
+    done <<< "$remaining_windows"
   fi
 
-  # Delete all goal branches (feat/*, fix/*, task/*) — only those related to this project's goals
-  # Also delete any remaining work/* branches
+  # Delete all goal branches (feat/*, fix/*, task/*) and any remaining work/* branches
   local branches_to_delete
   branches_to_delete="$(git -C "$project_path" for-each-ref --format='%(refname:short)' \
     'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 'refs/heads/work/' 2>/dev/null || true)"
@@ -141,8 +301,17 @@ _teardown_project() {
     done <<< "$branches_to_delete"
   fi
 
-  # Kill project orchestrator window
+  # Kill project orchestrator window and clear its pane registry
   _tmux_kill_window "$project"
+  _pane_registry_clear "$project"
+
+  # Kill project overflow windows
+  local overflow_win
+  for overflow_win in $(_tmux_overflow_windows "$project"); do
+    [[ -z "$overflow_win" ]] && continue
+    _tmux_kill_window "$overflow_win"
+    _pane_registry_clear "$overflow_win"
+  done
 
   # Kill board window
   _tmux_kill_window "${project}/board"
