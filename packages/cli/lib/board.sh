@@ -31,9 +31,9 @@ if [[ -n "$board_cmd" ]] && command -v "$board_cmd" &>/dev/null; then
   _tmux_send "$window_name" "$board_cmd"
 elif [[ -n "$board_cmd" ]]; then
   _warn "Board tool '$board_cmd' not found on PATH. Using built-in fallback."
-  _tmux_send "$window_name" "watch -n5 bd list"
+  _tmux_send "$window_name" "while true; do clear; bd list; sleep 5; done"
 else
-  _tmux_send "$window_name" "watch -n5 bd list"
+  _tmux_send "$window_name" "while true; do clear; bd list; sleep 5; done"
 fi
 
 _info "Board opened for '$project'."

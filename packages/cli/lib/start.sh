@@ -36,7 +36,7 @@ orc_start() {
 
     if ! _tmux_window_exists "status"; then
       _tmux_new_window "status" "$ORC_ROOT"
-      _tmux_send "status" "watch -n5 orc status"
+      _tmux_send "status" "while true; do clear; orc status; sleep 5; done"
     fi
 
     _tmux_new_window "orc" "$ORC_ROOT"

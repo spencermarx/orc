@@ -234,6 +234,12 @@ _tmux_ensure_session() {
     ORC_TMUX_NEEDS_CLEANUP=1
   fi
 
+  # ── Propagate ORC_YOLO into the tmux environment ──────────────────
+  # Child processes (orc spawn, orc review) inherit this from the tmux session
+  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+    tmux set-environment -t "$ORC_TMUX_SESSION" ORC_YOLO 1
+  fi
+
   # ── Functional settings (idempotent — safe to re-apply) ──────────
   tmux set-option -t "$ORC_TMUX_SESSION" base-index 1
   tmux set-option -t "$ORC_TMUX_SESSION" renumber-windows on
@@ -399,12 +405,12 @@ _tmux_is_dead_window() {
   return 0    # dead — shell with no children
 }
 
-# Set a pane title via escape sequence.
+# Set a pane title using tmux's select-pane -T (no shell input needed).
 _tmux_set_pane_title() {
   local window="$1"
   local pane="$2"
   local title="$3"
-  tmux send-keys -t "${ORC_TMUX_SESSION}:${window}.${pane}" "printf '\\033]2;${title}\\033\\\\'" Enter
+  tmux select-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" -T "$title" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

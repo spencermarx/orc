@@ -48,7 +48,13 @@ EOF
 
 # ── Parse global flags ──────────────────────────────────────────────────────
 
-export ORC_YOLO=0
+# Inherit ORC_YOLO from tmux environment if set (child processes of --yolo sessions)
+if [[ -n "${TMUX:-}" ]] && [[ "${ORC_YOLO:-}" != "1" ]]; then
+  tmux_yolo="$(tmux show-environment -t "$ORC_TMUX_SESSION" ORC_YOLO 2>/dev/null | grep -v '^-' | cut -d= -f2 || true)"
+  [[ "$tmux_yolo" == "1" ]] && export ORC_YOLO=1
+fi
+
+export ORC_YOLO="${ORC_YOLO:-0}"
 args=()
 for arg in "$@"; do
   case "$arg" in
