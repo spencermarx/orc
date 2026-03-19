@@ -321,21 +321,39 @@ _tmux_send() {
   tmux send-keys -t "${ORC_TMUX_SESSION}:${name}" "$cmd" Enter
 }
 
+# Check if a window exists. Supports exact match or prefix match
+# (for windows with status suffixes like "orc/bd-a1b2 ●").
 _tmux_window_exists() {
   local name="$1"
-  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null | grep -qxF "$name"
+  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+    | grep -qE "^${name}( |$)"
 }
 
+# Find the actual window name (may have status suffix).
+_tmux_resolve_window() {
+  local name="$1"
+  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+    | grep -E "^${name}( |$)" | head -1
+}
+
+# Kill a window by name (handles status suffix matching).
 _tmux_kill_window() {
   local name="$1"
-  if _tmux_window_exists "$name"; then
-    tmux kill-window -t "${ORC_TMUX_SESSION}:${name}"
+  local actual
+  actual="$(_tmux_resolve_window "$name")"
+  if [[ -n "$actual" ]]; then
+    tmux kill-window -t "${ORC_TMUX_SESSION}:=${actual}"
   fi
 }
 
 # Navigate to a window. exec for external, switch-client for internal.
+# Resolves status suffixes automatically.
 _orc_goto() {
-  local target="${ORC_TMUX_SESSION}:${1}"
+  local name="$1"
+  local actual
+  actual="$(_tmux_resolve_window "$name")"
+  actual="${actual:-$name}"
+  local target="${ORC_TMUX_SESSION}:=${actual}"
 
   if [[ -n "${TMUX:-}" ]]; then
     tmux select-window -t "$target" 2>/dev/null || true
