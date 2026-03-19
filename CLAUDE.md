@@ -241,19 +241,17 @@ Delivery is controlled separately via `[delivery] mode`: `"review"` (default, us
 
 ## tmux Layout
 
-All agents in one tmux session (`orc`). Hub-and-spoke pane model — agents share windows instead of getting one window each:
+All agents in one tmux session (`orc`). Each goal gets its own window with the goal orchestrator as pane 0 (left/main) and engineers splitting in on the right:
 
 ```
 orc                              ← Root orchestrator (window)
 status                           ← Dashboard (window)
-{project}                        ← Project window (hub)
-  ├── pane 0: Project orchestrator
-  ├── pane N: Goal orchestrator   (title: "goal: <name>")
-  └── pane N+1: Goal orchestrator (title: "goal: <name>")
-{project}/{goal}                 ← Goal window (spoke, created on first engineer spawn)
-  ├── pane 0: Goal orchestrator   (moved from project hub)
-  ├── pane N: Engineer            (title: "eng: <bead>")
-  └── pane N+1: Engineer          (title: "eng: <bead>")
+{project}                        ← Project orchestrator (window)
+{project}/{goal}                 ← Goal window (main-vertical layout)
+  ├── pane 0: Goal orchestrator   (title: "goal: <name>", persistent, left ~60%)
+  ├── pane N: Engineer            (title: "eng: <bead>", right column)
+  ├── pane N+1: Engineer          (title: "eng: <bead>", right column)
+  └── pane N+2: Reviewer          (title: "review: ...", ephemeral, splits vertically below its eng pane)
 {project}/board                  ← Board view (window)
 ```
 
@@ -263,7 +261,7 @@ When a window cannot fit another pane (below `layout.min_pane_width` or `layout.
 
 ### Pane Navigation
 
-Panes are identified by their titles (`goal: <name>`, `eng: <bead>`, `review: <project>/<bead>`). Use `tmux list-panes -t orc:<window> -F '#{pane_index}:#{pane_title}'` to find specific panes. The review pane splits from the engineer's pane horizontally (40% width) and is destroyed after each review round.
+Panes are identified by their titles (`goal: <name>`, `eng: <bead>`, `review: <project>/<bead>`). Use `tmux list-panes -t orc:<window> -F '#{pane_index}:#{pane_title}'` to find specific panes. The review pane splits vertically below its engineer pane (40% height) and is destroyed after each review round.
 
 ### Layout Configuration
 

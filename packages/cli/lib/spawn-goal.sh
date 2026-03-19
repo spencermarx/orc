@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# spawn-goal.sh — Launch a goal orchestrator as a pane in the project window.
+# spawn-goal.sh — Launch a goal orchestrator in its own goal window.
+# The goal orch is pane 0 (left/main); engineers split in on the right.
 
 set -euo pipefail
 
@@ -25,48 +26,21 @@ orc_spawn_goal() {
   local goal_branch
   goal_branch="$(_find_goal_branch "$project_path" "$goal")"
 
+  local goal_window="${project}/${goal}"
   local pane_title="goal: ${goal}"
 
-  # ── Check for existing goal pane (reuse or relaunch) ──────────────────────
+  # ── Check for existing goal window (reuse or relaunch) ─────────────────
 
-  # Search project window and any overflow windows for an existing goal pane
-  local existing_window="" existing_pane=""
-  _find_goal_pane() {
-    local win="$1"
-    local idx
-    idx="$(_tmux_find_pane "$win" "$pane_title")"
-    if [[ -n "$idx" ]]; then
-      existing_window="$win"
-      existing_pane="$idx"
-      return 0
-    fi
-    return 1
-  }
-
-  # Check primary project window
-  if _tmux_window_exists "$project" && _find_goal_pane "$project"; then
-    : # found
-  else
-    # Check overflow windows
-    local overflow
-    overflow="$(_tmux_overflow_windows "$project")"
-    while IFS= read -r win; do
-      [[ -z "$win" ]] && continue
-      if _find_goal_pane "$win"; then
-        break
-      fi
-    done <<< "$overflow"
-  fi
-
-  if [[ -n "$existing_pane" ]]; then
-    if _tmux_is_pane_alive "$existing_window" "$existing_pane"; then
+  if _tmux_window_exists "$goal_window"; then
+    # Check if pane 0 (goal orch) is still alive
+    if _tmux_is_pane_alive "$goal_window" "0"; then
       _info "Goal orchestrator for '$goal' already running. Attaching."
-      _orc_goto "$existing_window"
+      _orc_goto "$goal_window"
       return
     fi
-    # Dead pane — kill it, will be relaunched below
+    # Dead — tear down the window and recreate below
     _info "Goal orchestrator for '$goal' session ended. Relaunching."
-    _tmux_kill_pane "$existing_window" "$existing_pane"
+    tmux kill-window -t "$(_tmux_target "$goal_window")" 2>/dev/null || true
   fi
 
   _check_approval "spawn" "$project_path" || exit "$EXIT_OK"
@@ -76,26 +50,28 @@ orc_spawn_goal() {
   # Install slash commands into the project (goal orch runs from project root)
   _install_commands "$project_path" "$project_path"
 
-  # ── Find target window (project window or overflow) ───────────────────────
+  # ── Create goal window with goal orch as pane 0 ────────────────────────
 
-  local target_window
-  target_window="$(_tmux_pane_target "$project" "$project_path")"
+  local after
+  after="$(_last_project_window "$project")"
+  _tmux_new_window "$goal_window" "$project_path" "$after"
 
-  # ── Split and launch ──────────────────────────────────────────────────────
+  # Set pane 0 title
+  _tmux_set_pane_title "$goal_window" "0" "$pane_title"
 
+  # Set window status indicator
+  _tmux_set_window_status "$goal_window" "●"
+
+  # Launch the goal orchestrator agent in pane 0
   local persona
   persona="$(_resolve_persona "goal-orchestrator" "$project_path")"
 
   local init_prompt
   init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
 
-  _tmux_split_with_agent "$target_window" "$pane_title" "$persona" \
-    "$project_path" "$init_prompt" "$project_path"
+  _launch_agent_in_window "$goal_window" "$persona" "$project_path" "$init_prompt"
 
-  # Set window status indicator (on the target window housing the pane)
-  _tmux_set_window_status "$target_window" "●"
-
-  _info "Goal orchestrator spawned for goal '$goal' (branch: $goal_branch) as pane in '$target_window'."
+  _info "Goal orchestrator spawned for goal '$goal' (branch: $goal_branch) in project '$project'."
 }
 
 orc_spawn_goal "$@"

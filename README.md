@@ -510,18 +510,22 @@ Orc **always** escalates to you, even in YOLO mode, when:
 
 ## Review Loop
 
-Every bead goes through a review before merge. No exceptions. Two-pane model per worktree:
+Every bead goes through a review before merge. No exceptions. The reviewer spawns directly below the engineer it's reviewing:
 
 ```
-┌──────────────────────────────┬───────────────────┐
-│                              │                   │
-│     Engineering Pane         │    Review Pane     │
-│     (persistent — the        │    (ephemeral —    │
-│      engineer lives here)    │     spawns for     │
-│                              │     each review)   │
-│                              │     ~40% width     │
-│                              │                   │
-└──────────────────────────────┴───────────────────┘
+┌──────────────────────────────┐
+│                              │
+│     Engineer Pane            │
+│     (persistent — the        │
+│      engineer lives here)    │
+│                              │
+├──────────────────────────────┤
+│     Reviewer Pane            │
+│     (ephemeral — spawns per  │
+│      review cycle, ~40%      │
+│      height, destroyed       │
+│      when verdict is done)   │
+└──────────────────────────────┘
 ```
 
 **The cycle:**
@@ -557,21 +561,37 @@ Project personas are **additive** — they layer on top of `CLAUDE.md`, `.claude
 
 ## tmux Layout
 
-All agents live in one tmux session (`orc`). Hierarchy mirrors the command structure:
+All agents live in one tmux session (`orc`). Each goal gets its own window with the goal orchestrator as the main pane and engineers on the right:
 
 ```
 Session: orc
 ├── orc                              ← Root orchestrator
 ├── status                           ← Live dashboard
 ├── myapp                            ← Project orchestrator
-├── myapp/fix-auth                   ← Goal orchestrator
-├── myapp/fix-auth/bd-a1b2           ← Engineer (eng + review panes)
-├── myapp/fix-auth/bd-c3d4           ← Engineer
-├── myapp/add-rate-limit             ← Goal orchestrator
-├── myapp/add-rate-limit/bd-e5f6     ← Engineer
+├── myapp/fix-auth                   ← Goal window (layout below)
+├── myapp/add-rate-limit             ← Goal window
 ├── myapp/board                      ← Board view
 └── api                              ← Another project
 ```
+
+**Inside each goal window** — `main-vertical` layout with the goal orchestrator on the left and engineers (+ ephemeral reviewers) on the right:
+
+```
+┌──────────────────────────────┬──────────────────┐
+│                              │  eng: bd-a1b2    │
+│                              │  (being reviewed) │
+│   goal: fix-auth             ├──────────────────┤
+│   (Goal Orchestrator)        │  ▸ rev: bd-a1b2  │
+│                              │  (ephemeral)     │
+│   pane 0 — persistent,      ├──────────────────┤
+│   manages the review loop    │  eng: bd-c3d4    │
+│                              │  (working)       │
+└──────────────────────────────┴──────────────────┘
+```
+
+Each reviewer spawns directly below its engineer — a clear visual pair. When the review ends, the reviewer pane is destroyed and the engineer reclaims the space.
+
+When a window can't fit more panes (below `min_pane_width`/`min_pane_height`), orc creates overflow windows (`myapp/fix-auth:2`, etc.).
 
 **Status indicators** on windows: `●` working, `✓` in review, `✗` blocked.
 

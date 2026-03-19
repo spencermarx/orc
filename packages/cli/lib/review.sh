@@ -70,10 +70,13 @@ orc_review() {
       _die "Engineer pane for bead '$bead' disappeared." "$EXIT_STATE"
     fi
 
-    # Split the engineer pane horizontally to create the review pane
+    # Split the engineer pane vertically to create the review pane below it.
+    # This keeps the engineer and reviewer visually paired — same column,
+    # stacked top/bottom. When the review pane is destroyed, the engineer
+    # reclaims the vertical space.
     local target
     target="$(_tmux_target "$window_name" "$eng_pane")"
-    tmux split-window -h -l 40% -t "$target" -c "$worktree_dir"
+    tmux split-window -v -l 40% -t "$target" -c "$worktree_dir"
 
     # Brief pause so the new pane's shell initializes
     sleep 0.5
