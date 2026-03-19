@@ -822,6 +822,12 @@ _tmux_split_with_agent() {
     [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
   fi
 
+  # Ruflo: ensure MCP server registered, append persona block
+  _ensure_ruflo_mcp
+  local ruflo_block
+  ruflo_block="$(_ruflo_persona_block)"
+  [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
+
   local persona_file
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"
@@ -1024,6 +1030,12 @@ _launch_agent_in_window() {
     [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
   fi
 
+  # Ruflo: ensure MCP server registered, append persona block
+  _ensure_ruflo_mcp
+  local ruflo_block
+  ruflo_block="$(_ruflo_persona_block)"
+  [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
+
   local persona_file
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"
@@ -1085,6 +1097,12 @@ _launch_agent_in_review_pane() {
     fi
     [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
   fi
+
+  # Ruflo: ensure MCP server registered, append persona block
+  _ensure_ruflo_mcp
+  local ruflo_block
+  ruflo_block="$(_ruflo_persona_block)"
+  [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
 
   local persona_file
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
@@ -1390,4 +1408,49 @@ _detect_ruflo() {
 
   # auto mode, not found — silently proceed
   export ORC_RUFLO_AVAILABLE=0
+}
+
+# Ensure the Ruflo MCP server is registered with the agent CLI.
+# Called once per session before the first agent spawn.
+_ensure_ruflo_mcp() {
+  # Skip when Ruflo is not available
+  [[ "${ORC_RUFLO_AVAILABLE:-0}" == "1" ]] || return 0
+
+  # Already ensured this session — skip
+  [[ -n "${ORC_RUFLO_MCP_READY+x}" ]] && return 0
+
+  # Check if ruflo MCP server is already registered
+  if claude mcp list 2>/dev/null | grep -q "ruflo"; then
+    export ORC_RUFLO_MCP_READY=1
+    return 0
+  fi
+
+  # Register the Ruflo MCP server
+  _info "Registering Ruflo MCP server..."
+  if claude mcp add ruflo -- npx ruflo@latest mcp start 2>/dev/null; then
+    export ORC_RUFLO_MCP_READY=1
+  else
+    _warn "Failed to register Ruflo MCP server — continuing without it"
+    export ORC_RUFLO_AVAILABLE=0
+  fi
+}
+
+# Return a persona enhancement block when Ruflo is active, empty otherwise.
+_ruflo_persona_block() {
+  [[ "${ORC_RUFLO_AVAILABLE:-0}" == "1" ]] || return 0
+
+  cat <<'RUFLO_BLOCK'
+
+## Ruflo Tools Available
+
+You have access to Ruflo MCP tools in this session:
+
+- `agent_spawn`: Spawn sub-agents for parallel sub-tasks within your bead
+- `memory_search`: Search shared context and knowledge across sessions
+- `memory_store`: Store context and findings for other agents to discover
+
+Use these only when they clearly accelerate your work. Default to normal
+implementation for straightforward tasks. Do not force Ruflo usage when
+standard approaches suffice.
+RUFLO_BLOCK
 }
