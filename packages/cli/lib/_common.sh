@@ -326,23 +326,26 @@ _tmux_send() {
 _tmux_window_exists() {
   local name="$1"
   tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -qE "^${name}( |$)"
+    | grep -qE "^${name}( |$)" 2>/dev/null || return 1
 }
 
 # Find the actual window name (may have status suffix).
+# Always succeeds (returns empty string if not found) — safe with set -e.
 _tmux_resolve_window() {
   local name="$1"
-  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${name}( |$)" | head -1
+  local result
+  result="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+    | grep -E "^${name}( |$)" | head -1 || true)"
+  echo "$result"
 }
 
-# Kill a window by name (handles status suffix matching).
+# Kill a window by name (handles status suffix matching). Never fails.
 _tmux_kill_window() {
   local name="$1"
   local actual
   actual="$(_tmux_resolve_window "$name")"
   if [[ -n "$actual" ]]; then
-    tmux kill-window -t "${ORC_TMUX_SESSION}:=${actual}"
+    tmux kill-window -t "${ORC_TMUX_SESSION}:=${actual}" 2>/dev/null || true
   fi
 }
 
