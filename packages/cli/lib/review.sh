@@ -62,64 +62,67 @@ orc_review() {
 
   # Launch review process BEFORE renaming the window
   # (renaming changes $window_name which breaks subsequent tmux targeting)
+
+  # Build reviewer persona (always used, even with custom review command)
+  local persona
+  persona="$(_resolve_persona "reviewer" "$project_path")"
+
+  local review_instructions
+  review_instructions="$(_config_get "review.instructions" "" "$project_path")"
+  if [[ -n "$review_instructions" ]]; then
+    persona="$persona
+
+$review_instructions"
+  fi
+
+  # Determine initial prompt: custom review command or default
   local review_cmd
   review_cmd="$(_config_get "review.command" "" "$project_path")"
 
-  if [[ -z "$review_cmd" ]]; then
-    local persona
-    persona="$(_resolve_persona "reviewer" "$project_path")"
-
-    local review_instructions
-    review_instructions="$(_config_get "review.instructions" "" "$project_path")"
-    if [[ -n "$review_instructions" ]]; then
-      persona="$persona
-
-$review_instructions"
-    fi
-
-    local init_prompt
+  local init_prompt
+  if [[ -n "$review_cmd" ]]; then
+    init_prompt="$review_cmd"
+  else
     init_prompt="Review the engineer's changes now. Read .orch-assignment.md for context, run git diff main to see changes, run tests, then write your verdict to .worker-feedback. Start immediately."
+  fi
 
-    # Send directly to the review pane by index (we just created it, we know the index)
-    local agent_cmd
-    agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
-    local agent_flags
-    agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
-    if [[ "${ORC_YOLO:-0}" == "1" ]]; then
-      local yolo_flags
-      yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-      if [[ -z "$yolo_flags" ]]; then
-        case "$agent_cmd" in
-          claude) yolo_flags="--dangerously-skip-permissions" ;;
-        esac
-      fi
-      [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
+  # Build agent command with persona
+  local agent_cmd
+  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  local agent_flags
+  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
+  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+    local yolo_flags
+    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
+    if [[ -z "$yolo_flags" ]]; then
+      case "$agent_cmd" in
+        claude) yolo_flags="--dangerously-skip-permissions" ;;
+      esac
     fi
+    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
+  fi
 
-    local persona_file
-    persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
-    printf '%s' "$persona" > "$persona_file"
+  local persona_file
+  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
+  printf '%s' "$persona" > "$persona_file"
 
-    local prompt_file
-    prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-    printf '%s' "$init_prompt" > "$prompt_file"
+  local prompt_file
+  prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
+  printf '%s' "$init_prompt" > "$prompt_file"
 
-    local cmd="$agent_cmd"
-    [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
-    cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\" \"\$(cat $prompt_file)\""
+  local cmd="$agent_cmd"
+  [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
+  cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\" \"\$(cat $prompt_file)\""
 
-    local launcher
-    launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-    cat > "$launcher" <<LAUNCH_EOF
+  local launcher
+  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
+  cat > "$launcher" <<LAUNCH_EOF
 #!/usr/bin/env bash
 clear
 $cmd
 LAUNCH_EOF
-    chmod +x "$launcher"
-    _tmux_send_pane "$window_name" "$review_pane" "bash $launcher"
-  else
-    _tmux_send_pane "$window_name" "$review_pane" "$review_cmd"
-  fi
+  chmod +x "$launcher"
+  _tmux_send_pane "$window_name" "$review_pane" "bash $launcher"
 
   # Update status indicator (displayed in status bar, not in window name)
   _tmux_set_window_status "$window_name" "✓"
