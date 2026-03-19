@@ -50,11 +50,31 @@ Core philosophy: shell over runtime, markdown is the control plane, beads are th
 
 ## Architecture
 
-Three-tier hierarchy:
+Four-tier agent hierarchy:
 
 1. **Root Orchestrator** — conversational session coordinating across projects. Optional; skip with `orc <project>` for single-project work.
-2. **Project Orchestrator** — runs at project root, decomposes goals into beads, sequences/dispatches engineers, manages the review loop.
-3. **Worktrees** — isolated workspaces with two planes: engineering (implementation) and review (ephemeral). Each gets a single bead assignment via `.orch-assignment.md`.
+2. **Project Orchestrator** — receives user requests, decomposes them into goals, dispatches goal orchestrators, monitors goal-level progress. Never writes code or manages engineers directly.
+3. **Goal Orchestrator** — owns one goal (feature/bug/task). Runs as a separate agent session. Decomposes the goal into beads, dispatches engineers, manages the review loop, fast-forward merges approved beads to the goal branch, and handles delivery (review or PR).
+4. **Engineers** — autonomous agent sessions in isolated git worktrees, each assigned a single bead.
+
+### Branch Topology
+
+Each goal gets a dedicated branch using configurable type-based prefixes (`feat/`, `fix/`, `task/`). Bead worktrees branch from the goal branch. Approved beads fast-forward merge back into the goal branch. The system never merges to main unless the user explicitly requests it.
+
+```
+main ──────────────────────────────────────────→
+  └── fix/auth-bug ────────────────────────────→
+        ├── work/auth-bug/bd-a1b2 → ff-merge
+        └── work/auth-bug/bd-c3d4 → ff-merge
+                                        ↓
+                                  User reviews or PR
+```
+
+### Delivery
+
+Two modes when a goal completes:
+- **Review (default):** Goal branch is presented for user inspection. User can provide feedback via any agent plane.
+- **PR:** Goal orchestrator pushes and creates PR via `gh` to a configurable target branch.
 
 State model uses exactly three primitives: **Beads** (Dolt DB at `{project}/.beads/`), **`.worker-status`** (plain text signal per worktree), and **`.worker-feedback`** (review output per worktree).
 
@@ -77,6 +97,7 @@ orc/
 │   └── personas/                    # Default persona markdown files
 │       ├── root-orchestrator.md
 │       ├── orchestrator.md
+│       ├── goal-orchestrator.md
 │       ├── engineer.md
 │       └── reviewer.md
 ├── docs/
@@ -98,6 +119,7 @@ Registered projects get an optional `.orc/` dir for overrides, `.beads/` for sta
 | Board visualization | Configurable (Abacus, etc.) with built-in fallback |
 | Session management | tmux |
 | Agent adapter | String interpolation with --yolo support |
+| Delivery | `gh` CLI for PR creation (optional) |
 
 ## Build & Development Commands
 
@@ -143,6 +165,7 @@ orc leave                      # Detach from tmux
 
 ```bash
 orc spawn <project> <bead>     # Create worktree + launch engineer
+orc spawn-goal <project> <goal> # Launch goal orchestrator
 orc review <project> <bead>    # Launch review pane in worktree
 ```
 
@@ -154,9 +177,10 @@ Exit codes: `0` success, `1` usage error, `2` state error, `3` project not found
 |---------|------|----------|
 | `/orc` | Any | Orientation: your role, available commands, state |
 | `/orc:status` | Any | Run `orc status`, highlight actionable items |
-| `/orc:plan` | Orchestrator | Investigate → decompose → beads → propose |
-| `/orc:dispatch` | Orchestrator | Check ready beads → spawn engineers |
-| `/orc:check` | Orchestrator | Poll .worker-status → handle review/blocked/found/dead |
+| `/orc:plan` | Project Orch | Decompose request into goals with named branches |
+| `/orc:dispatch` | Project/Goal Orch | Spawn goal orchestrators or engineers for ready beads |
+| `/orc:check` | Project/Goal Orch | Poll status → handle review/blocked/found/dead |
+| `/orc:complete-goal` | Goal Orch | Trigger delivery (review or PR) when all beads done |
 | `/orc:view` | Orchestrator | Create/adjust tmux layouts for monitoring |
 | `/orc:done` | Engineer | Self-review → signal review → STOP |
 | `/orc:blocked` | Engineer | Signal blocked with reason → STOP |
@@ -168,6 +192,19 @@ Commands are installed by `orc init` (into orc repo), `orc add` (into projects),
 ## Configuration
 
 Resolution order (most specific wins): `{project}/.orc/config.toml` > `config.local.toml` > `config.toml`
+
+Key config sections:
+
+```toml
+[branching]
+strategy = ""                  # Natural language branch naming preference
+                               # Default: feat/, fix/, task/ + ticket prefix if available
+
+[delivery]
+mode = "review"                # "review" (default) or "pr"
+target_strategy = ""           # Natural language PR target branch strategy
+                               # e.g., "gitflow: target develop, hotfix → release branch"
+```
 
 Persona resolution: `{project}/.orc/{role}.md` > `{orc-repo}/packages/personas/{role}.md`
 
@@ -189,7 +226,7 @@ Project personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/ rules
 
 ## The Review Loop
 
-Two-plane model: each worktree window has an engineering pane (persistent) and a review pane (ephemeral, right side, 40%). Engineers signal `review` via `.worker-status` → orchestrator creates review pane → reviewer writes verdict to `.worker-feedback` → if not approved, review pane destroyed, engineer gets feedback and re-signals → repeats up to `max_rounds` (default 3) then escalates to human.
+Two-plane model: each worktree window has an engineering pane (persistent) and a review pane (ephemeral, right side, 40%). Engineers signal `review` via `.worker-status` → goal orchestrator creates review pane → reviewer writes verdict to `.worker-feedback` → if approved, bead is fast-forward merged to goal branch and worktree is torn down → if not approved, review pane destroyed, engineer gets feedback and re-signals → repeats up to `max_rounds` (default 3) then escalates to human.
 
 Review mode is configurable: default reviewer persona, `/ocr:review`, or custom command via `[review] command` in config.
 
@@ -197,8 +234,19 @@ Review mode is configurable: default reviewer persona, `/ocr:review`, or custom 
 
 Three configurable gates: `spawn`, `review`, `merge`. Each can be `"ask"` (human confirms) or `"auto"` (orchestrator proceeds). Defaults: spawn=ask, review=auto, merge=ask. Always escalates on: blocked engineers, max review rounds, merge conflicts, out-of-scope discoveries.
 
+Delivery is controlled separately via `[delivery] mode`: `"review"` (default, user inspects goal branch) or `"pr"` (push + create PR via `gh`). The system never merges to the project's main/default branch unless the user explicitly requests it.
+
 ## tmux Layout
 
-All agents in one tmux session (`orc`). Windows: `orc` (root orchestrator), `status` (dashboard), `{project}` (project orchestrator), `{project}/{bead}` (worktree with eng+review panes), `{project}/board` (board view).
+All agents in one tmux session (`orc`). Three-level window hierarchy:
+
+```
+orc                              ← Root orchestrator
+status                           ← Dashboard
+{project}                        ← Project orchestrator
+{project}/{goal}                 ← Goal orchestrator (agent plane)
+{project}/{goal}/{bead}          ← Engineer worktree (eng + review panes)
+{project}/board                  ← Board view
+```
 
 Status bar shows aggregate health. Window names include live status indicators (● ✓ ✗). Pane borders show titles. Activity monitoring highlights active windows.

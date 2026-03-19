@@ -46,10 +46,13 @@ context: |
 
   ## Architecture
 
-  Three-tier hierarchy:
+  Four-tier hierarchy:
   - **Root Orchestrator** — conversational session coordinating across projects
-  - **Project Orchestrator** — runs at project root, decomposes goals into beads,
-    sequences/dispatches engineers, manages the review loop
+  - **Project Orchestrator** — receives user requests, decomposes into goals,
+    dispatches goal orchestrators, monitors goal-level progress
+  - **Goal Orchestrator** — owns one goal (feature/bug/task), runs as separate
+    agent session, decomposes into beads, dispatches engineers, manages review
+    loop, fast-forward merges approved beads to goal branch, handles delivery
   - **Engineers** — autonomous agent sessions in isolated git worktrees, each
     assigned a single bead
 
@@ -65,9 +68,12 @@ context: |
   - Config resolution: project .orc/config.toml > config.local.toml > config.toml
   - Persona resolution: project .orc/{role}.md > packages/personas/{role}.md
   - Personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/, .ocr/, etc.
+  - Goal branches: type-prefixed (feat/, fix/, task/), configurable naming strategy
+  - Bead branches: work/<goal>/<bead>, fast-forward merge to goal branch
+  - Delivery: review mode (default, user inspects) or PR mode (push + gh pr create)
   - Review loop: engineer signals → reviewer agent in worktree → verdict → feedback cycle
   - Approval policy: spawn/review/merge gates, each "ask" or "auto"
-  - tmux session layout: one session, all projects, all agents
+  - tmux session layout: one session, three-level windows (project/goal/bead)
   - Agent adapter via string interpolation (no interfaces, no strategy pattern)
 
   ## Key Design Decisions
@@ -214,22 +220,29 @@ testing:
 domain:
   concepts:
     root_orchestrator: Conversational agent coordinating across multiple projects
-    project_orchestrator: Agent at project root that plans, sequences, dispatches, and reviews
+    project_orchestrator: Agent at project root that decomposes requests into goals and dispatches goal orchestrators
+    goal_orchestrator: Agent that owns one goal — plans beads, dispatches engineers, manages review loop, merges to goal branch, handles delivery
     engineer: Autonomous agent in isolated worktree with single bead assignment
     reviewer: Agent that evaluates engineer work and writes structured verdicts
     persona: Markdown file defining agent role and behavior boundaries
+    goal: Named unit of delivery grouping related beads under one branch (feat/, fix/, task/)
     bead: Work item in Dolt database — single source of truth for tasks and dependencies
+    goal_branch: Long-lived branch per goal, beads ff-merge into it, becomes the PR/review target
     worktree: Isolated git checkout where engineers work (under .worktrees/)
     worker_status: Plain text signal file at worktree root (working/review/blocked)
     worker_feedback: Structured review output written by reviewer agent
     assignment: Bead description rendered as .orch-assignment.md in the worktree
     approval_policy: Configurable gates (spawn/review/merge) — "ask" or "auto"
+    delivery: Goal completion mode — "review" (present branch) or "pr" (push + create PR)
+    branching_strategy: Natural language config field for branch naming conventions
+    target_strategy: Natural language config field for PR target branch selection
     board: Visual bead management tool (Abacus default, configurable)
     adapter: String interpolation pattern for launching any agent CLI
 
   tiers:
     - Root orchestrator (coordinates projects, never writes code)
-    - Project orchestrator (manages beads and engineers, never writes code)
+    - Project orchestrator (creates goals, dispatches goal orchestrators, never writes code)
+    - Goal orchestrator (manages beads, engineers, review loop for one goal, never writes code)
     - Engineers (write code, never modify beads or push)
 
 # ─────────────────────────────────────────────────────────────────────────────
