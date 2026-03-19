@@ -1,68 +1,71 @@
 ## ADDED Requirements
 
-### Requirement: Review Command
-The system SHALL provide `orc review <project> <bead>` to spawn a review agent in an engineer's worktree. It SHALL check the review approval policy (ask/auto) from the project's configuration, create a temporary tmux window named "{project}/{bead}/review", and launch the agent CLI with the reviewer persona pointed at the engineer's worktree directory.
+### Requirement: Two-Plane Worktree Model
+Each worktree window SHALL support two planes: a persistent engineering pane (pane 0) and an ephemeral review pane (pane 1). Both planes operate on the same worktree directory.
 
-#### Scenario: review spawns reviewer in engineer worktree
-- **WHEN** `orc review <project> <bead>` is run and the worktree exists
-- **THEN** a tmux window named "{project}/{bead}/review" is created and the agent CLI is launched with the reviewer persona in the engineer's worktree directory
+#### Scenario: Engineering pane is full screen during implementation
+- **WHEN** an engineer is working and no review is active
+- **THEN** the engineering pane occupies the full window
 
-#### Scenario: review with ask policy prompts for confirmation
-- **WHEN** `orc review <project> <bead>` is run and the project's approval policy is "ask"
-- **THEN** the system prompts the user for confirmation before spawning the review agent
+#### Scenario: Review pane appears during review
+- **WHEN** the project orchestrator triggers `orc review <project> <bead>`
+- **THEN** a review pane is created as a vertical split on the right side at 40% width
 
-#### Scenario: review nonexistent worktree exits with state error
-- **WHEN** `orc review <project> <bead>` is run and no worktree exists for that bead
-- **THEN** the command exits with a non-zero status and prints a state error message identifying the missing worktree
+#### Scenario: Review pane is destroyed after review
+- **WHEN** the review process completes and writes to `.worker-feedback`
+- **THEN** the review pane is killed and the engineering pane returns to full width
 
-### Requirement: Verdict Format
-The reviewer persona SHALL instruct the review agent to write its verdict to `.worker-feedback` in the worktree root upon completing its evaluation. The first line of the file SHALL be exactly `VERDICT: approved` or `VERDICT: not-approved`. Not-approved verdicts SHALL include a structured `## Issues` section below the verdict line containing file:line references and actionable descriptions for each identified issue.
+### Requirement: Review Pane Convention
+The review pane SHALL always be a vertical split on the right side at 40% width. This convention SHALL NOT vary.
 
-#### Scenario: approved verdict has correct first line
-- **WHEN** the review agent produces an approved verdict
-- **THEN** the first line of `.worker-feedback` is exactly `VERDICT: approved`
+#### Scenario: Consistent review pane position
+- **WHEN** any review pane is created in any worktree
+- **THEN** it appears as a right-side vertical split at 40% width
 
-#### Scenario: not-approved verdict includes issues section
-- **WHEN** the review agent produces a not-approved verdict
-- **THEN** the first line of `.worker-feedback` is exactly `VERDICT: not-approved` and the file contains a `## Issues` section with at least one file:line reference and actionable description
+### Requirement: Review Loop Orchestration
+The project orchestrator SHALL manage the review loop: detect "review" in `.worker-status`, launch the review pane, read the verdict from `.worker-feedback`, and either send feedback to the engineering pane for another round or mark the bead as done.
 
-### Requirement: Review Round Tracking
-The orchestrator SHALL track review rounds, where one round constitutes an engineer signaling "review" followed by a reviewer agent evaluating the work. The orchestrator SHALL maintain a round counter per bead that increments with each completed implement→review cycle. After `max_rounds` consecutive not-approved verdicts, where `max_rounds` is configurable per project with a default of 3, the orchestrator SHALL escalate to the human operator instead of dispatching another review.
+#### Scenario: Review triggers on status signal
+- **WHEN** the project orchestrator detects `.worker-status` contains "review"
+- **THEN** it runs `orc review <project> <bead>` to create the review pane
 
-#### Scenario: first review is round 1
-- **WHEN** an engineer signals "review" for the first time on a bead
-- **THEN** the orchestrator records the review round count as 1
+#### Scenario: Approved verdict marks done
+- **WHEN** `.worker-feedback` contains "VERDICT: approved"
+- **THEN** the project orchestrator marks the bead as done and initiates teardown
 
-#### Scenario: max_rounds exceeded triggers escalation
-- **WHEN** a bead receives `max_rounds` consecutive not-approved verdicts
-- **THEN** the orchestrator escalates to the human operator and does not dispatch another review agent
+#### Scenario: Not-approved verdict sends feedback
+- **WHEN** `.worker-feedback` contains "VERDICT: not-approved"
+- **THEN** the project orchestrator sends feedback to the engineering pane and waits for the engineer to re-signal
 
-### Requirement: Escalation
-The system SHALL always escalate to the human operator regardless of the configured approval policy when any of the following conditions occur: an engineer agent signals "blocked", a bead's review round count reaches `max_rounds` with consecutive not-approved verdicts, a merge conflict cannot be cleanly resolved by the orchestrator, or an engineer agent discovers work that is out of scope for the assigned bead.
+#### Scenario: Max rounds escalates to human
+- **WHEN** the review loop reaches `max_rounds` without approval
+- **THEN** the project orchestrator escalates to the human
 
-#### Scenario: blocked engineer triggers escalation
-- **WHEN** an engineer agent writes a status signal of "blocked" to its `.worker-status` file
-- **THEN** the orchestrator immediately escalates to the human operator with the blocking reason, bypassing any approval policy check
+### Requirement: Configurable Review Process
+The review process SHALL be configurable via `[review] command` in config. An empty value uses the default reviewer persona. Other values (e.g., `/ocr:review`) are executed in the review pane.
 
-#### Scenario: max review rounds triggers escalation
-- **WHEN** a bead accumulates `max_rounds` consecutive not-approved review verdicts
-- **THEN** the orchestrator escalates to the human operator with a summary of the outstanding issues from the final `.worker-feedback` file
+#### Scenario: Default reviewer persona
+- **WHEN** `review.command` is empty
+- **THEN** a reviewer agent session using `reviewer.md` persona is launched in the review pane
 
-#### Scenario: Merge conflict triggers escalation
-- **WHEN** the orchestrator attempts to merge an approved worktree branch and encounters a merge conflict that cannot be cleanly resolved
-- **THEN** the orchestrator escalates to the human operator with details of the conflicting files
+#### Scenario: OCR review configured
+- **WHEN** `review.command` is set to `/ocr:review`
+- **THEN** OCR is run in the review pane
 
-#### Scenario: Out-of-scope discovery triggers escalation
-- **WHEN** an engineer signals a `found:` discovery that the orchestrator determines requires human judgment
-- **THEN** the orchestrator escalates to the human operator with the discovery description
+#### Scenario: Custom review command
+- **WHEN** `review.command` is set to any other value
+- **THEN** that command is executed in the review pane
 
-### Requirement: Review Instructions Configuration
-The system SHALL support a `review.instructions` configuration field that is appended to the reviewer persona when launching a review agent. This field allows projects to customize what "review" means (e.g., specifying test commands, lint tools, or focus areas) without writing a full persona override. When `review.instructions` is not set, the reviewer uses the default persona behavior.
+### Requirement: Worker Status Signal
+Engineers SHALL signal their state via `.worker-status` — a plain text file with one status word on line 1: `working`, `review`, or `blocked: <reason>`. Optional `found:` discoveries appear on subsequent lines.
 
-#### Scenario: Custom review instructions appended to reviewer persona
-- **WHEN** `review.instructions` is set in the project's configuration and `orc review` is invoked
-- **THEN** the content of `review.instructions` is appended to the reviewer persona before launching the review agent
+#### Scenario: Engineer signals review
+- **WHEN** the engineer writes `review` to `.worker-status`
+- **THEN** the project orchestrator detects this and initiates the review loop
 
-#### Scenario: Default behavior when review instructions not set
-- **WHEN** `review.instructions` is not set in configuration
-- **THEN** the review agent is launched with the default reviewer persona without additional instructions
+### Requirement: Worker Feedback
+Review agents SHALL write structured feedback to `.worker-feedback` with a `VERDICT:` line followed by optional issue details.
+
+#### Scenario: Feedback file written
+- **WHEN** the review process completes
+- **THEN** `.worker-feedback` contains either `VERDICT: approved` or `VERDICT: not-approved` followed by structured issues

@@ -1,0 +1,6 @@
+{
+  "name": "@orc/commands",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orc slash commands for agent CLIs (Claude Code, Windsurf)"
+}

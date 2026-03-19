@@ -1,0 +1,30 @@
+# Orc — committed defaults
+# Override in config.local.toml (gitignored) or {project}/.orc/config.toml
+
+[defaults]
+agent_cmd = "claude"
+agent_flags = ""
+agent_template = ""
+yolo_flags = ""              # auto-accept flags per agent (--yolo); empty = use built-in defaults
+max_workers = 3
+
+[approval]
+spawn = "ask"
+review = "auto"
+merge = "ask"
+
+[review]
+max_rounds = 3
+command = ""                 # empty = default reviewer persona; "/ocr:review" = OCR; or any command
+
+[board]
+command = ""                 # empty = built-in fallback (watch bd list)
+
+[theme]
+enabled = true               # false = respect user's tmux theme, only set functional options
+accent = "#00ff88"            # primary accent (status bar, active borders, current window)
+bg = "#0d1117"                # status bar background
+fg = "#8b949e"                # status bar text
+border = "#30363d"            # inactive pane/window borders
+muted = "#6e7681"             # de-emphasized text (version, separators)
+activity = "#d29922"          # window activity highlight

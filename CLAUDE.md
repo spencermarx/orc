@@ -52,9 +52,9 @@ Core philosophy: shell over runtime, markdown is the control plane, beads are th
 
 Three-tier hierarchy:
 
-1. **Root Orchestrator** — conversational session coordinating across projects. Optional; skip with `orc start <project>` for single-project work.
+1. **Root Orchestrator** — conversational session coordinating across projects. Optional; skip with `orc <project>` for single-project work.
 2. **Project Orchestrator** — runs at project root, decomposes goals into beads, sequences/dispatches engineers, manages the review loop.
-3. **Engineers** — autonomous agent sessions in isolated git worktrees. Each gets a single bead assignment via `.orch-assignment.md`.
+3. **Worktrees** — isolated workspaces with two planes: engineering (implementation) and review (ephemeral). Each gets a single bead assignment via `.orch-assignment.md`.
 
 State model uses exactly three primitives: **Beads** (Dolt DB at `{project}/.beads/`), **`.worker-status`** (plain text signal per worktree), and **`.worker-feedback`** (review output per worktree).
 
@@ -62,15 +62,19 @@ State model uses exactly three primitives: **Beads** (Dolt DB at `{project}/.bea
 
 ```
 orc/
-├── config.toml                    # Committed defaults
-├── config.local.toml              # User overrides (gitignored)
-├── projects.toml                  # Project registry (gitignored)
-├── nx.json / package.json / pnpm-workspace.yaml
+├── assets/
+│   └── orc-ascii.txt                # ASCII art
+├── config.toml                      # Committed defaults
+├── config.local.toml                # User overrides (gitignored)
+├── projects.toml                    # Project registry (gitignored)
 ├── packages/
-│   ├── cli/                       # The `orc` command (bash scripts)
-│   │   ├── bin/orc                # Entry point (symlinked to PATH)
-│   │   └── lib/                   # Subcommand scripts + _common.sh
-│   └── personas/                  # Default persona markdown files
+│   ├── cli/                         # The `orc` command (bash scripts)
+│   │   ├── bin/orc                  # Entry point (positional routing)
+│   │   └── lib/                     # Subcommand scripts + _common.sh
+│   ├── commands/                    # Slash commands for agent CLIs
+│   │   ├── claude/orc/              # Claude Code commands (/orc, /orc:status, etc.)
+│   │   └── windsurf/                # Windsurf commands (orc-index, orc-status, etc.)
+│   └── personas/                    # Default persona markdown files
 │       ├── root-orchestrator.md
 │       ├── orchestrator.md
 │       ├── engineer.md
@@ -89,10 +93,11 @@ Registered projects get an optional `.orc/` dir for overrides, `.beads/` for sta
 | Package Manager | pnpm |
 | CLI | Pure bash scripts (no build step) |
 | Personas | Pure markdown (no runtime dependencies) |
+| Slash commands | Markdown (installed via symlinks) |
 | Work tracking | Beads (Dolt database, MySQL-compatible) |
-| Board visualization | Abacus (default), configurable |
+| Board visualization | Configurable (Abacus, etc.) with built-in fallback |
 | Session management | tmux |
-| Agent adapter | String interpolation (`$AGENT_CMD $AGENT_FLAGS --print "$INITIAL_PROMPT"`) |
+| Agent adapter | String interpolation with --yolo support |
 
 ## Build & Development Commands
 
@@ -100,7 +105,7 @@ Registered projects get an optional `.orc/` dir for overrides, `.beads/` for sta
 # Setup
 git clone https://github.com/thefinalsource/orc.git
 cd orc && pnpm install
-pnpm orc:install              # Symlinks `orc` to PATH, creates gitignored config files
+pnpm orc:install              # Symlinks `orc` to PATH, creates config, installs commands
 
 # CLI (no build step — bash scripts)
 # Edit scripts directly in packages/cli/lib/
@@ -111,25 +116,54 @@ pnpm orc:install              # Symlinks `orc` to PATH, creates gitignored confi
 
 ## CLI Commands
 
+### Navigation (positional arguments)
+
 ```bash
-orc                            # Help + brief status
-orc init                       # First-time setup
-orc add <key> <path>           # Register a project
+orc                            # Root orchestrator (create or attach)
+orc <project>                  # Project orchestrator (create or attach)
+orc <project> <bead>           # Attach to worktree (engineering plane)
+```
+
+### Admin (explicit subcommands)
+
+```bash
+orc init                       # First-time setup + install slash commands
+orc add <key> <path>           # Register project + install commands
 orc remove <key>               # Unregister a project
 orc list                       # Show registered projects
-orc start                      # Start root orchestrator
-orc start <project>            # Start project orchestrator
-orc spawn <project> <bead>     # Create worktree + launch engineer
-orc review <project> <bead>    # Trigger review for a worktree
-orc board <project>            # Open Abacus (or configured board)
 orc status                     # Dashboard: all projects, all workers
 orc halt <project> <bead>      # Stop an engineer
-orc teardown <project> <bead>  # Remove worktree + clean up branch
-orc config                     # Open config in $EDITOR
-orc config <project>           # Open project config in $EDITOR
+orc teardown [project] [bead]  # Hierarchical cleanup (bead, project, or all)
+orc config [project]           # Open config in $EDITOR
+orc board <project>            # Open board view
+orc leave                      # Detach from tmux
+```
+
+### Internal (still work, hidden from help)
+
+```bash
+orc spawn <project> <bead>     # Create worktree + launch engineer
+orc review <project> <bead>    # Launch review pane in worktree
 ```
 
 Exit codes: `0` success, `1` usage error, `2` state error, `3` project not found.
+
+## Slash Commands (installed per agent CLI)
+
+| Command | Role | Workflow |
+|---------|------|----------|
+| `/orc` | Any | Orientation: your role, available commands, state |
+| `/orc:status` | Any | Run `orc status`, highlight actionable items |
+| `/orc:plan` | Orchestrator | Investigate → decompose → beads → propose |
+| `/orc:dispatch` | Orchestrator | Check ready beads → spawn engineers |
+| `/orc:check` | Orchestrator | Poll .worker-status → handle review/blocked/found/dead |
+| `/orc:view` | Orchestrator | Create/adjust tmux layouts for monitoring |
+| `/orc:done` | Engineer | Self-review → signal review → STOP |
+| `/orc:blocked` | Engineer | Signal blocked with reason → STOP |
+| `/orc:feedback` | Engineer | Read .worker-feedback → fix → re-signal → STOP |
+| `/orc:leave` | Any | Report state → detach from tmux |
+
+Commands are installed by `orc init` (into orc repo), `orc add` (into projects), and `orc spawn` (into worktrees).
 
 ## Configuration
 
@@ -141,7 +175,7 @@ Project personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/ rules
 
 ## Prerequisites
 
-`bd` (Beads), `tmux`, `git`, an agent CLI (`claude`/`opencode`/`codex`). Recommended: `abacus`.
+`bd` (Beads), `tmux` (3.0+), `git`, `bash` (4+), an agent CLI (`claude`/`opencode`/`codex`).
 
 ## Code Conventions
 
@@ -151,12 +185,13 @@ Project personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/ rules
 - TypeScript (where used): strict mode, ESM only, `type` over `interface`, no `any`, exhaustive switch with `never` default
 - Naming: kebab-case files, camelCase identifiers, kebab-case commands
 - Testing: Detroit school — test observable behavior, use real dependencies, mock only external systems
+- **Cross-OS**: no `readlink -f`, no `grep -P`, portable `mktemp`, `$OSTYPE` for sed -i
 
 ## The Review Loop
 
-Engineers signal `review` via `.worker-status` → orchestrator spawns a review agent in the worktree → reviewer writes verdict to `.worker-feedback` → if not approved, engineer gets structured feedback and re-signals → repeats up to `max_rounds` (default 3) then escalates to human.
+Two-plane model: each worktree window has an engineering pane (persistent) and a review pane (ephemeral, right side, 40%). Engineers signal `review` via `.worker-status` → orchestrator creates review pane → reviewer writes verdict to `.worker-feedback` → if not approved, review pane destroyed, engineer gets feedback and re-signals → repeats up to `max_rounds` (default 3) then escalates to human.
 
-Review is an agent session with full access to project AI config, slash commands, skills, OCR, test suite, and linters. Verdicts are LLM-classified, not regex-matched.
+Review mode is configurable: default reviewer persona, `/ocr:review`, or custom command via `[review] command` in config.
 
 ## Approval Policy
 
@@ -164,4 +199,6 @@ Three configurable gates: `spawn`, `review`, `merge`. Each can be `"ask"` (human
 
 ## tmux Layout
 
-All agents in one tmux session (`orc`). Windows: `orc` (root), `dash` (status), `{project}` (orchestrator), `{project}/{bead}` (engineer), `{project}/board` (Abacus).
+All agents in one tmux session (`orc`). Windows: `orc` (root orchestrator), `status` (dashboard), `{project}` (project orchestrator), `{project}/{bead}` (worktree with eng+review panes), `{project}/board` (board view).
+
+Status bar shows aggregate health. Window names include live status indicators (● ✓ ✗). Pane borders show titles. Activity monitoring highlights active windows.

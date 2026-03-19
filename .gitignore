@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Orc local state (machine-specific)
+config.local.toml
+projects.toml
+
+# Project runtime state
+.worktrees/
+.beads/
+
+# OS
+.DS_Store
+
+# pnpm
+pnpm-lock.yaml

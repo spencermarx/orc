@@ -1,0 +1,1 @@
+/Users/spencermarx/Desktop/Projects/Aclarify/Repositories/orc/packages/commands/claude/orc/plan.md

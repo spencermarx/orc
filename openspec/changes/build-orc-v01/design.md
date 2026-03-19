@@ -1,95 +1,89 @@
 ## Context
 
-Orc is a thin orchestration layer for coordinating AI coding agents across multiple projects. It does not replace project-level AI configuration (CLAUDE.md, .claude/ rules, etc.) — it adds a role-scoped orchestration layer on top of whatever agent config already exists in each project.
+Orc is a thin orchestration layer for coordinating AI coding agents across multiple projects. It does not replace project-level AI configuration (CLAUDE.md, .claude/ rules, etc.) — it adds a role-scoped orchestration layer on top.
 
 The tool is intentionally self-contained: the repo is the tool. There is no ~/.orc dotdir. All runtime state, config, personas, and tooling live in a single directory tree.
 
 Core dependencies: tmux for session management, git worktrees for isolation, Beads/Dolt (bd) for work tracking, and markdown files for agent behavior. The CLI is pure bash. Config is TOML.
 
-Three-tier agent hierarchy:
-1. Root orchestrator — coordinates across all projects
-2. Project orchestrator — coordinates engineers within one project
-3. Engineers — execute scoped tasks inside worktrees
+This is the second design iteration. The first attempt (stashed) revealed critical issues with tmux abstraction depth, CLI/slash-command boundary clarity, navigation assumptions, review model, teardown lifecycle, and cross-OS portability. See `design-spec-v2.md` for the full UX design spec incorporating all lessons learned.
 
 ## Goals / Non-Goals
 
 Goals:
-- Implement the complete v0.1 CLI surface (15 subcommands)
-- Ship 4 default personas with clear role boundaries (root orchestrator, project orchestrator, engineer, reviewer)
-- Establish NX monorepo structure to accommodate future package additions
-- Provide a built-in board fallback (`watch -n5 bd list`) with configurable external board tools
+- Implement unified positional navigation (`orc`, `orc <project>`, `orc <project> <bead>`)
+- Ship two-plane review model (engineering + ephemeral review pane in one worktree window)
+- Deliver 10 slash commands covering all agent workflows
+- Build polished tmux experience (status bar, live window names, pane titles, activity monitoring)
+- Implement hierarchical teardown (bead → project → everything)
+- Ensure cross-OS compatibility (macOS + Linux)
 
 Non-Goals:
-- OCR integration package (future change)
-- Notification hooks (future change)
+- OCR integration package (future change — OCR works via `review.command` config)
+- Notification hooks / desktop notifications (future change)
 - Session persistence across tmux crashes (future change)
 - Metrics and token tracking (future change)
 
 ## Decisions
 
-### 1. Pure bash CLI
+### 1. Positional navigation replaces subcommands for navigation
 
-Each subcommand is a separate `.sh` file that sources `_common.sh` for shared utilities. The entry point (`orc`) dispatches via a `case` statement. No TypeScript runtime, no node_modules, no build step.
+`orc` opens the root orchestrator. `orc <project>` opens a project orchestrator. `orc <project> <bead>` jumps to an engineer. Reserved subcommands (`init`, `add`, `status`, etc.) are checked first to prevent collision. The `start` and `focus` commands from v3 spec are eliminated.
 
-Rationale: Shell over runtime. Orc coordinates agents; it should not itself require a language runtime to bootstrap. Bash is available everywhere tmux runs.
+Rationale: Three positional patterns replace five navigation-related subcommands. Users learn one mental model. CWD-aware detection means `orc` from inside a registered project offers to open that project's orchestrator.
 
-Alternatives considered: TypeScript CLI (oclif/commander) — rejected because it introduces a build step, node dependency, and packaging overhead for what is fundamentally a process-coordination script.
+### 2. Two-plane review model
 
-### 2. TOML config with three-layer resolution
+Each worktree window has two planes: an engineering pane (pane 0, persistent) and a review pane (pane 1, ephemeral). The review pane is created by the project orchestrator when `.worker-status` reads "review", runs the configured review process (default reviewer persona, `/ocr:review`, or custom command), writes verdict to `.worker-feedback`, and is destroyed after each cycle.
 
-Resolution order (highest to lowest precedence):
-1. `{project}/.orc/config.toml` — project-specific overrides
-2. `{orc-repo}/config.local.toml` — user overrides (gitignored)
-3. `{orc-repo}/config.toml` — committed defaults
+Rationale: Separates implementation from review (different agents, different concerns) while keeping everything in one window. The user sees both planes side-by-side during review. The engineering pane stays alive with all its context. No separate review windows cluttering the window list.
 
-Parsed with a lightweight bash TOML reader supporting flat sections and simple `key = value` pairs. Multi-line values (e.g., `review.instructions`) use a triple-quote convention parsed as a heredoc block.
+Convention: Review pane is always a vertical split on the right, always 40% width, always ephemeral.
 
-Alternatives considered: JSON config — rejected because TOML is more human-editable for the kind of string-heavy config Orc needs. Full TOML parser via external tool — acceptable fallback if config complexity grows, but not required at v0.1.
+### 3. CLI commands vs slash commands boundary
 
-### 3. String interpolation agent adapter
+CLI commands manage infrastructure (sessions, worktrees, processes, tmux state). Slash commands guide agent behavior (plan, dispatch, check, done). A slash command never creates infrastructure directly — it instructs the agent, and the agent calls CLI commands.
 
-Default invocation template:
+This maps to: `orc spawn`, `orc review`, `orc teardown` are CLI commands. `/orc:plan`, `/orc:dispatch`, `/orc:check`, `/orc:done` are slash commands.
 
-```
-$AGENT_CMD $AGENT_FLAGS --print "$PROMPT"
-```
+### 4. `exec` for tmux attachment
 
-Projects that use an agent CLI with a different interface set `agent_template` in config to override the template. No strategy pattern, no plugin interface — just a configurable string with interpolated variables.
+When entering orc from outside tmux, use `exec tmux attach-session` instead of just `tmux attach-session`. This replaces the shell process with tmux, eliminating the dangling process after detach and preventing the `set -e` / silent failure issues from the first attempt.
 
-Rationale: The set of agent CLIs in use is small and their interfaces are similar. A string template covers all known cases without the overhead of an abstraction layer.
+When navigating inside tmux, use `tmux switch-client` (not `select-window` alone, which fails across sessions).
 
-### 4. Board with built-in fallback
+### 5. Hierarchical teardown
 
-Default config: `[board] command = ""`. When the board command is empty or the configured tool is not found on PATH, Orc falls back to `watch -n5 bd list`. A warning is printed when falling back from a configured tool.
+`orc teardown` operates at three levels: single bead, entire project, or everything. Each level asks for confirmation with a summary of what will be destroyed. `--force` skips confirmation for orchestrator automation. Teardown order: review pane → engineering pane → tmux window → git worktree → branch.
 
-Rationale: bd is a required dependency (validated at `orc init`), so the fallback is always available. External board tools (abacus, foolery, etc.) are optional enhancements.
+### 6. Live tmux status indicators
 
-### 5. Persona resolution is additive
+Window names include status emoji (● working, ✓ review, ✗ blocked, ✓✓ approved). Status bar right side shows aggregate health across all projects. Pane borders show titles (engineering vs review, round number). Activity monitoring highlights windows with new output.
 
-Persona markdown files live at `packages/personas/{role}.md` (defaults) and `<project>/.orc/{role}.md` (overrides). A project-level file replaces the default for that role within that project, but personas never replace or modify existing project AI config (CLAUDE.md, .claude/ rules).
+The project orchestrator updates window names via `tmux rename-window` when polling `.worker-status`.
 
-Orc prepends or appends the persona content to the agent prompt — the persona describes the Orc role, not the full agent behavior.
+### 7. Portable utilities
 
-### 6. Worker status as plain text
+`readlink -f` replaced with a portable loop that follows symlinks iteratively. `mktemp` uses POSIX-compatible invocation. `grep -P` replaced with `grep -E`. `sed -i` handled via `$OSTYPE` detection. Bash 4+ and tmux 3.0+ are documented requirements.
 
-Each worktree writes a `.worker-status` file containing exactly one word: `working`, `review`, or `blocked`. The orchestrator polls with `cat .worker-status`.
+### 8. Slash command installation via symlinks
 
-Rationale: No JSON, no structured format, no parser. The signal space is intentionally small. If a richer status model is needed later, it can be added without breaking consumers that only check for the current three states.
+Slash commands live in `packages/commands/{agent}/` and are symlinked into agent config directories at three points: `orc init` (orc repo), `orc add` (project), `orc spawn` (worktree). Symlinks ensure commands stay in sync with the orc repo — no copies to get stale.
 
-### 7. Prerequisites validated at init and runtime
+### 9. Agent adapter with --yolo support
 
-`orc init` checks for: `bd`, `tmux`, `git`, and the configured agent CLI. Individual commands also validate what they specifically need (e.g., `orc spawn` checks bd, tmux, and the agent CLI before proceeding).
-
-Validation uses `command -v` checks with clear error messages that name the missing dependency and where to install it.
+Default launch pattern uses `--append-system-prompt` for Claude Code. `--yolo` flag sets `ORC_YOLO=1`, which appends the agent's auto-accept flag (e.g., `--dangerously-skip-permissions` for Claude). Configurable via `defaults.yolo_flags` in config for other agent CLIs.
 
 ## Risks / Trade-offs
 
-- **Bash TOML parsing is limited** — The lightweight parser supports flat sections with `key = value` pairs and a triple-quote multi-line convention. Deeply nested tables or arrays-of-tables are not supported. If config grows to require those constructs, the parser must be replaced with a call to an external TOML tool (e.g., `dasel`, `tomljson`). Mitigation: keep config schema flat by design; document the limitation explicitly.
+- **Bash TOML parsing is limited** — Lightweight parser supports flat sections with `key = value` pairs. Deeply nested tables or arrays-of-tables are not supported. Mitigation: keep config schema flat by design.
 
-- **No unit test framework for bash** — Quality is maintained via shellcheck linting, manual smoke tests, and integration tests that drive the full CLI. Acceptable for a ~500-line codebase where the logic is coordination (process invocation, file I/O) rather than complex computation.
+- **tmux 3.0+ required** — Pane titles and some style options need tmux 3.0+. Most systems have this or newer. Mitigation: `orc init` checks version and warns.
 
-- **tmux required even for single-project use** — tmux is the session manager by design; there is no non-tmux execution path. This is an acceptable constraint because the agent isolation model depends on named tmux sessions.
+- **Dynamic window renaming** — Project orchestrator must poll `.worker-status` and rename windows. If the orchestrator crashes, window names go stale. Mitigation: `orc status` reads actual status files, not window names. Names are cosmetic, not authoritative.
+
+- **Ephemeral review pane lifecycle** — Creating and destroying panes adds complexity. If `orc review` crashes mid-review, a stale pane may remain. Mitigation: `orc status` detects orphaned panes; teardown always kills pane 1 first.
 
 ## Open Questions
 
-None — spec is comprehensive and all decisions are settled.
+None — design is comprehensive and all decisions are settled per `design-spec-v2.md`.

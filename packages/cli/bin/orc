@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# orc — Lightweight multi-project agent orchestration.
+# Entry point with positional navigation + subcommand dispatch.
+
+set -euo pipefail
+
+# Resolve symlinks portably (no readlink -f)
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+
+# shellcheck source=../lib/_common.sh
+source "$LIB_DIR/_common.sh"
+
+_show_help() {
+  cat <<EOF
+orc v${ORC_VERSION} — Multi-project agent orchestration
+
+Usage:
+  orc                             Root orchestrator (create or attach)
+  orc <project>                   Project orchestrator (create or attach)
+  orc <project> <bead>            Attach to worktree (engineering plane)
+
+Admin:
+  init                            First-time setup + install slash commands
+  add <key> <path>                Register a project
+  remove <key>                    Unregister a project
+  list                            Show registered projects
+  status                          Dashboard: all projects, all workers
+  halt <project> <bead>           Stop an engineer
+  teardown [project] [bead]       Hierarchical cleanup
+  config [project]                Open config in \$EDITOR
+  board <project>                 Open board view
+  leave                           Detach from tmux
+
+Options:
+  --yolo                          Skip agent permission prompts
+  --help, -h                      Show this help
+  --version, -v                   Show version
+
+EOF
+}
+
+# ── Parse global flags ──────────────────────────────────────────────────────
+
+export ORC_YOLO=0
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --yolo) ORC_YOLO=1 ;;
+    *)      args+=("$arg") ;;
+  esac
+done
+set -- "${args[@]+"${args[@]}"}"
+
+# ── No arguments → root orchestrator (with CWD detection) ──────────────────
+
+if [[ $# -eq 0 ]]; then
+  # CWD-aware: if inside a registered project, offer to open it
+  detected="$(_detect_project_from_cwd)"
+  if [[ -n "$detected" ]]; then
+    printf '%s' "[orc] You're in '$detected'. Open its orchestrator? [Y/n] "
+    read -r answer
+    if [[ ! "$answer" =~ ^[Nn] ]]; then
+      source "$LIB_DIR/start.sh"
+      orc_start "$detected"
+      exit "$EXIT_OK"
+    fi
+  fi
+  source "$LIB_DIR/start.sh"
+  orc_start
+  exit "$EXIT_OK"
+fi
+
+# ── Flags ───────────────────────────────────────────────────────────────────
+
+case "$1" in
+  --help|-h)
+    _show_help
+    exit "$EXIT_OK"
+    ;;
+  --version|-v)
+    echo "orc v${ORC_VERSION}"
+    exit "$EXIT_OK"
+    ;;
+esac
+
+# ── Reserved subcommands (checked before positional routing) ────────────────
+
+if _is_reserved_name "$1"; then
+  cmd="$1"
+  shift
+  case "$cmd" in
+    start)
+      source "$LIB_DIR/start.sh"
+      orc_start "$@"
+      ;;
+    *)
+      source "$LIB_DIR/${cmd}.sh"
+      ;;
+  esac
+  exit "$EXIT_OK"
+fi
+
+# ── Positional navigation ──────────────────────────────────────────────────
+
+project="$1"
+shift
+
+if [[ $# -eq 0 ]]; then
+  # orc <project> → project orchestrator (create or attach)
+  source "$LIB_DIR/start.sh"
+  orc_start "$project"
+else
+  # orc <project> <bead> → attach to worktree window
+  bead="$1"
+  window_name="${project}/${bead}"
+
+  if ! tmux has-session -t "$ORC_TMUX_SESSION" 2>/dev/null; then
+    _die "No orc session running. Start one with: orc" "$EXIT_STATE"
+  fi
+
+  if ! _tmux_window_exists "$window_name"; then
+    # Check for windows with status suffixes (e.g., "myapp/bd-a1b2 ●")
+    found="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+      | grep -E "^${window_name}( |$)" | head -1 || true)"
+    if [[ -n "$found" ]]; then
+      _orc_goto "$found"
+    else
+      _error "Worktree '$window_name' not running."
+      _info "Active worktrees:"
+      tmux list-windows -t "$ORC_TMUX_SESSION" -F '  #{window_name}' 2>/dev/null \
+        | grep "/" || _info "  (none)"
+      exit "$EXIT_STATE"
+    fi
+  else
+    _orc_goto "$window_name"
+  fi
+fi

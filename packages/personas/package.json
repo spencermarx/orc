@@ -1,0 +1,6 @@
+{
+  "name": "@orc/personas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Default persona markdown files for orc agent roles"
+}
