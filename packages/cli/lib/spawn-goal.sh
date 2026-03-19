@@ -71,10 +71,11 @@ orc_spawn_goal() {
   persona="$(_resolve_persona "goal-orchestrator" "$project_path")"
 
   local init_prompt
+  init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
   if [[ -n "$custom_prompt" ]]; then
-    init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. ${custom_prompt}"
-  else
-    init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
+    init_prompt="${init_prompt}
+
+Additional instructions: ${custom_prompt}"
   fi
 
   _launch_agent_in_window "$goal_window" "$persona" "$project_path" "$init_prompt"
