@@ -121,7 +121,7 @@ pnpm orc:install
 orc add myapp /path/to/myapp
 ```
 
-> **What this touches in your project:** `orc add` creates a `.beads/` directory in your project for work tracking (via `bd init`). This is the **only** change orc makes to your project on disk. Everything else — worktrees, config overrides, persona overrides — is either gitignored or opt-in. Add `.beads/` to your project's `.gitignore` if you don't want it tracked.
+> **What this touches in your project:** `orc add` initializes a `.beads/` directory for work tracking (via `bd init`) and adds orc runtime paths (`.beads/`, `.worktrees/`, `.goals/`) to your repo's `.git/info/exclude` so they're invisible to git. No files in your project are modified — orc uses git's built-in per-repo exclude, not your `.gitignore`.
 
 ### 4. Launch
 
