@@ -29,8 +29,8 @@ if [[ "${1:-}" == "--line" ]]; then
         esac
       done
     fi
-    # Fall back to branch counting if no .goals/ dir
-    if (( goals == 0 )); then
+    # Fall back to branch counting if this project has no .goals/ dir
+    if [[ ! -d "$path/.goals" ]]; then
       goal_branches="$(git -C "$path" for-each-ref --format='%(refname:short)' \
         'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 2>/dev/null || true)"
       if [[ -n "$goal_branches" ]]; then
