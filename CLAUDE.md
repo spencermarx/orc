@@ -241,15 +241,36 @@ Delivery is controlled separately via `[delivery] mode`: `"review"` (default, us
 
 ## tmux Layout
 
-All agents in one tmux session (`orc`). Three-level window hierarchy:
+All agents in one tmux session (`orc`). Hub-and-spoke pane model — agents share windows instead of getting one window each:
 
 ```
-orc                              ← Root orchestrator
-status                           ← Dashboard
-{project}                        ← Project orchestrator
-{project}/{goal}                 ← Goal orchestrator (agent plane)
-{project}/{goal}/{bead}          ← Engineer worktree (eng + review panes)
-{project}/board                  ← Board view
+orc                              ← Root orchestrator (window)
+status                           ← Dashboard (window)
+{project}                        ← Project window (hub)
+  ├── pane 0: Project orchestrator
+  ├── pane N: Goal orchestrator   (title: "goal: <name>")
+  └── pane N+1: Goal orchestrator (title: "goal: <name>")
+{project}/{goal}                 ← Goal window (spoke, created on first engineer spawn)
+  ├── pane 0: Goal orchestrator   (moved from project hub)
+  ├── pane N: Engineer            (title: "eng: <bead>")
+  └── pane N+1: Engineer          (title: "eng: <bead>")
+{project}/board                  ← Board view (window)
+```
+
+### Pane Overflow
+
+When a window cannot fit another pane (below `layout.min_pane_width` or `layout.min_pane_height` thresholds), the system creates overflow windows with a `:N` suffix (e.g., `{project}:2`, `{project}/{goal}:2`). Teardown cleans up overflow windows automatically.
+
+### Pane Navigation
+
+Panes are identified by their titles (`goal: <name>`, `eng: <bead>`, `review: <project>/<bead>`). Use `tmux list-panes -t orc:<window> -F '#{pane_index}:#{pane_title}'` to find specific panes. The review pane splits from the engineer's pane horizontally (40% width) and is destroyed after each review round.
+
+### Layout Configuration
+
+```toml
+[layout]
+min_pane_width = 40    # Minimum columns before overflow
+min_pane_height = 10   # Minimum rows before overflow
 ```
 
 Status bar shows aggregate health (goal count + worker states). Window names are stable identifiers — status indicators (● ✓ ✗) are rendered via `@orc_status` user option in the window-status-format, not embedded in names. Pane borders show titles. Activity monitoring highlights active windows. The `orc status` dashboard groups workers under their parent goal for hierarchical visibility.

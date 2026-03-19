@@ -26,38 +26,85 @@ orc_review() {
 
   _check_approval "review" "$project_path" || exit "$EXIT_OK"
 
-  # Detect window name from worktree branch (handles both work/<bead> and work/<goal>/<bead>)
+  # Detect branch pattern — determines whether engineer is pane-based or window-based
   local actual_branch
   actual_branch="$(git -C "$worktree_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  local window_name="${project}/${bead}"
-  if [[ "$actual_branch" == work/*/* ]]; then
-    local goal_from_branch="${actual_branch#work/}"
+
+  local goal_from_branch=""
+  if [[ "$actual_branch" == work/*/* ]] && [[ "$actual_branch" != work/*//* ]]; then
+    goal_from_branch="${actual_branch#work/}"
     goal_from_branch="${goal_from_branch%/*}"
-    window_name="${project}/${goal_from_branch}/${bead}"
   fi
 
-  if ! _tmux_window_exists "$window_name"; then
-    _die "Worktree window for '$window_name' not found." "$EXIT_STATE"
+  local window_name eng_pane review_pane
+
+  if [[ -n "$goal_from_branch" ]]; then
+    # ── Pane-based: engineer is a pane in the goal window ──
+    local goal_window="${project}/${goal_from_branch}"
+    local pane_title="eng: ${bead}"
+
+    # Find the engineer pane in goal window or overflow
+    local found_window=""
+    for search_win in "$goal_window" $(_tmux_overflow_windows "$goal_window"); do
+      [[ -z "$search_win" ]] && continue
+      _tmux_window_exists "$search_win" || continue
+      eng_pane="$(_tmux_find_pane "$search_win" "$pane_title")"
+      if [[ -n "$eng_pane" ]]; then
+        found_window="$search_win"
+        break
+      fi
+    done
+
+    if [[ -z "$found_window" ]]; then
+      _die "Engineer pane for bead '$bead' not found in goal window '$goal_window'." "$EXIT_STATE"
+    fi
+
+    window_name="$found_window"
+
+    # Kill any existing review pane for this bead (stale from prior rounds)
+    _tmux_kill_pane_by_title "$window_name" "review: ${project}/${bead}"
+
+    # Re-discover engineer pane index (may have shifted)
+    eng_pane="$(_tmux_find_pane "$window_name" "$pane_title")"
+    if [[ -z "$eng_pane" ]]; then
+      _die "Engineer pane for bead '$bead' disappeared." "$EXIT_STATE"
+    fi
+
+    # Split the engineer pane horizontally to create the review pane
+    local target
+    target="$(_tmux_target "$window_name" "$eng_pane")"
+    tmux split-window -h -l 40% -t "$target" -c "$worktree_dir"
+
+    # Brief pause so the new pane's shell initializes
+    sleep 0.5
+
+    # The new pane is the active one — get its index
+    review_pane="$(tmux display-message -t "$(_tmux_target "$window_name")" -p '#{pane_index}' 2>/dev/null)"
+  else
+    # ── Legacy: engineer owns its own window ──
+    window_name="${project}/${bead}"
+
+    if ! _tmux_window_exists "$window_name"; then
+      _die "Worktree window for '$window_name' not found." "$EXIT_STATE"
+    fi
+
+    # Kill ALL non-engineering panes (everything except pane 0).
+    local stale_panes
+    stale_panes="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null \
+      | grep -v '^0$' | sort -rn || true)"
+    for p in $stale_panes; do
+      _tmux_kill_pane "$window_name" "$p"
+    done
+
+    # Create review pane — vertical split on right, 40% width
+    _tmux_split "$window_name" "-h" "40" "$worktree_dir"
+
+    # Brief pause so the new pane's shell initializes
+    sleep 0.5
+
+    # Review pane is always pane 1 now (we killed everything except 0, then split)
+    review_pane=1
   fi
-
-  # Kill ALL non-engineering panes (everything except pane 0).
-  # This ensures stale review panes from prior rounds are cleaned up.
-  # Claude Code overrides pane titles, so title-based discovery is unreliable.
-  local stale_panes
-  stale_panes="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null \
-    | grep -v '^0$' | sort -rn || true)"
-  for p in $stale_panes; do
-    _tmux_kill_pane "$window_name" "$p"
-  done
-
-  # Create review pane — vertical split on right, 40% width
-  _tmux_split "$window_name" "-h" "40" "$worktree_dir"
-
-  # Brief pause so the new pane's shell initializes
-  sleep 0.5
-
-  # Review pane is always pane 1 now (we killed everything except 0, then split)
-  local review_pane=1
 
   # Determine review round from .worker-feedback history
   local round=1

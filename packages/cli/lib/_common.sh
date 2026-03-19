@@ -1219,13 +1219,33 @@ _last_project_window() {
     | grep -E "^${project}(/|$)" | tail -1 || echo "$project"
 }
 
-# List all active goal orchestrator windows for a project.
+# List all active goal orchestrator panes for a project.
 # Prints goal names (one per line).
+# Goals are panes with title "goal: <name>" inside the project window (or overflow).
 _list_active_goals() {
   local project="$1"
-  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${project}/[^/]+$" | grep -v "^${project}/board$" \
-    | sed "s|^${project}/||" || true
+
+  # Helper: extract goal names from panes with "goal: *" titles in a window
+  _extract_goals_from_window() {
+    local win="$1"
+    tmux list-panes -t "$(_tmux_target "$win")" \
+      -F '#{pane_title}' 2>/dev/null \
+      | grep -E "^goal: " | sed 's/^goal: //' || true
+  }
+
+  # Check the primary project window
+  if _tmux_window_exists "$project"; then
+    _extract_goals_from_window "$project"
+  fi
+
+  # Check overflow windows
+  local overflow
+  overflow="$(_tmux_overflow_windows "$project")"
+  local win
+  while IFS= read -r win; do
+    [[ -z "$win" ]] && continue
+    _extract_goals_from_window "$win"
+  done <<< "$overflow"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
