@@ -11,12 +11,12 @@ Check on all active workers, handle status changes, and summarize. The behavior 
 
 ### Step 1 — List Active Goal Orchestrators
 
-Find all active goal orchestrator panes in the project window (and any overflow windows like `<project>:2`, `<project>:3`). Goal orchestrator panes have titles matching `"goal: <name>"`. List panes with:
+Each goal orchestrator runs in its own tmux window named `{project}/{goal}`. List goal windows by finding windows that match the `<project>/` prefix:
 ```bash
-tmux list-panes -t "orc:<project>" -F '#{pane_index}:#{pane_title}' | grep "^.*:goal: "
-# Also check overflow windows
-tmux list-panes -t "orc:<project>:2" -F '#{pane_index}:#{pane_title}' 2>/dev/null | grep "^.*:goal: "
+tmux list-windows -t orc -F '#{window_name}' | grep "^<project>/"
 ```
+
+**IMPORTANT:** Always use **window names** (e.g., `orc:wrkbelt/WEN-874-booking`) when targeting tmux, never window indices (e.g., `orc:4`). Indices shift when windows are created or destroyed.
 
 ### Step 2 — Read Status for Each Goal Orchestrator
 

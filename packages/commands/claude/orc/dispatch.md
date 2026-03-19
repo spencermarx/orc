@@ -36,11 +36,15 @@ Spawn these goal orchestrators? [Y/n]
 For each approved goal:
 ```bash
 orc spawn-goal <project> <goal-name>
+# Or with specific instructions:
+orc spawn-goal <project> <goal-name> "Address the review feedback on the auth module"
 ```
 
 **IMPORTANT:** Pass only the bare goal name (e.g., `hierarchical-pane-layout`), NOT the full branch name (e.g., `task/hierarchical-pane-layout`). The type prefix (`feat/`, `fix/`, `task/`) is resolved automatically by the CLI.
 
-This creates a tmux pane for the goal orchestrator inside the project window (or an overflow window like `{project}:2` if the project window is full), launches the agent with the goal-orchestrator persona, and the goal orchestrator will handle planning, bead creation, engineer dispatching, and review within its scope. The pane title is set to `"goal: <goal-name>"` for identification.
+The optional third argument is an initial prompt that replaces the default "investigate and plan" instructions. Use this when re-spawning a goal orchestrator with specific context (e.g., review feedback, unblocking instructions, or user requirements).
+
+This creates a tmux window for the goal orchestrator with the agent as pane 0 (left/main). Engineers will split into the right column of this window. The goal orchestrator handles planning, bead creation, engineer dispatching, and review within its scope.
 
 Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:
 
