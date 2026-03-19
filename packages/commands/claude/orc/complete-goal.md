@@ -52,9 +52,12 @@ Check the delivery configuration:
 
 Signal completion to the project orchestrator:
 
-1. Write `review` to your `.worker-status`:
+1. Derive the goal name from your goal branch by stripping the type prefix (`feat/`, `fix/`, `task/`). For example, `fix/auth-bug` → `auth-bug`.
+
+2. Write `review` to your per-goal status file at `.goals/{goal}/.worker-status`:
    ```bash
-   echo "review" > .worker-status
+   # Example: goal branch "fix/auth-bug" → goal name "auth-bug"
+   echo "review" > .goals/<goal-name>/.worker-status
    ```
 
 2. Present a summary of what was accomplished:
@@ -103,7 +106,7 @@ Push the goal branch and create a PR:
 
 4. Report the PR URL and signal completion:
    ```bash
-   echo "done" > .worker-status
+   echo "done" > .goals/<goal-name>/.worker-status
    ```
 
 ### Step 6 — STOP
