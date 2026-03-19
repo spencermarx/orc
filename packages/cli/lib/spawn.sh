@@ -57,9 +57,6 @@ orc_spawn() {
   (cd "$project_path" && bd show "$bead") > "$worktree/.orch-assignment.md"
   echo "working" > "$worktree/.worker-status"
 
-  # Install slash commands into worktree
-  _install_commands "$worktree" "$project_path"
-
   local persona
   persona="$(_resolve_persona "engineer" "$project_path")"
   local init_prompt

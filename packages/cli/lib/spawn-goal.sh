@@ -53,9 +53,6 @@ orc_spawn_goal() {
 
   _tmux_ensure_session
 
-  # Install slash commands into the project (goal orch runs from project root)
-  _install_commands "$project_path" "$project_path"
-
   # ── Create goal window with goal orch as pane 0 ────────────────────────
 
   local after

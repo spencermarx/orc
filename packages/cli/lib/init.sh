@@ -85,7 +85,7 @@ fi
 # ── Install slash commands ──────────────────────────────────────────────────
 
 _install_commands "$ORC_ROOT"
-_info "✓ Commands: slash commands installed"
+_info "✓ Commands: slash commands installed to ~/.claude/commands/orc/"
 
 # ── Verify prerequisites ────────────────────────────────────────────────────
 
