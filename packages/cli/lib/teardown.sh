@@ -26,8 +26,8 @@ _teardown_bead() {
     | grep -E "^${project}/${bead}( |$)" | head -1 || true)"
 
   if [[ -n "$window_name" ]]; then
-    # Kill review pane if present
-    _tmux_kill_pane "$window_name" "1"
+    # Kill review pane if present (find by title)
+    _tmux_kill_pane_by_title "$window_name" "review:"
     # Kill the window (kills the engineering pane too)
     _tmux_kill_window "$window_name"
   fi

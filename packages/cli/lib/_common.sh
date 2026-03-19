@@ -368,6 +368,34 @@ _tmux_layout() {
   tmux select-layout -t "${ORC_TMUX_SESSION}:${window}" "$layout"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Pane discovery — find panes by title, not hardcoded index
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Find a pane index by title pattern within a window.
+# Returns the pane index or empty string if not found.
+_tmux_find_pane() {
+  local window="$1"
+  local title_pattern="$2"
+  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" \
+    -F '#{pane_index}|#{pane_title}' 2>/dev/null \
+    | grep "|${title_pattern}" | head -1 | cut -d'|' -f1
+}
+
+# List all panes in a window with their titles.
+# Format: index|title per line
+_tmux_list_panes() {
+  local window="$1"
+  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" \
+    -F '#{pane_index}|#{pane_title}' 2>/dev/null
+}
+
+# Count panes in a window.
+_tmux_pane_count() {
+  local window="$1"
+  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" 2>/dev/null | wc -l | tr -d ' '
+}
+
 _tmux_send_pane() {
   local window="$1"
   local pane="$2"
@@ -381,6 +409,17 @@ _tmux_kill_pane() {
   tmux kill-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" 2>/dev/null || true
 }
 
+# Kill a pane by title pattern (finds it first, then kills).
+_tmux_kill_pane_by_title() {
+  local window="$1"
+  local title_pattern="$2"
+  local pane_idx
+  pane_idx="$(_tmux_find_pane "$window" "$title_pattern")"
+  if [[ -n "$pane_idx" ]]; then
+    _tmux_kill_pane "$window" "$pane_idx"
+  fi
+}
+
 _tmux_capture() {
   local window="$1"
   local pane="${2:-0}"
@@ -388,21 +427,29 @@ _tmux_capture() {
   tmux capture-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" -p -S "-${lines}"
 }
 
+# Check if a pane (by title) is alive (has child processes) or dead (bare shell).
+_tmux_is_pane_alive() {
+  local window="$1"
+  local pane="${2:-0}"
+  local pane_pid
+  pane_pid="$(tmux display-message -t "${ORC_TMUX_SESSION}:${window}.${pane}" -p '#{pane_pid}' 2>/dev/null || echo "")"
+  [[ -z "$pane_pid" ]] && return 1
+  pgrep -P "$pane_pid" &>/dev/null && return 0
+  return 1
+}
+
 # Check if a window's primary pane is a dead shell (agent exited).
-# Returns 0 if dead (bare shell, no children), 1 if alive (has child processes).
-# Uses process tree instead of command names — reliable even when the agent
-# binary is a shell wrapper (e.g., claude is a bash script that runs node).
+# Uses process tree — reliable even when agent binary is a shell wrapper.
 _tmux_is_dead_window() {
   local window="$1"
-  local pane_pid
-  pane_pid="$(tmux display-message -t "${ORC_TMUX_SESSION}:${window}.0" -p '#{pane_pid}' 2>/dev/null || echo "")"
-  # Can't determine → assume alive (safe default)
-  [[ -z "$pane_pid" ]] && return 1
-  # If the shell has child processes, the agent is running
-  if pgrep -P "$pane_pid" &>/dev/null; then
-    return 1  # alive — has children
+  # Find the engineering pane by title, fall back to pane 0
+  local eng_pane
+  eng_pane="$(_tmux_find_pane "$window" "eng:")"
+  eng_pane="${eng_pane:-0}"
+  if _tmux_is_pane_alive "$window" "$eng_pane"; then
+    return 1  # alive
   fi
-  return 0    # dead — shell with no children
+  return 0    # dead
 }
 
 # Set a pane title using tmux's select-pane -T (no shell input needed).
@@ -476,6 +523,69 @@ $cmd
 LAUNCH_EOF
   chmod +x "$launcher"
   _tmux_send "$window" "bash $launcher"
+}
+
+# Launch an agent in the review pane of a worktree window.
+# Finds the review pane by title ("review:") — no hardcoded index.
+_launch_agent_in_review_pane() {
+  local window="$1"
+  local persona="$2"
+  local project_path="${3:-}"
+  local initial_prompt="${4:-}"
+
+  local agent_cmd
+  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  local agent_flags
+  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
+  local agent_template
+  agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
+
+  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+    local yolo_flags
+    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
+    if [[ -z "$yolo_flags" ]]; then
+      case "$agent_cmd" in
+        claude) yolo_flags="--dangerously-skip-permissions" ;;
+      esac
+    fi
+    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
+  fi
+
+  local persona_file
+  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
+  printf '%s' "$persona" > "$persona_file"
+
+  local cmd
+  if [[ -n "$agent_template" ]]; then
+    cmd="$agent_template"
+    cmd="${cmd//\{cmd\}/$agent_cmd}"
+    cmd="${cmd//\{prompt_file\}/$persona_file}"
+    cmd="${cmd//\{prompt\}/\$(cat $persona_file)}"
+  else
+    cmd="$agent_cmd"
+    [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
+    cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\""
+    if [[ -n "$initial_prompt" ]]; then
+      local prompt_file
+      prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
+      printf '%s' "$initial_prompt" > "$prompt_file"
+      cmd="$cmd \"\$(cat $prompt_file)\""
+    fi
+  fi
+
+  local launcher
+  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
+  cat > "$launcher" <<LAUNCH_EOF
+#!/usr/bin/env bash
+clear
+$cmd
+LAUNCH_EOF
+  chmod +x "$launcher"
+  # Find review pane by title, not hardcoded index
+  local review_pane
+  review_pane="$(_tmux_find_pane "$window" "review:")"
+  review_pane="${review_pane:-1}"  # fallback to 1 if title not set yet
+  _tmux_send_pane "$window" "$review_pane" "bash $launcher"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -35,11 +35,15 @@ orc_review() {
     _die "Worktree window for '$project/$bead' not found." "$EXIT_STATE"
   fi
 
-  # Kill existing review pane if present (pane 1)
-  _tmux_kill_pane "$window_name" "1"
+  # Kill existing review pane if present (find by title)
+  _tmux_kill_pane_by_title "$window_name" "review:"
 
   # Create review pane — vertical split on right, 40% width
   _tmux_split "$window_name" "-h" "40" "$worktree_dir"
+
+  # The new pane is the highest-indexed pane in the window
+  local review_pane
+  review_pane="$(tmux list-panes -t "${ORC_TMUX_SESSION}:${window_name}" -F '#{pane_index}' 2>/dev/null | tail -1)"
 
   # Determine review round from .worker-feedback history
   local round=1
@@ -47,8 +51,8 @@ orc_review() {
     round=$(( $(grep -c "^VERDICT:" "$worktree_dir/.worker-feedback" 2>/dev/null || echo 0) + 1 ))
   fi
 
-  # Set review pane title
-  _tmux_set_pane_title "$window_name" "1" "review: ${project}/${bead} (round $round)"
+  # Set review pane title (used for discovery — never hardcode the index again)
+  _tmux_set_pane_title "$window_name" "$review_pane" "review: ${project}/${bead} (round $round)"
 
   # Update window name to show review status
   tmux rename-window -t "${ORC_TMUX_SESSION}:${window_name}" "${project}/${bead} ✓"
@@ -70,7 +74,9 @@ orc_review() {
 $review_instructions"
     fi
 
-    _launch_agent_in_window "$window_name" "$persona" "$project_path"
+    local init_prompt
+    init_prompt="Review the engineer's changes now. Read .orch-assignment.md for context, run git diff main to see changes, run tests, then write your verdict to .worker-feedback. Start immediately."
+    _launch_agent_in_review_pane "$window_name" "$persona" "$project_path" "$init_prompt"
   else
     # Configured review command (e.g., /ocr:review)
     _tmux_send_pane "$window_name" "1" "$review_cmd"
