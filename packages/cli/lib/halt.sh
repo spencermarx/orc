@@ -12,12 +12,10 @@ bead="$2"
 
 _require_project "$project" >/dev/null
 
-# Find the worktree window
-window_name="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-  | grep -E "^${project}/${bead}( |$)" | head -1 || true)"
+window_name="${project}/${bead}"
 
-if [[ -z "$window_name" ]]; then
-  _die "No running window for '$project/$bead'." "$EXIT_STATE"
+if ! _tmux_window_exists "$window_name"; then
+  _die "No running window for '$window_name'." "$EXIT_STATE"
 fi
 
 # Send Ctrl-C to the engineering pane

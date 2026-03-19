@@ -272,9 +272,9 @@ _tmux_ensure_session() {
     tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
     tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 80
 
-    # Window tabs
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format "#[fg=${muted}] #W "
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format "#[bg=${tab_bg},fg=${accent},bold] #W #[bg=${bg}]"
+    # Window tabs — show @orc_status indicator after name
+    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format "#[fg=${muted}] #W #{?@orc_status,#{@orc_status} ,}"
+    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format "#[bg=${tab_bg},fg=${accent},bold] #W #{?@orc_status,#{@orc_status} ,}#[bg=${bg}]"
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-separator "#[fg=${border}]│"
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-activity-style "fg=${activity}"
 
@@ -326,37 +326,22 @@ _tmux_send() {
 _tmux_window_exists() {
   local name="$1"
   tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -qE "^${name}( |$)" 2>/dev/null || return 1
+    | grep -qxF "$name" 2>/dev/null || return 1
 }
 
-# Find the actual window name (may have status suffix).
-# Always succeeds (returns empty string if not found) — safe with set -e.
-_tmux_resolve_window() {
-  local name="$1"
-  local result
-  result="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${name}( |$)" | head -1 || true)"
-  echo "$result"
-}
-
-# Kill a window by name (handles status suffix matching). Never fails.
+# Kill a window by name. Never fails.
 _tmux_kill_window() {
   local name="$1"
-  local actual
-  actual="$(_tmux_resolve_window "$name")"
-  if [[ -n "$actual" ]]; then
-    tmux kill-window -t "${ORC_TMUX_SESSION}:=${actual}" 2>/dev/null || true
+  if _tmux_window_exists "$name"; then
+    tmux kill-window -t "$(_tmux_target "$name")" 2>/dev/null || true
   fi
 }
 
 # Navigate to a window. exec for external, switch-client for internal.
-# Resolves status suffixes automatically.
 _orc_goto() {
   local name="$1"
-  local actual
-  actual="$(_tmux_resolve_window "$name")"
-  actual="${actual:-$name}"
-  local target="${ORC_TMUX_SESSION}:=${actual}"
+  local target
+  target="$(_tmux_target "$name")"
 
   if [[ -n "${TMUX:-}" ]]; then
     tmux select-window -t "$target" 2>/dev/null || true
@@ -367,19 +352,28 @@ _orc_goto() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# tmux target formatting — handles special characters in window names
+# tmux target formatting
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Format a tmux target for a window (handles special chars like ● in names).
-# The = prefix tells tmux to match the name exactly, not as a pattern.
+# Window names are STABLE identifiers: "orc", "status", "myapp", "myapp/bd-a1b2".
+# No emojis, no spaces, no status suffixes. Status is shown via @orc_status
+# user option, rendered in the window-status-format.
+
 _tmux_target() {
   local window="$1"
   local pane="${2:-}"
   if [[ -n "$pane" ]]; then
-    echo "${ORC_TMUX_SESSION}:=${window}.${pane}"
+    echo "${ORC_TMUX_SESSION}:${window}.${pane}"
   else
-    echo "${ORC_TMUX_SESSION}:=${window}"
+    echo "${ORC_TMUX_SESSION}:${window}"
   fi
+}
+
+# Set the status indicator for a window (displayed in status bar, not in the name).
+_tmux_set_window_status() {
+  local window="$1"
+  local status="$2"  # e.g., "●", "✓", "✗", "✓✓"
+  tmux set-option -t "$(_tmux_target "$window")" @orc_status "$status" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

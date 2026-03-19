@@ -26,13 +26,10 @@ orc_review() {
 
   _check_approval "review" "$project_path" || exit "$EXIT_OK"
 
-  # Find the worktree window (may have status suffix)
-  local window_name
-  window_name="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${project}/${bead}( |$)" | head -1 || true)"
+  local window_name="${project}/${bead}"
 
-  if [[ -z "$window_name" ]]; then
-    _die "Worktree window for '$project/$bead' not found." "$EXIT_STATE"
+  if ! _tmux_window_exists "$window_name"; then
+    _die "Worktree window for '$window_name' not found." "$EXIT_STATE"
   fi
 
   # Kill existing review pane if present (find by title)
@@ -41,9 +38,13 @@ orc_review() {
   # Create review pane — vertical split on right, 40% width
   _tmux_split "$window_name" "-h" "40" "$worktree_dir"
 
+  # Brief pause so the new pane's shell initializes before we send commands
+  sleep 0.5
+
   # The new pane is the highest-indexed pane in the window
   local review_pane
-  review_pane="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null | tail -1)"
+  review_pane="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null | tail -1 || true)"
+  review_pane="${review_pane:-1}"
 
   # Determine review round from .worker-feedback history
   local round=1
@@ -51,18 +52,15 @@ orc_review() {
     round=$(( $(grep -c "^VERDICT:" "$worktree_dir/.worker-feedback" 2>/dev/null || echo 0) + 1 ))
   fi
 
-  # Set review pane title (used for discovery — never hardcode the index again)
+  # Set review pane title (used for discovery)
   _tmux_set_pane_title "$window_name" "$review_pane" "review: ${project}/${bead} (round $round)"
 
-  # Update window name to show review status
-  tmux rename-window -t "$(_tmux_target "$window_name")" "${project}/${bead} ✓"
-
-  # Launch review process
+  # Launch review process BEFORE renaming the window
+  # (renaming changes $window_name which breaks subsequent tmux targeting)
   local review_cmd
   review_cmd="$(_config_get "review.command" "" "$project_path")"
 
   if [[ -z "$review_cmd" ]]; then
-    # Default: launch reviewer agent with persona
     local persona
     persona="$(_resolve_persona "reviewer" "$project_path")"
 
@@ -76,11 +74,50 @@ $review_instructions"
 
     local init_prompt
     init_prompt="Review the engineer's changes now. Read .orch-assignment.md for context, run git diff main to see changes, run tests, then write your verdict to .worker-feedback. Start immediately."
-    _launch_agent_in_review_pane "$window_name" "$persona" "$project_path" "$init_prompt"
+
+    # Send directly to the review pane by index (we just created it, we know the index)
+    local agent_cmd
+    agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+    local agent_flags
+    agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
+    if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+      local yolo_flags
+      yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
+      if [[ -z "$yolo_flags" ]]; then
+        case "$agent_cmd" in
+          claude) yolo_flags="--dangerously-skip-permissions" ;;
+        esac
+      fi
+      [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
+    fi
+
+    local persona_file
+    persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
+    printf '%s' "$persona" > "$persona_file"
+
+    local prompt_file
+    prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
+    printf '%s' "$init_prompt" > "$prompt_file"
+
+    local cmd="$agent_cmd"
+    [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
+    cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\" \"\$(cat $prompt_file)\""
+
+    local launcher
+    launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
+    cat > "$launcher" <<LAUNCH_EOF
+#!/usr/bin/env bash
+clear
+$cmd
+LAUNCH_EOF
+    chmod +x "$launcher"
+    _tmux_send_pane "$window_name" "$review_pane" "bash $launcher"
   else
-    # Configured review command (e.g., /ocr:review)
-    _tmux_send_pane "$window_name" "1" "$review_cmd"
+    _tmux_send_pane "$window_name" "$review_pane" "$review_cmd"
   fi
+
+  # Update status indicator (displayed in status bar, not in window name)
+  _tmux_set_window_status "$window_name" "✓"
 
   _info "Review pane launched for bead '$bead' (round $round)."
 }

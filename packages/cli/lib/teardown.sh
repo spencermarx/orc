@@ -20,17 +20,11 @@ _teardown_bead() {
   project_path="$(_require_project "$project")"
   local worktree="$project_path/.worktrees/$bead"
 
-  # Find the window (may have status suffix)
-  local window_name
-  window_name="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${project}/${bead}( |$)" | head -1 || true)"
+  local window_name="${project}/${bead}"
 
-  if [[ -n "$window_name" ]]; then
-    # Kill review pane if present (find by title)
-    _tmux_kill_pane_by_title "$window_name" "review:"
-    # Kill the window (kills the engineering pane too)
-    _tmux_kill_window "$window_name"
-  fi
+  # Kill review pane if present, then kill the window
+  _tmux_kill_pane_by_title "$window_name" "review:"
+  _tmux_kill_window "$window_name"
 
   # Remove git worktree
   if [[ -d "$worktree" ]]; then

@@ -131,20 +131,13 @@ else
     _die "No orc session running. Start one with: orc" "$EXIT_STATE"
   fi
 
-  if ! _tmux_window_exists "$window_name"; then
-    # Check for windows with status suffixes (e.g., "myapp/bd-a1b2 ●")
-    found="$(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-      | grep -E "^${window_name}( |$)" | head -1 || true)"
-    if [[ -n "$found" ]]; then
-      _orc_goto "$found"
-    else
-      _error "Worktree '$window_name' not running."
-      _info "Active worktrees:"
-      tmux list-windows -t "$ORC_TMUX_SESSION" -F '  #{window_name}' 2>/dev/null \
-        | grep "/" || _info "  (none)"
-      exit "$EXIT_STATE"
-    fi
-  else
+  if _tmux_window_exists "$window_name"; then
     _orc_goto "$window_name"
+  else
+    _error "Worktree '$window_name' not running."
+    _info "Active worktrees:"
+    tmux list-windows -t "$ORC_TMUX_SESSION" -F '  #{window_name}' 2>/dev/null \
+      | grep "/" || _info "  (none)"
+    exit "$EXIT_STATE"
   fi
 fi

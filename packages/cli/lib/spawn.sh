@@ -50,11 +50,12 @@ orc_spawn() {
   local after
   after="$(_last_project_window "$project")"
 
-  local window_name="${project}/${bead} ●"
+  local window_name="${project}/${bead}"
   _tmux_new_window "$window_name" "$worktree" "$after"
 
-  # Set engineering pane title
+  # Set engineering pane title and window status indicator
   _tmux_set_pane_title "$window_name" "0" "eng: ${project}/${bead}"
+  _tmux_set_window_status "$window_name" "●"
 
   local persona
   persona="$(_resolve_persona "engineer" "$project_path")"
