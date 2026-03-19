@@ -1,4 +1,8 @@
-# orc
+<p align="center">
+  <img src="assets/orc-ascii.svg" alt="orc" width="480" />
+</p>
+
+<h1 align="center">orc</h1>
 
 Lightweight orchestration layer that coordinates AI coding agents across multiple projects.
 
