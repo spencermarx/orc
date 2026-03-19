@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
+# --force or ORC_YOLO skip confirmation
 force=0
+[[ "${ORC_YOLO:-0}" == "1" ]] && force=1
 args=()
 for arg in "$@"; do
   case "$arg" in
@@ -22,8 +24,7 @@ _teardown_bead() {
 
   local window_name="${project}/${bead}"
 
-  # Kill review pane if present, then kill the window
-  _tmux_kill_pane_by_title "$window_name" "review:"
+  # Kill the entire window (kills all panes — engineering + any review panes)
   _tmux_kill_window "$window_name"
 
   # Remove git worktree

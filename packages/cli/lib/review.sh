@@ -32,19 +32,24 @@ orc_review() {
     _die "Worktree window for '$window_name' not found." "$EXIT_STATE"
   fi
 
-  # Kill existing review pane if present (find by title)
-  _tmux_kill_pane_by_title "$window_name" "review:"
+  # Kill ALL non-engineering panes (everything except pane 0).
+  # This ensures stale review panes from prior rounds are cleaned up.
+  # Claude Code overrides pane titles, so title-based discovery is unreliable.
+  local stale_panes
+  stale_panes="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null \
+    | grep -v '^0$' | sort -rn || true)"
+  for p in $stale_panes; do
+    _tmux_kill_pane "$window_name" "$p"
+  done
 
   # Create review pane — vertical split on right, 40% width
   _tmux_split "$window_name" "-h" "40" "$worktree_dir"
 
-  # Brief pause so the new pane's shell initializes before we send commands
+  # Brief pause so the new pane's shell initializes
   sleep 0.5
 
-  # The new pane is the highest-indexed pane in the window
-  local review_pane
-  review_pane="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null | tail -1 || true)"
-  review_pane="${review_pane:-1}"
+  # Review pane is always pane 1 now (we killed everything except 0, then split)
+  local review_pane=1
 
   # Determine review round from .worker-feedback history
   local round=1
