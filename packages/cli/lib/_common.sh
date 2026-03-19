@@ -318,7 +318,7 @@ _tmux_new_window() {
 _tmux_send() {
   local name="$1"
   local cmd="$2"
-  tmux send-keys -t "${ORC_TMUX_SESSION}:${name}" "$cmd" Enter
+  tmux send-keys -t "$(_tmux_target "$name")" "$cmd" Enter
 }
 
 # Check if a window exists. Supports exact match or prefix match
@@ -364,6 +364,22 @@ _orc_goto() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# tmux target formatting — handles special characters in window names
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Format a tmux target for a window (handles special chars like ● in names).
+# The = prefix tells tmux to match the name exactly, not as a pattern.
+_tmux_target() {
+  local window="$1"
+  local pane="${2:-}"
+  if [[ -n "$pane" ]]; then
+    echo "${ORC_TMUX_SESSION}:=${window}.${pane}"
+  else
+    echo "${ORC_TMUX_SESSION}:=${window}"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Pane helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -374,7 +390,8 @@ _tmux_split() {
   local direction="${2:--h}"
   local size="${3:-40}"
   local dir="${4:-}"
-  local target="${ORC_TMUX_SESSION}:${window}"
+  local target
+  target="$(_tmux_target "$window")"
   local cmd=(tmux split-window "$direction" -l "${size}%" -t "$target")
   [[ -n "$dir" ]] && cmd+=(-c "$dir")
   "${cmd[@]}"
@@ -383,51 +400,45 @@ _tmux_split() {
 _tmux_layout() {
   local window="$1"
   local layout="$2"
-  tmux select-layout -t "${ORC_TMUX_SESSION}:${window}" "$layout"
+  tmux select-layout -t "$(_tmux_target "$window")" "$layout"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Pane discovery — find panes by title, not hardcoded index
+# Pane discovery — all helpers use _tmux_target for safe special-char handling
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Find a pane index by title pattern within a window.
-# Returns the pane index or empty string if not found.
 _tmux_find_pane() {
   local window="$1"
   local title_pattern="$2"
-  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" \
+  tmux list-panes -t "$(_tmux_target "$window")" \
     -F '#{pane_index}|#{pane_title}' 2>/dev/null \
-    | grep "|${title_pattern}" | head -1 | cut -d'|' -f1
+    | grep "|${title_pattern}" | head -1 | cut -d'|' -f1 || true
 }
 
-# List all panes in a window with their titles.
-# Format: index|title per line
 _tmux_list_panes() {
   local window="$1"
-  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" \
+  tmux list-panes -t "$(_tmux_target "$window")" \
     -F '#{pane_index}|#{pane_title}' 2>/dev/null
 }
 
-# Count panes in a window.
 _tmux_pane_count() {
   local window="$1"
-  tmux list-panes -t "${ORC_TMUX_SESSION}:${window}" 2>/dev/null | wc -l | tr -d ' '
+  tmux list-panes -t "$(_tmux_target "$window")" 2>/dev/null | wc -l | tr -d ' '
 }
 
 _tmux_send_pane() {
   local window="$1"
   local pane="$2"
   local cmd="$3"
-  tmux send-keys -t "${ORC_TMUX_SESSION}:${window}.${pane}" "$cmd" Enter
+  tmux send-keys -t "$(_tmux_target "$window" "$pane")" "$cmd" Enter
 }
 
 _tmux_kill_pane() {
   local window="$1"
   local pane="$2"
-  tmux kill-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" 2>/dev/null || true
+  tmux kill-pane -t "$(_tmux_target "$window" "$pane")" 2>/dev/null || true
 }
 
-# Kill a pane by title pattern (finds it first, then kills).
 _tmux_kill_pane_by_title() {
   local window="$1"
   local title_pattern="$2"
@@ -442,15 +453,14 @@ _tmux_capture() {
   local window="$1"
   local pane="${2:-0}"
   local lines="${3:-5}"
-  tmux capture-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" -p -S "-${lines}"
+  tmux capture-pane -t "$(_tmux_target "$window" "$pane")" -p -S "-${lines}"
 }
 
-# Check if a pane (by title) is alive (has child processes) or dead (bare shell).
 _tmux_is_pane_alive() {
   local window="$1"
   local pane="${2:-0}"
   local pane_pid
-  pane_pid="$(tmux display-message -t "${ORC_TMUX_SESSION}:${window}.${pane}" -p '#{pane_pid}' 2>/dev/null || echo "")"
+  pane_pid="$(tmux display-message -t "$(_tmux_target "$window" "$pane")" -p '#{pane_pid}' 2>/dev/null || echo "")"
   [[ -z "$pane_pid" ]] && return 1
   pgrep -P "$pane_pid" &>/dev/null && return 0
   return 1
@@ -475,7 +485,7 @@ _tmux_set_pane_title() {
   local window="$1"
   local pane="$2"
   local title="$3"
-  tmux select-pane -t "${ORC_TMUX_SESSION}:${window}.${pane}" -T "$title" 2>/dev/null || true
+  tmux select-pane -t "$(_tmux_target "$window" "$pane")" -T "$title" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

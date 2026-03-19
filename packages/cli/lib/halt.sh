@@ -21,6 +21,9 @@ if [[ -z "$window_name" ]]; then
 fi
 
 # Send Ctrl-C to the engineering pane
-tmux send-keys -t "${ORC_TMUX_SESSION}:${window_name}.0" C-c
+# Find engineering pane by title, fallback to pane 0
+eng_pane="$(_tmux_find_pane "$window_name" "eng:")"
+eng_pane="${eng_pane:-0}"
+tmux send-keys -t "$(_tmux_target "$window_name" "$eng_pane")" C-c
 
 _info "Sent interrupt to engineer '$project/$bead'."

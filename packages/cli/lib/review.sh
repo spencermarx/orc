@@ -43,7 +43,7 @@ orc_review() {
 
   # The new pane is the highest-indexed pane in the window
   local review_pane
-  review_pane="$(tmux list-panes -t "${ORC_TMUX_SESSION}:${window_name}" -F '#{pane_index}' 2>/dev/null | tail -1)"
+  review_pane="$(tmux list-panes -t "$(_tmux_target "$window_name")" -F '#{pane_index}' 2>/dev/null | tail -1)"
 
   # Determine review round from .worker-feedback history
   local round=1
@@ -55,7 +55,7 @@ orc_review() {
   _tmux_set_pane_title "$window_name" "$review_pane" "review: ${project}/${bead} (round $round)"
 
   # Update window name to show review status
-  tmux rename-window -t "${ORC_TMUX_SESSION}:${window_name}" "${project}/${bead} ✓"
+  tmux rename-window -t "$(_tmux_target "$window_name")" "${project}/${bead} ✓"
 
   # Launch review process
   local review_cmd
