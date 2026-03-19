@@ -34,7 +34,7 @@ bd status <bead> <status>   # Update bead status
 2. Decompose the user's request into **goals** (each goal = one feature, bug fix, or task)
 3. For each goal, determine the **goal type** (`feat`, `fix`, or `task`) and a short **goal name** (kebab-case)
 4. Identify dependencies between goals if any (e.g., goal B depends on goal A completing first)
-5. Propose the plan to the user before executing
+5. Check `echo $ORC_YOLO` — if YOLO mode, create goal branches and immediately proceed to dispatching without asking. Otherwise, propose the plan and wait for approval.
 
 For simple requests (single feature, single bug fix), create a single goal. For larger requests, decompose into multiple independent or dependent goals.
 
@@ -48,6 +48,8 @@ For simple requests (single feature, single bug fix), create a single goal. For 
 2. Check `echo $ORC_YOLO` — if it prints `1`, you are in YOLO mode
 3. **YOLO mode**: spawn ALL ready goals immediately without asking. No "Shall I proceed?", no confirmation tables, no waiting. Just run `orc spawn-goal <project> <goal>` for each and move on.
 4. **Normal mode** (`ORC_YOLO` is not `1`): present the list and wait for approval before spawning.
+
+**IMPORTANT:** Pass only the bare goal name (e.g., `hierarchical-pane-layout`), NOT the full branch name (e.g., `task/hierarchical-pane-layout`). The type prefix is resolved automatically.
 
 ## After Dispatching: Autonomous Monitoring
 

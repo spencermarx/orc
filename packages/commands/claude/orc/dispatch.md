@@ -38,6 +38,8 @@ For each approved goal:
 orc spawn-goal <project> <goal-name>
 ```
 
+**IMPORTANT:** Pass only the bare goal name (e.g., `hierarchical-pane-layout`), NOT the full branch name (e.g., `task/hierarchical-pane-layout`). The type prefix (`feat/`, `fix/`, `task/`) is resolved automatically by the CLI.
+
 This creates a tmux window for the goal orchestrator, launches the agent with the goal-orchestrator persona, and the goal orchestrator will handle planning, bead creation, engineer dispatching, and review within its scope.
 
 Report results briefly, then **immediately begin monitoring**. Do NOT wait for the user to ask — start polling automatically:

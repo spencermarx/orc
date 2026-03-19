@@ -67,7 +67,9 @@ Once approved, create a branch for each goal:
 git branch feat/<goal-name>   # or fix/<goal-name>, task/<goal-name>
 ```
 
-Confirm creation: "Plan created. N goals ready. Run `/orc:dispatch` to start spawning goal orchestrators."
+After creating branches, check `echo $ORC_YOLO`:
+- **If `ORC_YOLO=1` (YOLO mode):** Do NOT prompt the user. Immediately proceed to run `/orc:dispatch` yourself to spawn goal orchestrators. No questions, no delays.
+- **Otherwise:** Confirm: "Plan created. N goals ready. Run `/orc:dispatch` to start spawning goal orchestrators."
 
 ## Instructions (Goal Orchestrator)
 
@@ -124,4 +126,6 @@ bd create --title "<title>" --desc "<description>"
 
 Set dependencies between beads as specified in the plan.
 
-Confirm creation: "Plan created. N beads ready. Run `/orc:dispatch` to start spawning engineers."
+After creating beads, check `echo $ORC_YOLO`:
+- **If `ORC_YOLO=1` (YOLO mode):** Do NOT prompt the user. Immediately proceed to run `/orc:dispatch` yourself to spawn engineers. No questions, no delays.
+- **Otherwise:** Confirm: "Plan created. N beads ready. Run `/orc:dispatch` to start spawning engineers."

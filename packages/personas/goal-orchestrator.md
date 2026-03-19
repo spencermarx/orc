@@ -41,7 +41,7 @@ orc teardown <project> <bead>      # Remove worktree + clean up
 1. Investigate the project — read code, understand architecture, identify scope for this goal
 2. Decompose the goal into discrete beads (each bead = one engineer assignment)
 3. Set dependencies between beads (`bd dep add`)
-4. Propose the plan to the user before executing
+4. Check `echo $ORC_YOLO` — if YOLO mode, create beads and immediately proceed to dispatching without asking. Otherwise, propose the plan and wait for approval.
 
 ## Dispatching
 
