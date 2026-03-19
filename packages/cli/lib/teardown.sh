@@ -259,8 +259,8 @@ _teardown_project() {
   project_path="$(_require_project "$project")"
   local worktrees_dir="$project_path/.worktrees"
 
-  # Collect goals to teardown (deduplicating via goal names)
-  local -A goals_seen=()
+  # Collect goals to teardown (deduplicating via newline-separated list)
+  local goals_seen=""
 
   if [[ -d "$worktrees_dir" ]]; then
     for d in "$worktrees_dir"/*/; do
@@ -272,7 +272,11 @@ _teardown_project() {
       if [[ "$wt_branch" == work/*/* ]] && [[ "$wt_branch" != work/*//* ]]; then
         local goal_name="${wt_branch#work/}"
         goal_name="${goal_name%/*}"
-        goals_seen["$goal_name"]=1
+        # Deduplicate
+        if ! echo "$goals_seen" | grep -qxF "$goal_name"; then
+          goals_seen="${goals_seen:+$goals_seen
+}$goal_name"
+        fi
       else
         # Legacy non-goal bead — teardown directly
         _teardown_bead "$project" "$bead"
@@ -281,10 +285,12 @@ _teardown_project() {
   fi
 
   # Teardown each goal (handles engineer panes, goal windows, goal panes, goal status dirs)
-  local goal_name
-  for goal_name in "${!goals_seen[@]}"; do
-    _teardown_goal "$project" "$goal_name"
-  done
+  if [[ -n "$goals_seen" ]]; then
+    local goal_name
+    while IFS= read -r goal_name; do
+      [[ -n "$goal_name" ]] && _teardown_goal "$project" "$goal_name"
+    done <<< "$goals_seen"
+  fi
 
   # Remove any remaining .goals/ subdirectories not covered by tracked worktrees
   if [[ -d "$project_path/.goals" ]]; then
