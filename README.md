@@ -250,6 +250,16 @@ orc myapp --yolo
 # You come back to open PRs ready for your review.
 ```
 
+**Keeping tickets in sync** — if your project uses Jira, Linear, or GitHub Issues and has a skill or MCP for it, orc can automatically update tickets as work progresses:
+
+```toml
+# In {project}/.orc/config.toml
+[tickets]
+strategy = "Move Jira tickets to In Progress when goals start, Done when complete"
+```
+
+Just pass ticket links to the orchestrator — it handles the rest. See [`[tickets]`](#tickets--ticket-integration) configuration.
+
 ## How It Works
 
 You describe what you want. Orc breaks it into **goals** (deliverables with dedicated branches), then into **beads** (small work items for individual engineers). Each engineer runs in an isolated worktree. When all beads pass review, you get a clean goal branch.
@@ -443,6 +453,24 @@ Examples:
 ```toml
 target_strategy = "target develop for features, main for hotfixes"
 target_strategy = "gitflow: develop for features, release branch for fixes"
+```
+
+</details>
+
+<details>
+<summary><h3><code>[tickets]</code> — Ticket Integration</h3></summary>
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `strategy` | `""` | Natural language ticket integration strategy. Empty = don't touch tickets. Requires the project to have a skill or MCP for the ticketing system. |
+
+This is a **project-level concern** — set it in `{project}/.orc/config.toml`, not globally. When configured, orchestrators automatically update linked tickets at lifecycle moments (goal started, progress made, goal delivered, blockers hit).
+
+Examples:
+```toml
+strategy = "Move Jira tickets to In Progress when goals start, Done when complete"
+strategy = "Add a comment to Linear issues with the goal branch name and progress updates"
+strategy = "Update GitHub issues: In Progress on start, close with PR link on delivery"
 ```
 
 </details>

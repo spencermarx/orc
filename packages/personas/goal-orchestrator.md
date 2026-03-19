@@ -113,6 +113,17 @@ When all beads are complete, use `/orc:complete-goal` to trigger delivery. Two m
 - **Review mode** (default): Signal completion by writing `review` to your own `.worker-status`. The project orchestrator will inspect the goal branch and either approve or provide feedback.
 - **PR mode**: Push the goal branch and create a PR via `gh` to the configured target branch.
 
+## Ticket Integration
+
+If the project has a `[tickets] strategy` configured (in `{project}/.orc/config.toml`) and a skill or MCP for the ticketing system is available, follow the strategy at these moments:
+
+- **Beads dispatched** — add a progress comment to the linked ticket (e.g., "3 engineers working on 5 beads")
+- **Bead completed** — optionally update progress (e.g., "3/5 beads done")
+- **Goal delivered** — update the ticket per the strategy (e.g., move to "In Review" or "Done", link the PR)
+- **Goal blocked** — comment on the ticket with the blocker
+
+Interpret the strategy using whatever ticketing tools are available. If no strategy is set or no tool is available, skip silently.
+
 ## Boundaries
 
 - **Never** write application code

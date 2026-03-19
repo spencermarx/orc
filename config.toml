@@ -31,6 +31,13 @@ target_strategy = ""         # Natural language PR target branch strategy (defau
 [agents]
 ruflo = "off"                # "off" (default), "auto", or "require"
 
+[tickets]
+strategy = ""                # Natural language ticket integration strategy (project-level concern)
+                             # empty = don't touch tickets
+                             # e.g., "Move Jira tickets to In Progress when goals start, Done when complete"
+                             # e.g., "Add a comment to Linear issues with the goal branch name"
+                             # Requires the project to have a skill or MCP for the ticketing system
+
 [board]
 command = ""                 # empty = built-in fallback (watch bd list)
 

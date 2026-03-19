@@ -84,6 +84,23 @@ When a goal orchestrator's `.worker-status` contains `blocked`:
 2. Surface it to the user with context
 3. Decide: unblock with clarification, reassign, or escalate
 
+## Ticket Integration
+
+On startup, check for a ticket strategy:
+
+```bash
+# Read from project config (empty = disabled)
+# Check {project}/.orc/config.toml → [tickets] strategy
+```
+
+If a `[tickets] strategy` is configured and the project has a skill or MCP for the ticketing system (Jira, Linear, GitHub Issues, etc.), follow the strategy at natural lifecycle moments:
+
+- **Goal created** — update the linked ticket (e.g., move to "In Progress", add a comment with the goal branch name)
+- **Goal completed** — update the ticket (e.g., move to "Done", add a comment with the PR link or review summary)
+- **Goal blocked** — update the ticket (e.g., add a comment explaining the blocker)
+
+The strategy is natural language — interpret it using whatever ticketing tools are available to you. If no strategy is set or no ticketing tool is available, skip silently.
+
 ## Boundaries
 
 - **Never** write application code
