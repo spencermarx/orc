@@ -1,6 +1,6 @@
 # /orc:check — Poll Worker Statuses
 
-**Role:** Orchestrator
+**Role:** Orchestrator (project or goal)
 
 Check on all active engineers, handle status changes, and summarize.
 
@@ -22,7 +22,21 @@ The engineer has finished and is requesting review.
 1. Run `orc review <project> <bead>` to launch the review plane.
 2. The review agent will write its verdict to `.worker-feedback`.
 3. After review completes, read the verdict:
-   - **Approved**: Mark the bead as done. Proceed to teardown or merge based on `approval.merge` config.
+   - **Approved**:
+     - **Goal orchestrator**: Fast-forward merge the bead branch into the goal branch. The bead branch is `work/<goal>/<bead>` and the goal branch is `feat/<goal>`, `fix/<goal>`, or `task/<goal>`. Run the merge from the project root:
+       ```bash
+       # Fast-forward merge (no checkout needed)
+       git -C <project_path> fetch . work/<goal>/<bead>:<goal-branch>
+       ```
+       If fast-forward fails (branches have diverged), rebase the bead branch onto the goal branch first:
+       ```bash
+       git -C <project_path> rebase <goal-branch> work/<goal>/<bead>
+       # Then retry the fast-forward merge
+       git -C <project_path> fetch . work/<goal>/<bead>:<goal-branch>
+       ```
+       If rebase has conflicts, **escalate to the human** — do not force merge.
+     - **Project orchestrator**: No merge needed (handled by goal orchestrator or manual).
+     - Mark the bead as done. Proceed to teardown based on `approval.merge` config.
    - **Not approved**: The feedback is already in `.worker-feedback`. Send a message to the engineering pane to trigger `/orc:feedback`, or note it for manual follow-up.
 
 #### Status: `blocked: <reason>`

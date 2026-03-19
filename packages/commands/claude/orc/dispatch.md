@@ -1,6 +1,6 @@
 # /orc:dispatch — Spawn Engineers for Ready Beads
 
-**Role:** Orchestrator
+**Role:** Orchestrator (project or goal)
 
 Check for ready beads and spawn engineer agents in isolated worktrees.
 
@@ -45,7 +45,14 @@ Spawn these engineers? [Y/n]
 
 ### Step 5 — Spawn Engineers
 
-For each approved bead, run:
+For each approved bead, determine the correct spawn command based on your role:
+
+**Goal orchestrator** — always pass the goal name so engineers branch from the goal branch:
+```bash
+orc spawn <project> <bead-id> <goal>
+```
+
+**Project orchestrator** — spawn without a goal (engineers branch from HEAD):
 ```bash
 orc spawn <project> <bead-id>
 ```

@@ -5,15 +5,16 @@ Detect your role and show what you can do.
 ## Role Detection
 
 1. If `.orch-assignment.md` exists in the current working directory, you are an **Engineer**.
-2. Else if you are inside a registered project directory (check `projects.toml`), you are a **Project Orchestrator**.
-3. Otherwise, you are the **Root Orchestrator**.
+2. Else if you are inside a registered project directory (check `projects.toml`) and your persona identifies you as a goal orchestrator (or you were launched with a goal context), you are a **Goal Orchestrator**.
+3. Else if you are inside a registered project directory, you are a **Project Orchestrator**.
+4. Otherwise, you are the **Root Orchestrator**.
 
 ## Step 1 — Announce Role
 
 Print your detected role:
 
 ```
-Role: <Engineer | Project Orchestrator | Root Orchestrator>
+Role: <Engineer | Goal Orchestrator | Project Orchestrator | Root Orchestrator>
 ```
 
 ## Step 2 — Show Available Commands
@@ -31,6 +32,15 @@ Role: <Engineer | Project Orchestrator | Root Orchestrator>
 - `/orc:plan` — Investigate codebase and decompose goal into beads
 - `/orc:dispatch` — Spawn engineers for ready beads
 - `/orc:check` — Poll worker statuses and handle review/blocked/dead
+- `/orc:view` — Create tmux monitoring layouts
+- `/orc:leave` — Detach from orc
+
+**Goal Orchestrator:**
+- `/orc:status` — Dashboard of all projects and workers
+- `/orc:plan` — Decompose goal into beads within goal context
+- `/orc:dispatch` — Spawn engineers from the goal branch
+- `/orc:check` — Poll worker statuses, ff-merge approved beads to goal branch
+- `/orc:complete-goal` — Trigger delivery (review or PR) when all beads are done
 - `/orc:view` — Create tmux monitoring layouts
 - `/orc:leave` — Detach from orc
 
