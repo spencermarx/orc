@@ -61,6 +61,12 @@ Orc does.
 
 Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Claude Code](https://docs.anthropic.com/en/docs/claude-code), OpenCode, Codex, or your own. No daemon, no server, no framework.
 
+<p align="center">
+  <img src="assets/orc-in-action.png" alt="Orc in action — goal orchestrator managing beads while an engineer implements in an isolated worktree" width="900" />
+  <br />
+  <sub>A goal orchestrator (left) dispatches and monitors engineers working in isolated worktrees (right).</sub>
+</p>
+
 ## The 30-Second Version
 
 ```
