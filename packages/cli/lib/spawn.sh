@@ -4,12 +4,13 @@
 set -euo pipefail
 
 orc_spawn() {
-  if [[ $# -ne 2 ]]; then
-    _die "Usage: orc spawn <project> <bead>" "$EXIT_USAGE"
+  if [[ $# -lt 2 || $# -gt 3 ]]; then
+    _die "Usage: orc spawn <project> <bead> [goal]" "$EXIT_USAGE"
   fi
 
   local project="$1"
   local bead="$2"
+  local goal="${3:-}"
 
   local project_path
   project_path="$(_require_project "$project")"
@@ -38,7 +39,20 @@ orc_spawn() {
   _check_approval "spawn" "$project_path" || exit "$EXIT_OK"
 
   mkdir -p "$project_path/.worktrees"
-  git -C "$project_path" worktree add ".worktrees/$bead" -b "work/$bead"
+
+  local branch_name window_name
+  if [[ -n "$goal" ]]; then
+    # Find the goal branch and branch from it
+    local goal_branch
+    goal_branch="$(_find_goal_branch "$project_path" "$goal")"
+    branch_name="work/${goal}/${bead}"
+    window_name="${project}/${goal}/${bead}"
+    git -C "$project_path" worktree add ".worktrees/$bead" -b "$branch_name" "$goal_branch"
+  else
+    branch_name="work/$bead"
+    window_name="${project}/${bead}"
+    git -C "$project_path" worktree add ".worktrees/$bead" -b "$branch_name"
+  fi
 
   (cd "$project_path" && bd show "$bead") > "$worktree/.orch-assignment.md"
   echo "working" > "$worktree/.worker-status"
@@ -50,11 +64,10 @@ orc_spawn() {
   local after
   after="$(_last_project_window "$project")"
 
-  local window_name="${project}/${bead}"
   _tmux_new_window "$window_name" "$worktree" "$after"
 
   # Set engineering pane title and window status indicator
-  _tmux_set_pane_title "$window_name" "0" "eng: ${project}/${bead}"
+  _tmux_set_pane_title "$window_name" "0" "eng: ${window_name}"
   _tmux_set_window_status "$window_name" "●"
 
   local persona
@@ -63,7 +76,7 @@ orc_spawn() {
   init_prompt="Read your assignment in .orch-assignment.md now. Investigate the relevant code, then implement the work described. When done, run /orc:done."
   _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"
 
-  _info "Engineer spawned for bead '$bead' in project '$project'."
+  _info "Engineer spawned for bead '$bead'${goal:+ (goal: $goal)} in project '$project'."
 }
 
 orc_spawn "$@"

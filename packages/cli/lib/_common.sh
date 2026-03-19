@@ -705,6 +705,37 @@ _merge_bead_to_goal() {
   _info "Merged '${bead_branch}' → '${goal_branch}' (fast-forward)."
 }
 
+# Find the goal branch for a given goal name by checking all type prefixes.
+# Usage: _find_goal_branch <project_path> <goal_name>
+# Prints the branch name (e.g., "feat/my-goal") or exits with error.
+_find_goal_branch() {
+  local project_path="$1"
+  local goal_name="$2"
+  local prefix
+  for prefix in feat/ fix/ task/; do
+    local candidate="${prefix}${goal_name}"
+    if git -C "$project_path" show-ref --verify --quiet "refs/heads/${candidate}" 2>/dev/null; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  _die "No goal branch found for '${goal_name}'. Expected feat/${goal_name}, fix/${goal_name}, or task/${goal_name}." "$EXIT_STATE"
+}
+
+# Check if a goal branch exists for a given goal name (any type prefix).
+# Returns 0 if found, 1 if not.
+_goal_branch_exists() {
+  local project_path="$1"
+  local goal_name="$2"
+  local prefix
+  for prefix in feat/ fix/ task/; do
+    if git -C "$project_path" show-ref --verify --quiet "refs/heads/${prefix}${goal_name}" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Delete a goal branch.
 # Usage: _delete_goal_branch <project_path> <goal_branch> [--force]
 _delete_goal_branch() {

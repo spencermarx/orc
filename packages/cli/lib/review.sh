@@ -26,7 +26,15 @@ orc_review() {
 
   _check_approval "review" "$project_path" || exit "$EXIT_OK"
 
+  # Detect window name from worktree branch (handles both work/<bead> and work/<goal>/<bead>)
+  local actual_branch
+  actual_branch="$(git -C "$worktree_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   local window_name="${project}/${bead}"
+  if [[ "$actual_branch" == work/*/* ]]; then
+    local goal_from_branch="${actual_branch#work/}"
+    goal_from_branch="${goal_from_branch%/*}"
+    window_name="${project}/${goal_from_branch}/${bead}"
+  fi
 
   if ! _tmux_window_exists "$window_name"; then
     _die "Worktree window for '$window_name' not found." "$EXIT_STATE"
