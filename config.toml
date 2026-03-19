@@ -17,6 +17,16 @@ merge = "ask"
 max_rounds = 3
 command = ""                 # empty = default reviewer persona; "/ocr:review" = OCR; or any command
 
+[branching]
+strategy = ""                # Natural language branch naming preference
+                             # Default: feat/, fix/, task/ + ticket prefix if available
+                             # e.g., "always use feat/ prefix" or "use JIRA ticket as prefix"
+
+[delivery]
+mode = "review"              # "review" (default) or "pr"
+target_strategy = ""         # Natural language PR target branch strategy
+                             # e.g., "gitflow: target develop, hotfix → release branch"
+
 [board]
 command = ""                 # empty = built-in fallback (watch bd list)
 

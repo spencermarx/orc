@@ -632,6 +632,99 @@ _tmux_rebalance() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Goal branch helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Return the branching strategy from config (natural language or empty).
+_config_get_branching_strategy() {
+  local project_path="${1:-}"
+  _config_get "branching.strategy" "" "$project_path"
+}
+
+# Determine the branch prefix for a goal type.
+# Types: feat, fix, task (default: task).
+_goal_branch_prefix() {
+  local goal_type="${1:-task}"
+  case "$goal_type" in
+    feat|feature) echo "feat/" ;;
+    fix|bugfix)   echo "fix/" ;;
+    task|*)       echo "task/" ;;
+  esac
+}
+
+# Create a goal branch off the current HEAD (or a specified base).
+# Usage: _create_goal_branch <project_path> <goal_name> [goal_type] [base_branch]
+# Prints the created branch name to stdout.
+_create_goal_branch() {
+  local project_path="$1"
+  local goal_name="$2"
+  local goal_type="${3:-task}"
+  local base_branch="${4:-}"
+
+  local prefix
+  prefix="$(_goal_branch_prefix "$goal_type")"
+  local branch="${prefix}${goal_name}"
+
+  # Verify the branch doesn't already exist
+  if git -C "$project_path" show-ref --verify --quiet "refs/heads/${branch}" 2>/dev/null; then
+    _die "Branch '${branch}' already exists." "$EXIT_STATE"
+  fi
+
+  local create_args=("$branch")
+  if [[ -n "$base_branch" ]]; then
+    create_args+=("$base_branch")
+  fi
+
+  git -C "$project_path" branch "${create_args[@]}"
+  echo "$branch"
+}
+
+# Fast-forward merge a bead branch into its goal branch.
+# Usage: _merge_bead_to_goal <project_path> <goal_branch> <bead_branch>
+_merge_bead_to_goal() {
+  local project_path="$1"
+  local goal_branch="$2"
+  local bead_branch="$3"
+
+  # Verify both branches exist
+  if ! git -C "$project_path" show-ref --verify --quiet "refs/heads/${goal_branch}" 2>/dev/null; then
+    _die "Goal branch '${goal_branch}' not found." "$EXIT_STATE"
+  fi
+  if ! git -C "$project_path" show-ref --verify --quiet "refs/heads/${bead_branch}" 2>/dev/null; then
+    _die "Bead branch '${bead_branch}' not found." "$EXIT_STATE"
+  fi
+
+  # Attempt fast-forward merge without switching branches
+  # git fetch . src:dst does a fast-forward update of dst to src
+  if ! git -C "$project_path" fetch . "${bead_branch}:${goal_branch}" 2>/dev/null; then
+    _error "Fast-forward merge failed for '${bead_branch}' → '${goal_branch}'."
+    _error "The goal branch may have diverged. Manual merge required."
+    return 1
+  fi
+
+  _info "Merged '${bead_branch}' → '${goal_branch}' (fast-forward)."
+}
+
+# Delete a goal branch.
+# Usage: _delete_goal_branch <project_path> <goal_branch> [--force]
+_delete_goal_branch() {
+  local project_path="$1"
+  local goal_branch="$2"
+  local force="${3:-}"
+
+  if ! git -C "$project_path" show-ref --verify --quiet "refs/heads/${goal_branch}" 2>/dev/null; then
+    _warn "Branch '${goal_branch}' does not exist. Nothing to delete."
+    return 0
+  fi
+
+  local delete_flag="-d"
+  [[ "$force" == "--force" ]] && delete_flag="-D"
+
+  git -C "$project_path" branch "$delete_flag" "$goal_branch"
+  _info "Deleted branch '${goal_branch}'."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Agent adapter
 # ─────────────────────────────────────────────────────────────────────────────
 
