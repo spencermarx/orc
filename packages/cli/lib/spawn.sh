@@ -67,15 +67,30 @@ orc_spawn() {
 
   if [[ -n "$goal" ]]; then
     # ── Goal-aware: spawn engineer as a pane in the goal window ──
+    # The goal window (${project}/${goal}) is created on first engineer spawn.
+    # Goal orchestrators run as panes in the project window; engineers get
+    # their own goal window so the tab bar reads:
+    #   orc │ status │ myproject │ myproject/fix-auth │ myproject/add-api
     local goal_window="${project}/${goal}"
-    local target_window
-    target_window="$(_tmux_pane_target "$goal_window" "$project_path")"
 
-    _tmux_split_with_agent "$target_window" "eng: ${bead}" "$persona" \
-      "$project_path" "$init_prompt" "$worktree"
+    if ! _tmux_window_exists "$goal_window"; then
+      # First engineer for this goal — create the goal window
+      local after
+      after="$(_last_project_window "$project")"
+      _tmux_new_window "$goal_window" "$worktree" "$after"
+      _tmux_set_pane_title "$goal_window" "0" "eng: ${bead}"
+      _tmux_set_window_status "$goal_window" "●"
+      _launch_agent_in_window "$goal_window" "$persona" "$project_path" "$init_prompt"
+    else
+      # Subsequent engineers — split into the goal window (or overflow)
+      local target_window
+      target_window="$(_tmux_pane_target "$goal_window" "$project_path")"
 
-    # Set window status indicator on the target window
-    _tmux_set_window_status "$target_window" "●"
+      _tmux_split_with_agent "$target_window" "eng: ${bead}" "$persona" \
+        "$project_path" "$init_prompt" "$worktree"
+
+      _tmux_set_window_status "$target_window" "●"
+    fi
   else
     # ── Legacy: spawn engineer in its own window ──
     local after
