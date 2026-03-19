@@ -86,14 +86,17 @@ When a goal orchestrator's `.worker-status` contains `blocked`:
 
 ## Ticket Integration
 
-On startup, check for a ticket strategy:
+On startup, read the ticket strategy from config. Check these files in order (first non-empty value wins):
 
 ```bash
-# Read from project config (empty = disabled)
-# Check {project}/.orc/config.toml → [tickets] strategy
+cat .orc/config.toml 2>/dev/null    # Project-level config (preferred)
+cat "$ORC_ROOT/config.local.toml" 2>/dev/null   # User overrides
+cat "$ORC_ROOT/config.toml" 2>/dev/null          # Global defaults
 ```
 
-If a `[tickets] strategy` is configured and the project has a skill or MCP for the ticketing system (Jira, Linear, GitHub Issues, etc.), follow the strategy at natural lifecycle moments:
+Look for the `[tickets]` section and read the `strategy` value. If it's empty or missing, ticket integration is disabled — skip silently.
+
+If a strategy IS set and the project has a skill or MCP for the ticketing system (Jira, Linear, GitHub Issues, etc.), follow the strategy at natural lifecycle moments:
 
 - **Goal created** — update the linked ticket (e.g., move to "In Progress", add a comment with the goal branch name)
 - **Goal completed** — update the ticket (e.g., move to "Done", add a comment with the PR link or review summary)

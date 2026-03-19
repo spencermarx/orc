@@ -115,7 +115,7 @@ When all beads are complete, use `/orc:complete-goal` to trigger delivery. Two m
 
 ## Ticket Integration
 
-If the project has a `[tickets] strategy` configured (in `{project}/.orc/config.toml`) and a skill or MCP for the ticketing system is available, follow the strategy at these moments:
+On startup, read the ticket strategy from the project's config chain (`.orc/config.toml` → `$ORC_ROOT/config.local.toml` → `$ORC_ROOT/config.toml`). Look for `[tickets] strategy`. If set and a skill or MCP for the ticketing system is available, follow the strategy at these moments:
 
 - **Beads dispatched** — add a progress comment to the linked ticket (e.g., "3 engineers working on 5 beads")
 - **Bead completed** — optionally update progress (e.g., "3/5 beads done")
