@@ -153,7 +153,7 @@ orc init                       # First-time setup + install slash commands
 orc add <key> <path>           # Register project + install commands
 orc remove <key>               # Unregister a project
 orc list                       # Show registered projects
-orc status                     # Dashboard: all projects, all workers
+orc status                     # Dashboard: projects, goals, workers (goal-grouped)
 orc halt <project> <bead>      # Stop an engineer
 orc teardown [project] [bead]  # Hierarchical cleanup (bead, project, or all)
 orc config [project]           # Open config in $EDITOR
@@ -201,10 +201,13 @@ strategy = ""                  # Natural language branch naming preference
                                # Default: feat/, fix/, task/ + ticket prefix if available
 
 [delivery]
-mode = "review"                # "review" (default) or "pr"
-target_strategy = ""           # Natural language PR target branch strategy
+mode = "review"                # "review" = goal orch signals review, user inspects branch
+                               # "pr" = push goal branch + create PR via gh CLI
+target_strategy = ""           # Natural language PR target branch strategy (default: main)
                                # e.g., "gitflow: target develop, hotfix → release branch"
 ```
+
+CLI delivery helpers (`_common.sh`): `_delivery_mode`, `_delivery_target_branch`, `_deliver_pr` support both modes. The goal orchestrator uses `/orc:complete-goal` which reads these settings.
 
 Persona resolution: `{project}/.orc/{role}.md` > `{orc-repo}/packages/personas/{role}.md`
 
@@ -249,4 +252,4 @@ status                           ← Dashboard
 {project}/board                  ← Board view
 ```
 
-Status bar shows aggregate health. Window names include live status indicators (● ✓ ✗). Pane borders show titles. Activity monitoring highlights active windows.
+Status bar shows aggregate health (goal count + worker states). Window names are stable identifiers — status indicators (● ✓ ✗) are rendered via `@orc_status` user option in the window-status-format, not embedded in names. Pane borders show titles. Activity monitoring highlights active windows. The `orc status` dashboard groups workers under their parent goal for hierarchical visibility.

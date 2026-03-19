@@ -175,7 +175,7 @@ conventions:
     commands: kebab-case subcommands (orc spawn, orc teardown)
     personas: lowercase role names (engineer, orchestrator, reviewer)
     projects: short lowercase keys in projects.toml (ia, wrkbelt, ocr)
-    tmux_windows: '"{project}" or "{project}/{bead}" or "{project}/board"'
+    tmux_windows: '"{project}" or "{project}/{goal}" or "{project}/{goal}/{bead}" or "{project}/board"'
 
   git:
     commits: |

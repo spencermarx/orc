@@ -12,10 +12,16 @@ set -euo pipefail
 # ── Status line mode (for tmux status-right) ──────────────────────────────
 
 if [[ "${1:-}" == "--line" ]]; then
-  working=0; review=0; blocked=0; dead=0
+  working=0; review=0; blocked=0; dead=0; goals=0
   for key in $(_project_keys); do
     path="$(_project_path "$key")"
     [[ -d "$path/.worktrees" ]] || continue
+    # Count active goals by counting goal branches (feat/*, fix/*, task/*)
+    goal_branches="$(git -C "$path" for-each-ref --format='%(refname:short)' \
+      'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 2>/dev/null || true)"
+    if [[ -n "$goal_branches" ]]; then
+      goals=$(( goals + $(echo "$goal_branches" | wc -l | tr -d ' ') ))
+    fi
     for d in "$path/.worktrees"/*/; do
       [[ -d "$d" ]] || continue
       status="$(_worker_status "$d")"
@@ -28,6 +34,7 @@ if [[ "${1:-}" == "--line" ]]; then
     done
   done
   parts=()
+  (( goals > 0 ))   && parts+=("${goals} goals")
   (( working > 0 )) && parts+=("${working} ● working")
   (( review > 0 ))  && parts+=("${review} ✓ review")
   (( blocked > 0 )) && parts+=("${blocked} ✗ blocked")
@@ -78,6 +85,44 @@ if [[ -z "$keys" ]]; then
   exit "$EXIT_OK"
 fi
 
+# Helper: format elapsed time from a status file
+_format_elapsed() {
+  local status_file="$1"
+  local elapsed=""
+  if [[ -f "$status_file" ]]; then
+    local mod_time
+    if _is_macos; then
+      mod_time=$(stat -f %m "$status_file" 2>/dev/null || echo 0)
+    else
+      mod_time=$(stat -c %Y "$status_file" 2>/dev/null || echo 0)
+    fi
+    local now diff
+    now=$(date +%s)
+    diff=$(( now - mod_time ))
+    if (( diff < 60 )); then
+      elapsed="${diff}s"
+    elif (( diff < 3600 )); then
+      elapsed="$(( diff / 60 ))m"
+    else
+      elapsed="$(( diff / 3600 ))h"
+    fi
+  fi
+  echo "$elapsed"
+}
+
+# Helper: format status indicator
+_format_indicator() {
+  local status="$1"
+  case "$status" in
+    working*)  echo "● working" ;;
+    review*)   echo "✓ review" ;;
+    blocked*)  echo "✗ blocked" ;;
+    done*)     echo "✓ done" ;;
+    unknown)   echo "✗ dead (agent exited)" ;;
+    *)         echo "? $status" ;;
+  esac
+}
+
 # Per-project
 for key in $keys; do
   path="$(_project_path "$key")"
@@ -92,47 +137,78 @@ for key in $keys; do
     continue
   fi
 
+  # Collect workers grouped by goal
+  # goal_map: associative array keyed by goal name, values are newline-separated bead entries
+  declare -A goal_map=()
+  ungrouped=""
+
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
-    bead="$(basename "$d")"
+    bead_name="$(basename "$d")"
+    wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     status="$(_worker_status "$d")"
+    elapsed="$(_format_elapsed "$d/.worker-status")"
+    indicator="$(_format_indicator "$status")"
 
-    # Elapsed time
-    elapsed=""
-    if [[ -f "$d/.worker-status" ]]; then
-      if _is_macos; then
-        mod_time=$(stat -f %m "$d/.worker-status" 2>/dev/null || echo 0)
-      else
-        mod_time=$(stat -c %Y "$d/.worker-status" 2>/dev/null || echo 0)
-      fi
-      now=$(date +%s)
-      diff=$(( now - mod_time ))
-      if (( diff < 60 )); then
-        elapsed="${diff}s"
-      elif (( diff < 3600 )); then
-        elapsed="$(( diff / 60 ))m"
-      else
-        elapsed="$(( diff / 3600 ))h"
-      fi
-    fi
-
-    # Format status indicator
-    indicator=""
-    case "$status" in
-      working*)  indicator="● working" ;;
-      review*)   indicator="✓ review" ;;
-      blocked*)  indicator="✗ blocked" ;;
-      unknown)   indicator="✗ dead (agent exited)" ;;
-      *)         indicator="? $status" ;;
-    esac
-
-    printf '  %-12s %-24s %s %5s\n' "$bead" "" "$indicator" "$elapsed"
-
-    # Show blocked reason if present
+    # Build entry line
+    entry="$(printf '%-12s %s %5s' "$bead_name" "$indicator" "$elapsed")"
     if [[ "$status" == blocked:* ]]; then
       reason="${status#blocked: }"
-      printf '             "%s"\n' "$reason"
+      entry="$entry
+             \"$reason\""
+    fi
+
+    # Group by goal
+    if [[ "$wt_branch" == work/*/* ]]; then
+      goal_name="${wt_branch#work/}"
+      goal_name="${goal_name%/*}"
+      if [[ -n "${goal_map[$goal_name]+x}" ]]; then
+        goal_map[$goal_name]="${goal_map[$goal_name]}
+${entry}"
+      else
+        goal_map[$goal_name]="$entry"
+      fi
+    else
+      if [[ -n "$ungrouped" ]]; then
+        ungrouped="$ungrouped
+${entry}"
+      else
+        ungrouped="$entry"
+      fi
     fi
   done
+
+  # Print goal-grouped workers
+  for goal_name in $(echo "${!goal_map[@]}" | tr ' ' '\n' | sort); do
+    # Detect goal branch and goal orchestrator status
+    goal_branch="$(_find_goal_branch "$path" "$goal_name" 2>/dev/null || true)"
+    goal_indicator=""
+    if _tmux_window_exists "${key}/${goal_name}" 2>/dev/null; then
+      if _tmux_is_dead_window "${key}/${goal_name}" 2>/dev/null; then
+        goal_indicator="✗ dead"
+      else
+        goal_indicator="● active"
+      fi
+    fi
+
+    printf '  ┌ goal: %s' "$goal_name"
+    [[ -n "$goal_branch" ]] && printf ' (%s)' "$goal_branch"
+    [[ -n "$goal_indicator" ]] && printf '  [%s]' "$goal_indicator"
+    printf '\n'
+
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && printf '  │ %s\n' "$line"
+    done <<< "${goal_map[$goal_name]}"
+    printf '  └\n'
+  done
+
+  # Print ungrouped workers (no goal)
+  if [[ -n "$ungrouped" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && printf '  %s\n' "$line"
+    done <<< "$ungrouped"
+  fi
+
+  unset goal_map
 done
 echo ""

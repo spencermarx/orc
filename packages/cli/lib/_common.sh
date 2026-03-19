@@ -972,10 +972,76 @@ _worker_status() {
 }
 
 # Find the last window name matching a project prefix (for hierarchical insertion).
+# Matches all three levels: {project}, {project}/{goal}, {project}/{goal}/{bead}.
 _last_project_window() {
   local project="$1"
   tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
     | grep -E "^${project}(/|$)" | tail -1 || echo "$project"
+}
+
+# List all active goal orchestrator windows for a project.
+# Prints goal names (one per line).
+_list_active_goals() {
+  local project="$1"
+  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+    | grep -E "^${project}/[^/]+$" | sed "s|^${project}/||" || true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Delivery helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Get the delivery mode from config (defaults to "review").
+_delivery_mode() {
+  local project_path="${1:-}"
+  _config_get "delivery.mode" "review" "$project_path"
+}
+
+# Determine the PR target branch based on delivery.target_strategy config.
+# Falls back to "main" if not configured.
+_delivery_target_branch() {
+  local project_path="${1:-}"
+  local strategy
+  strategy="$(_config_get "delivery.target_strategy" "" "$project_path")"
+  if [[ -z "$strategy" ]]; then
+    echo "main"
+  else
+    # The strategy is natural language — the agent interprets it.
+    # For CLI use, return the raw strategy so callers can decide.
+    echo "$strategy"
+  fi
+}
+
+# Push a goal branch and create a PR via gh.
+# Usage: _deliver_pr <project_path> <goal_branch> <title> <body>
+_deliver_pr() {
+  local project_path="$1"
+  local goal_branch="$2"
+  local title="$3"
+  local body="$4"
+
+  _require "gh" "brew install gh"
+
+  local target
+  target="$(_delivery_target_branch "$project_path")"
+
+  _info "Pushing goal branch '${goal_branch}'..."
+  git -C "$project_path" push -u origin "$goal_branch"
+
+  _info "Creating PR: ${title}"
+  local pr_url
+  pr_url="$(gh pr create \
+    --repo "$(git -C "$project_path" remote get-url origin)" \
+    --base "$target" \
+    --head "$goal_branch" \
+    --title "$title" \
+    --body "$body" 2>&1)" || {
+    _error "Failed to create PR: $pr_url"
+    return 1
+  }
+
+  _info "PR created: $pr_url"
+  echo "$pr_url"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
