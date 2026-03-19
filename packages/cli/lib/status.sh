@@ -13,14 +13,29 @@ set -euo pipefail
 
 if [[ "${1:-}" == "--line" ]]; then
   working=0; review=0; blocked=0; dead=0; goals=0
+  goal_review=0; goal_blocked=0; goal_done=0
   for key in $(_project_keys); do
     path="$(_project_path "$key")"
-    [[ -d "$path/.worktrees" ]] || continue
-    # Count active goals by counting goal branches (feat/*, fix/*, task/*)
-    goal_branches="$(git -C "$path" for-each-ref --format='%(refname:short)' \
-      'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 2>/dev/null || true)"
-    if [[ -n "$goal_branches" ]]; then
-      goals=$(( goals + $(echo "$goal_branches" | wc -l | tr -d ' ') ))
+    # Count goals and their statuses from .goals/ directory
+    if [[ -d "$path/.goals" ]]; then
+      for gd in "$path/.goals"/*/; do
+        [[ -d "$gd" ]] || continue
+        ((goals++)) || true
+        gs="$(head -1 "$gd/.worker-status" 2>/dev/null || echo "unknown")"
+        case "$gs" in
+          review*)   ((goal_review++)) ;;
+          blocked*)  ((goal_blocked++)) ;;
+          done*)     ((goal_done++)) ;;
+        esac
+      done
+    fi
+    # Fall back to branch counting if no .goals/ dir
+    if (( goals == 0 )); then
+      goal_branches="$(git -C "$path" for-each-ref --format='%(refname:short)' \
+        'refs/heads/feat/' 'refs/heads/fix/' 'refs/heads/task/' 2>/dev/null || true)"
+      if [[ -n "$goal_branches" ]]; then
+        goals=$(( goals + $(echo "$goal_branches" | wc -l | tr -d ' ') ))
+      fi
     fi
     for d in "$path/.worktrees"/*/; do
       [[ -d "$d" ]] || continue
@@ -35,7 +50,17 @@ if [[ "${1:-}" == "--line" ]]; then
     done
   done
   parts=()
-  (( goals > 0 ))   && parts+=("${goals} goals")
+  if (( goals > 0 )); then
+    goal_detail=""
+    (( goal_review > 0 ))  && goal_detail+=" ${goal_review}✓"
+    (( goal_blocked > 0 )) && goal_detail+=" ${goal_blocked}✗"
+    (( goal_done > 0 ))    && goal_detail+=" ${goal_done}done"
+    if [[ -n "$goal_detail" ]]; then
+      parts+=("${goals} goals(${goal_detail## })")
+    else
+      parts+=("${goals} goals")
+    fi
+  fi
   (( working > 0 )) && parts+=("${working} ● working")
   (( review > 0 ))  && parts+=("${review} ✓ review")
   (( blocked > 0 )) && parts+=("${blocked} ✗ blocked")
@@ -183,19 +208,43 @@ ${entry}"
   for goal_name in $(echo "${!goal_map[@]}" | tr ' ' '\n' | sort); do
     # Detect goal branch and goal orchestrator status
     goal_branch="$(_find_goal_branch "$path" "$goal_name" 2>/dev/null || true)"
+    goal_status="$(_goal_worker_status "$path" "$goal_name")"
     goal_indicator=""
-    if _tmux_window_exists "${key}/${goal_name}" 2>/dev/null; then
-      if _tmux_is_dead_window "${key}/${goal_name}" 2>/dev/null; then
-        goal_indicator="✗ dead"
-      else
-        goal_indicator="● active"
-      fi
-    fi
+    case "$goal_status" in
+      working*)  goal_indicator="● working" ;;
+      review*)   goal_indicator="✓ review" ;;
+      blocked*)  goal_indicator="✗ blocked" ;;
+      done*)     goal_indicator="✓ done" ;;
+      unknown)
+        # Fall back to tmux liveness check if no status file exists
+        if _tmux_window_exists "${key}/${goal_name}" 2>/dev/null; then
+          if _tmux_is_dead_window "${key}/${goal_name}" 2>/dev/null; then
+            goal_indicator="✗ dead"
+          else
+            goal_indicator="● active"
+          fi
+        fi
+        ;;
+      *)         goal_indicator="? $goal_status" ;;
+    esac
+
+    # Goal elapsed time from .goals/<goal>/.worker-status
+    goal_elapsed=""
+    goal_status_file="$path/.goals/$goal_name/.worker-status"
+    goal_elapsed="$(_format_elapsed "$goal_status_file")"
 
     printf '  ┌ goal: %s' "$goal_name"
     [[ -n "$goal_branch" ]] && printf ' (%s)' "$goal_branch"
-    [[ -n "$goal_indicator" ]] && printf '  [%s]' "$goal_indicator"
+    [[ -n "$goal_indicator" ]] && printf '  [%s' "$goal_indicator"
+    [[ -n "$goal_elapsed" ]] && printf ' %s' "$goal_elapsed"
+    [[ -n "$goal_indicator" ]] && printf ']'
     printf '\n'
+
+    # Show blocked reason for goals
+    if [[ "$goal_status" == blocked:* ]]; then
+      goal_reason="${goal_status#blocked: }"
+      printf '  │ "%s"\n' "$goal_reason"
+    fi
 
     while IFS= read -r line; do
       [[ -n "$line" ]] && printf '  │ %s\n' "$line"
