@@ -632,6 +632,231 @@ _tmux_rebalance() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Pane overflow — find/create overflow windows when panes won't fit
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Configurable min-size thresholds for pane overflow checks.
+# These define the minimum dimensions a child pane must have after a split.
+_pane_overflow_min_width() {
+  local project_path="${1:-}"
+  _config_get "layout.min_pane_width" "40" "$project_path"
+}
+
+_pane_overflow_min_height() {
+  local project_path="${1:-}"
+  _config_get "layout.min_pane_height" "10" "$project_path"
+}
+
+# Check if adding a pane to a window would violate min-size constraints.
+# Simulates a main-vertical split: the right column gets divided among children.
+# Returns 0 if adding a pane would fit, 1 if it would violate constraints.
+# Usage: _tmux_can_fit_pane "window-name" [min_width] [min_height]
+_tmux_can_fit_pane() {
+  local window="$1"
+  local min_width="${2:-40}"
+  local min_height="${3:-10}"
+  local target
+  target="$(_tmux_target "$window")"
+
+  local win_width win_height pane_count
+  win_width="$(tmux display-message -t "$target" -p '#{window_width}' 2>/dev/null || echo 0)"
+  win_height="$(tmux display-message -t "$target" -p '#{window_height}' 2>/dev/null || echo 0)"
+  pane_count="$(_tmux_pane_count "$window")"
+
+  # If the window doesn't exist or has no dimensions, can't fit
+  [[ "$win_width" -eq 0 || "$win_height" -eq 0 ]] && return 1
+
+  # In main-vertical layout, pane 0 gets ~60% width, the rest share the right column.
+  # After adding a new pane, the right column will have (pane_count) child panes
+  # (pane_count includes pane 0, so children = pane_count - 1, plus the new one = pane_count).
+  local right_col_width right_col_children child_height
+
+  # Right column width: window width minus ~60% for pane 0, minus 1 for separator
+  right_col_width=$(( win_width * 40 / 100 ))
+  [[ "$right_col_width" -lt "$min_width" ]] && return 1
+
+  # Number of children in right column after adding the new pane
+  if [[ "$pane_count" -le 1 ]]; then
+    # Only pane 0 exists — the new pane will be the first child
+    right_col_children=1
+  else
+    # pane_count - 1 existing children, plus the new one
+    right_col_children=$(( pane_count ))
+  fi
+
+  # Each child pane gets equal vertical space minus separators (1 line each)
+  local separators=$(( right_col_children - 1 ))
+  child_height=$(( (win_height - separators) / right_col_children ))
+
+  [[ "$child_height" -ge "$min_height" ]] && return 0
+  return 1
+}
+
+# List all overflow windows for a base window name.
+# Prints window names like "base:2", "base:3", etc. (one per line, sorted).
+# Usage: _tmux_overflow_windows "base-window-name"
+_tmux_overflow_windows() {
+  local base="$1"
+  # Escape regex-special chars in the base name (e.g., dots, slashes are literal)
+  local escaped_base
+  escaped_base="$(printf '%s' "$base" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')"
+  tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
+    | grep -E "^${escaped_base}:[0-9]+$" | sort -t: -k2 -n || true
+}
+
+# Find the best window to add a pane to, creating overflow windows as needed.
+# Returns the target window name (the base window, or an overflow like "base:2").
+# Fills numbering gaps: prefers :2 over :4 when :2 is available.
+# Usage: _tmux_pane_target "base-window-name" [project_path]
+_tmux_pane_target() {
+  local base="$1"
+  local project_path="${2:-}"
+
+  local min_w min_h
+  min_w="$(_pane_overflow_min_width "$project_path")"
+  min_h="$(_pane_overflow_min_height "$project_path")"
+
+  # First: try the primary window
+  if _tmux_window_exists "$base" && _tmux_can_fit_pane "$base" "$min_w" "$min_h"; then
+    echo "$base"
+    return 0
+  fi
+
+  # If base doesn't exist yet, it will be created by the caller — it can fit
+  if ! _tmux_window_exists "$base"; then
+    echo "$base"
+    return 0
+  fi
+
+  # Second: try existing overflow windows
+  local overflow
+  overflow="$(_tmux_overflow_windows "$base")"
+  local win
+  while IFS= read -r win; do
+    [[ -z "$win" ]] && continue
+    if _tmux_can_fit_pane "$win" "$min_w" "$min_h"; then
+      echo "$win"
+      return 0
+    fi
+  done <<< "$overflow"
+
+  # Third: create a new overflow window, filling gaps
+  local next_num=2
+  while true; do
+    local candidate="${base}:${next_num}"
+    if ! _tmux_window_exists "$candidate"; then
+      # Create the overflow window (inserted after the last related window)
+      local after
+      after="$(_last_project_window "$base")"
+      # Also check existing overflow windows for correct insertion point
+      local last_overflow
+      last_overflow="$(echo "$overflow" | tail -1)"
+      [[ -n "$last_overflow" ]] && after="$last_overflow"
+      _tmux_new_window "$candidate" "$PWD" "$after"
+      echo "$candidate"
+      return 0
+    fi
+    ((next_num++))
+  done
+}
+
+# Combined helper: split a pane, set its title, register it, rebalance, and
+# launch an agent. This is the single entry point for spawning a child agent
+# as a pane inside a parent window.
+#
+# Usage: _tmux_split_with_agent "target-window" "pane-title" "persona" \
+#            [project_path] [initial_prompt] [working_dir]
+#
+# The target window should be obtained from _tmux_pane_target() first.
+# Uses main-vertical layout. Pane 0 is assumed to be the orchestrator.
+_tmux_split_with_agent() {
+  local window="$1"
+  local pane_title="$2"
+  local persona="$3"
+  local project_path="${4:-}"
+  local initial_prompt="${5:-}"
+  local working_dir="${6:-$PWD}"
+
+  local target
+  target="$(_tmux_target "$window")"
+
+  # Split horizontally (creates a new pane to the right)
+  local cmd=(tmux split-window -h -t "$target")
+  [[ -n "$working_dir" ]] && cmd+=(-c "$working_dir")
+  "${cmd[@]}"
+
+  # The new pane is now the active pane — get its index
+  local new_pane
+  new_pane="$(tmux display-message -t "$target" -p '#{pane_index}' 2>/dev/null)"
+
+  # Set pane title
+  _tmux_set_pane_title "$window" "$new_pane" "$pane_title"
+
+  # Register in pane registry
+  local min_w min_h
+  min_w="$(_pane_overflow_min_width "$project_path")"
+  min_h="$(_pane_overflow_min_height "$project_path")"
+  _pane_registry_add "$window" "$new_pane" "$pane_title" "$min_w" "$min_h"
+
+  # Apply main-vertical layout and rebalance
+  tmux select-layout -t "$target" main-vertical 2>/dev/null || true
+  _pane_min_size_check "$window" || true
+
+  # Build agent command and launch it in the new pane
+  local agent_cmd
+  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  local agent_flags
+  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
+  local agent_template
+  agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
+
+  # --yolo: append auto-accept flags
+  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+    local yolo_flags
+    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
+    if [[ -z "$yolo_flags" ]]; then
+      case "$agent_cmd" in
+        claude) yolo_flags="--dangerously-skip-permissions" ;;
+      esac
+    fi
+    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
+  fi
+
+  local persona_file
+  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
+  printf '%s' "$persona" > "$persona_file"
+
+  local launch_cmd
+  if [[ -n "$agent_template" ]]; then
+    launch_cmd="$agent_template"
+    launch_cmd="${launch_cmd//\{cmd\}/$agent_cmd}"
+    launch_cmd="${launch_cmd//\{prompt_file\}/$persona_file}"
+    launch_cmd="${launch_cmd//\{prompt\}/\$(cat $persona_file)}"
+  else
+    launch_cmd="$agent_cmd"
+    [[ -n "$agent_flags" ]] && launch_cmd="$launch_cmd $agent_flags"
+    launch_cmd="$launch_cmd --append-system-prompt \"\$(cat $persona_file)\""
+    if [[ -n "$initial_prompt" ]]; then
+      local prompt_file
+      prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
+      printf '%s' "$initial_prompt" > "$prompt_file"
+      launch_cmd="$launch_cmd \"\$(cat $prompt_file)\""
+    fi
+  fi
+
+  # Write launcher script for clean terminal output
+  local launcher
+  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
+  cat > "$launcher" <<LAUNCH_EOF
+#!/usr/bin/env bash
+clear
+$launch_cmd
+LAUNCH_EOF
+  chmod +x "$launcher"
+  _tmux_send_pane "$window" "$new_pane" "bash $launcher"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Goal branch helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
