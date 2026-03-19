@@ -984,7 +984,8 @@ _last_project_window() {
 _list_active_goals() {
   local project="$1"
   tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null \
-    | grep -E "^${project}/[^/]+$" | sed "s|^${project}/||" || true
+    | grep -E "^${project}/[^/]+$" | grep -v "^${project}/board$" \
+    | sed "s|^${project}/||" || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

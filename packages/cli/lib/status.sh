@@ -29,6 +29,7 @@ if [[ "${1:-}" == "--line" ]]; then
         working*)  ((working++)) ;;
         review*)   ((review++)) ;;
         blocked*)  ((blocked++)) ;;
+        done*)     ;; # completed — not counted in active totals
         *)         ((dead++)) ;;
       esac
     done

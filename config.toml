@@ -23,8 +23,9 @@ strategy = ""                # Natural language branch naming preference
                              # e.g., "always use feat/ prefix" or "use JIRA ticket as prefix"
 
 [delivery]
-mode = "review"              # "review" (default) or "pr"
-target_strategy = ""         # Natural language PR target branch strategy
+mode = "review"              # "review" = goal orch signals review, user inspects branch
+                             # "pr" = push goal branch + create PR via gh CLI
+target_strategy = ""         # Natural language PR target branch strategy (default: main)
                              # e.g., "gitflow: target develop, hotfix → release branch"
 
 [board]
