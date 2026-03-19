@@ -52,6 +52,7 @@ orc_start() {
     _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
     _tmux_ensure_session
+    _detect_ruflo "$project_path"
 
     local persona
     persona="$(_resolve_persona "orchestrator" "$project_path")"

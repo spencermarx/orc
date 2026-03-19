@@ -1348,3 +1348,46 @@ _check_approval() {
   fi
   return 0
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ruflo detection — optional agent capability enhancer
+# ─────────────────────────────────────────────────────────────────────────────
+
+_detect_ruflo() {
+  local project_path="${1:-}"
+
+  # Already detected this session — skip
+  if [[ -n "${ORC_RUFLO_AVAILABLE+x}" ]]; then
+    return 0
+  fi
+
+  local mode
+  mode="$(_config_get "agents.ruflo" "off" "$project_path")"
+
+  # Default: Ruflo is never used, never detected, never mentioned
+  if [[ "$mode" == "off" ]]; then
+    export ORC_RUFLO_AVAILABLE=0
+    return 0
+  fi
+
+  # Check for ruflo availability
+  local found=0
+  if command -v ruflo &>/dev/null; then
+    found=1
+  elif npx ruflo --version &>/dev/null 2>&1; then
+    found=1
+  fi
+
+  if [[ "$found" -eq 1 ]]; then
+    export ORC_RUFLO_AVAILABLE=1
+    return 0
+  fi
+
+  # Not found
+  if [[ "$mode" == "require" ]]; then
+    _die "Ruflo is required but not found. Install via: npm install -g ruflo@latest" "$EXIT_STATE"
+  fi
+
+  # auto mode, not found — silently proceed
+  export ORC_RUFLO_AVAILABLE=0
+}

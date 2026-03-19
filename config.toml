@@ -28,6 +28,9 @@ mode = "review"              # "review" = goal orch signals review, user inspect
 target_strategy = ""         # Natural language PR target branch strategy (default: main)
                              # e.g., "gitflow: target develop, hotfix → release branch"
 
+[agents]
+ruflo = "off"                # "off" (default), "auto", or "require"
+
 [board]
 command = ""                 # empty = built-in fallback (watch bd list)
 
