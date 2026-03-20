@@ -100,8 +100,7 @@ orc/
 │       ├── goal-orchestrator.md
 │       ├── engineer.md
 │       └── reviewer.md
-├── docs/
-└── examples/
+└── openspec/                        # Change proposals and specifications
 ```
 
 Registered projects get an optional `.orc/` dir for overrides, `.beads/` for state, and `.worktrees/` (gitignored) for engineer workspaces.
@@ -231,7 +230,7 @@ Project personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/ rules
 
 Two-plane model: each worktree window has an engineering pane (persistent) and a review pane (ephemeral, right side, 40%). Engineers signal `review` via `.worker-status` → goal orchestrator creates review pane → reviewer writes verdict to `.worker-feedback` → if approved, bead is fast-forward merged to goal branch and worktree is torn down → if not approved, review pane destroyed, engineer gets feedback and re-signals → repeats up to `max_rounds` (default 3) then escalates to human.
 
-Review mode is configurable: default reviewer persona, `/ocr:review`, or custom command via `[review] command` in config.
+Review mode is configurable via `[review.dev]` (bead-level) and `[review.goal]` (goal-level) config sections with `review_instructions` fields.
 
 ## Approval Policy
 

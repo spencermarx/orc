@@ -201,22 +201,20 @@ mkdir -p /path/to/myapp/.orc
 Create `/path/to/myapp/.orc/config.toml`:
 
 ```toml
-[review]
-# Use a custom review command instead of the default reviewer persona
-command = "/ocr:review"
-
-# Or add project-specific guidelines to the default reviewer
-instructions = """
-Focus on security: check for SQL injection, XSS, and auth bypass.
-All new endpoints must have rate limiting.
-Verify error responses follow our RFC 7807 format.
-"""
-
-# Allow up to 5 review rounds before escalating
+[review.dev]
+# Bead-level review: use a custom tool or add project-specific guidelines
+review_instructions = "Focus on security: check for SQL injection, XSS, and auth bypass. All new endpoints must have rate limiting."
 max_rounds = 5
+
+[review.goal]
+# Goal-level review: deep review before delivery (opt-in)
+review_instructions = "/ocr:review — post the review to the GitHub PR"
+verify_approval = "The review output contains no outstanding issues requiring changes"
+address_feedback = "Run the review tool's address command with the path to the review output file"
+max_rounds = 3
 ```
 
-The `command` field lets you swap in any review tool — the built-in reviewer persona, [OCR](https://github.com/thefinalsource/ocr) multi-agent review, or a custom script. The `instructions` field appends natural language guidelines to whatever reviewer you're using.
+`review_instructions` accepts a slash command, natural language guidelines, or both. See [`[review.dev]`](#reviewdev--dev-review-bead-level) and [`[review.goal]`](#reviewgoal--goal-review-goal-level) for full reference.
 
 ### Configuring Branching and Delivery
 
@@ -352,7 +350,7 @@ orc <project> <bead>           # Jump to an engineer's worktree
 | `orc list` | Show registered projects |
 | `orc status` | Dashboard: all projects, goals, and workers at a glance |
 | `orc halt <project> <bead>` | Stop an engineer mid-work |
-| `orc teardown [project] [goal] [bead]` | Hierarchical cleanup — tear down a bead, a goal, a project, or everything |
+| `orc teardown [project] [bead-or-goal]` | Hierarchical cleanup — tear down a bead, a goal, a project, or everything |
 | `orc config [project]` | Open config in `$EDITOR` |
 | `orc board <project>` | Open the board view |
 | `orc leave` | Detach from tmux (agents keep running in the background) |
@@ -590,7 +588,7 @@ Every bead goes through dev review before merging to the goal branch. The review
 
 ### Goal Review (Long Cycle)
 
-After all beads pass dev review, if `[review.goal] command` is configured, the goal orchestrator enters a deeper review cycle before delivery:
+After all beads pass dev review, if `[review.goal] review_instructions` is configured, the goal orchestrator enters a deeper review cycle before delivery:
 
 1. Goal orchestrator runs the configured command (e.g., `/ocr:review`) against the full goal branch
 2. Review evaluates the entire deliverable — not just individual beads
@@ -598,7 +596,7 @@ After all beads pass dev review, if `[review.goal] command` is configured, the g
 4. **Not approved** → goal orchestrator creates new beads to address feedback, engineers fix, dev review runs, then goal review re-runs
 5. Repeats up to `[review.goal] max_rounds`, then escalates
 
-This tier is **opt-in**. When `[review.goal] command` is empty (default), the goal orchestrator skips straight to delivery after all beads pass dev review.
+This tier is **opt-in**. When `[review.goal] review_instructions` is empty (default), the goal orchestrator skips straight to delivery after all beads pass dev review.
 
 ## Customizing Personas
 
