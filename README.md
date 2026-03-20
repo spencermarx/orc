@@ -31,6 +31,7 @@
 - [Usage](#usage)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
+- [Supported Agent CLIs](#supported-agent-CLIs)
 - [CLI Reference](#cli-reference)
 - [Slash Commands](#slash-commands)
 - [Configuration](#configuration)
@@ -57,7 +58,7 @@ Orc does.
 - **Built-in review loop** — every piece of work is reviewed before merge, so bugs don't sneak past the front lines
 - **One clean branch** — you review a single goal branch, not 10 scattered PRs from 10 scattered agents
 
-Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Claude Code](https://docs.anthropic.com/en/docs/claude-code), OpenCode, Codex, or your own. No daemon, no server, no framework.
+Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), or your own. No daemon, no server, no framework.
 
 <p align="center">
   <img src="assets/orc-in-action.png" alt="Orc in action — goal orchestrator managing beads while an engineer implements in an isolated worktree" width="900" />
@@ -101,7 +102,7 @@ Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Cl
 | [tmux](https://github.com/tmux/tmux) 3.0+ | Session management | `brew install tmux` / `apt install tmux` |
 | `git` | Worktrees and branching | Pre-installed on most systems |
 | `bash` 4+ | CLI runtime | `brew install bash` (macOS ships 3.x) |
-| Agent CLI | Your AI coding agents | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), OpenCode, or Codex |
+| Agent CLI | Your AI coding agents | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 
 Optional: [`gh`](https://cli.github.com/) — only needed if you want orc to auto-create PRs.
 
@@ -330,6 +331,59 @@ Three primitives. That's it. No database server, no Redis, no message queue.
 | **`.worker-status`** | Per worktree | One line of text: `working`, `review`, `blocked: <reason>`, or `dead` |
 | **`.worker-feedback`** | Per worktree | Review verdict from the reviewer agent — `VERDICT: approved` or detailed feedback |
 
+## Supported Agent CLIs
+
+Orc doesn't care which AI does the coding — it just needs something that can accept a prompt and run in a terminal. Swap your engine with one line of config.
+
+```toml
+# config.local.toml (or {project}/.orc/config.toml)
+[defaults]
+agent_cmd = "claude"    # ← change this
+```
+
+### First-Class Adapters
+
+Each adapter handles the CLI's specific quirks — prompt delivery, auto-approval, slash command installation — so orc's orchestration works identically regardless of which engine is underneath.
+
+| CLI | `agent_cmd` | Prompt Delivery | Auto-Approval | Custom Commands |
+|-----|-------------|-----------------|---------------|-----------------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `--append-system-prompt` flag | `--dangerously-skip-permissions` | `~/.claude/commands/orc/` (MD) |
+| [OpenCode](https://opencode.ai) | `opencode` | `.opencode/agents/` config files | Per-agent permission block | `.opencode/commands/` (MD) |
+| [Codex](https://github.com/openai/codex) | `codex` | `AGENTS.md` in worktree | `--dangerously-bypass-approvals-and-sandbox` | N/A (built-in only) |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `GEMINI.md` in worktree | `--yolo` | `.gemini/commands/orc/` (TOML) |
+
+### Bring Your Own CLI
+
+Any agent CLI that runs in a terminal works. If there's no dedicated adapter, orc falls back to the generic adapter which uses `agent_template` for full control:
+
+```toml
+[defaults]
+agent_cmd = "my-agent"
+agent_template = "my-agent --system-prompt {prompt_file} --input {prompt}"
+yolo_flags = "--auto-approve"
+```
+
+Template placeholders: `{cmd}` (agent_cmd value), `{prompt_file}` (path to persona file), `{prompt}` (inline persona content).
+
+### Writing a New Adapter
+
+Adapters live at `packages/cli/lib/adapters/{name}.sh` — one bash file per CLI. Orc discovers them automatically by matching `agent_cmd` to the filename.
+
+Each adapter implements a simple function contract:
+
+| Function | Purpose |
+|----------|---------|
+| `_adapter_build_launch_cmd` | Build the shell command to start the agent |
+| `_adapter_inject_persona` | Deliver the system prompt (flag, file, or env) |
+| `_adapter_yolo_flags` | Return auto-approval flags (or configure file-based approval) |
+| `_adapter_install_commands` | Install slash commands in the CLI's format |
+| `_adapter_pre_launch` | Pre-launch worktree setup (optional) |
+| `_adapter_post_teardown` | Cleanup after worktree removal (optional) |
+
+See [`packages/cli/lib/adapters/generic.sh`](packages/cli/lib/adapters/generic.sh) for the full contract and contributor guide.
+
+---
+
 ## CLI Reference
 
 ### Navigation (Positional Arguments)
@@ -391,10 +445,10 @@ Edit your overrides: `orc config` (personal) or `orc config <project>` (project-
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `agent_cmd` | `"claude"` | Agent CLI to launch. Supports `claude`, `opencode`, `codex`, or any CLI that accepts a system prompt. |
+| `agent_cmd` | `"claude"` | Agent CLI to launch. Built-in adapters: `claude`, `opencode`, `codex`, `gemini`. Any other value uses the generic adapter. See [Supported Agent CLIs](#supported-agent-clis). |
 | `agent_flags` | `""` | Extra flags passed to every agent invocation. Example: `"--model sonnet"` |
-| `agent_template` | `""` | Custom launch template. Use `{cmd}` and `{prompt_file}` placeholders for full control over how agents start. |
-| `yolo_flags` | `""` | Auto-accept flags appended in YOLO mode. Empty uses built-in defaults (Claude Code: `--dangerously-skip-permissions`). |
+| `agent_template` | `""` | Custom launch template (overrides adapter). Placeholders: `{cmd}`, `{prompt_file}`, `{prompt}`. See [Bring Your Own CLI](#bring-your-own-cli). |
+| `yolo_flags` | `""` | Auto-accept flags appended in YOLO mode. Empty uses adapter defaults (`claude`: `--dangerously-skip-permissions`, `codex`: `--dangerously-bypass-approvals-and-sandbox`, `gemini`: `--yolo`). |
 | `max_workers` | `3` | Maximum concurrent engineers per project. New spawns block when the limit is reached. |
 
 </details>
@@ -547,7 +601,7 @@ orc myapp
 **What changes in YOLO mode:**
 - All approval gates (`spawn`, `review`, `merge`) are skipped — no "Shall I proceed?" prompts
 - Planning auto-continues to dispatching — goals and beads are created and engineers are spawned in one shot
-- Agents launch with auto-accept flags (Claude Code: `--dangerously-skip-permissions`)
+- Agents launch with auto-accept flags (each adapter knows its CLI's flag: Claude → `--dangerously-skip-permissions`, Codex → `--dangerously-bypass-approvals-and-sandbox`, Gemini → `--yolo`, OpenCode → file-based permissions)
 
 **What doesn't change (the safety net):**
 
@@ -678,9 +732,10 @@ orc/
 │   ├── cli/                         # The `orc` CLI — pure bash, no build step
 │   │   ├── bin/orc                  # Entry point with positional routing
 │   │   └── lib/                     # Subcommand scripts + shared helpers
-│   ├── commands/                    # Slash commands (markdown, installed via symlinks)
-│   │   ├── claude/orc/              # Claude Code commands
-│   │   └── windsurf/                # Windsurf commands
+│   │       └── adapters/            # Per-CLI adapters (claude.sh, codex.sh, etc.)
+│   ├── commands/                    # Slash commands
+│   │   ├── _canonical/              # Single-source command definitions (all CLIs)
+│   │   └── claude/orc/              # Legacy Claude-specific commands
 │   └── personas/                    # Agent personas (markdown)
 │       ├── root-orchestrator.md
 │       ├── orchestrator.md
@@ -740,7 +795,22 @@ Increase the limit: `orc config` → set `max_workers = 5` under `[defaults]`.
 <details>
 <summary><strong>Agents using the wrong CLI</strong></summary>
 
-Set `agent_cmd` in your config. Globally: `orc config` → `[defaults] agent_cmd = "opencode"`. Per-project: create `{project}/.orc/config.toml`.
+Set `agent_cmd` in your config. Globally: `orc config` → `[defaults] agent_cmd = "opencode"`. Per-project: create `{project}/.orc/config.toml`. See [Supported Agent CLIs](#supported-agent-clis) for all options.
+
+</details>
+
+<details>
+<summary><strong>Custom CLI not launching correctly</strong></summary>
+
+If your agent CLI uses non-standard flags, set `agent_template` to control the exact launch command:
+
+```toml
+[defaults]
+agent_cmd = "my-agent"
+agent_template = "my-agent --system {prompt_file} --input {prompt}"
+```
+
+Check `packages/cli/lib/adapters/generic.sh` for the full template placeholder reference.
 
 </details>
 

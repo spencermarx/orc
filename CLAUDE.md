@@ -91,9 +91,11 @@ orc/
 │   ├── cli/                         # The `orc` command (bash scripts)
 │   │   ├── bin/orc                  # Entry point (positional routing)
 │   │   └── lib/                     # Subcommand scripts + _common.sh
+│   │       └── adapters/            # Per-CLI adapters (claude.sh, codex.sh, etc.)
 │   ├── commands/                    # Slash commands for agent CLIs
-│   │   ├── claude/orc/              # Claude Code commands (/orc, /orc:status, etc.)
-│   │   └── windsurf/                # Windsurf commands (orc-index, orc-status, etc.)
+│   │   ├── _canonical/              # Single-source command definitions (all CLIs)
+│   │   ├── claude/orc/              # Legacy Claude commands (symlinked)
+│   │   └── windsurf/                # Legacy Windsurf commands (symlinked)
 │   └── personas/                    # Default persona markdown files
 │       ├── root-orchestrator.md
 │       ├── orchestrator.md
@@ -117,7 +119,7 @@ Registered projects get an optional `.orc/` dir for overrides, `.beads/` for sta
 | Work tracking | Beads (Dolt database, MySQL-compatible) |
 | Board visualization | Configurable (Abacus, etc.) with built-in fallback |
 | Session management | tmux |
-| Agent adapter | String interpolation with --yolo support |
+| Agent adapter | Sourced-script adapters per CLI (`packages/cli/lib/adapters/`) |
 | Delivery | `gh` CLI for PR creation (optional) |
 
 ## Build & Development Commands

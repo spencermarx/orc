@@ -2,10 +2,17 @@
 # Override in config.local.toml (gitignored) or {project}/.orc/config.toml
 
 [defaults]
-agent_cmd = "claude"
+agent_cmd = "claude"             # CLI to launch: claude, opencode, codex, gemini, or any custom CLI
+                                 # Adapters at packages/cli/lib/adapters/{name}.sh handle CLI-specific
+                                 # prompt delivery, yolo flags, and command installation.
+                                 # If no adapter matches, the generic fallback uses agent_template.
 agent_flags = ""
-agent_template = ""
-yolo_flags = ""              # auto-accept flags per agent (--yolo); empty = use built-in defaults
+agent_template = ""              # Custom launch template (overrides adapter). Placeholders:
+                                 # {cmd} = agent_cmd, {prompt_file} = persona file path,
+                                 # {prompt} = $(cat persona_file)
+yolo_flags = ""                  # auto-accept flags per agent (--yolo); empty = use adapter defaults
+                                 # Built-in: claude=--dangerously-skip-permissions,
+                                 # codex=--dangerously-bypass-approvals-and-sandbox, gemini=--yolo
 max_workers = 3
 
 [approval]
