@@ -118,8 +118,15 @@ orc_review() {
     round=$(( $(grep -c "^VERDICT:" "$worktree_dir/.worker-feedback" 2>/dev/null || echo 0) + 1 ))
   fi
 
+  # Extract bead title for descriptive review pane label
+  local bead_title
+  bead_title="$(cd "$project_path" && bd show --short "$bead" 2>/dev/null \
+    | sed 's/^[^ ]* *//' | cut -c1-30 || echo "")"
+  local review_label="review: ${project}/${bead} R${round}"
+  [[ -n "$bead_title" ]] && review_label="review: ${project}/${bead} R${round} — ${bead_title}"
+
   # Set review pane title (used for discovery)
-  _tmux_set_pane_title "$window_name" "$review_pane" "review: ${project}/${bead} (round $round)"
+  _tmux_set_pane_title "$window_name" "$review_pane" "$review_label"
 
   # Launch review process BEFORE renaming the window
   # (renaming changes $window_name which breaks subsequent tmux targeting)

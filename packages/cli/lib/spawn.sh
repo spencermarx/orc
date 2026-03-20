@@ -57,6 +57,13 @@ orc_spawn() {
   (cd "$project_path" && bd show "$bead") > "$worktree/.orch-assignment.md"
   echo "working" > "$worktree/.worker-status"
 
+  # Extract bead title for descriptive pane label
+  local bead_title
+  bead_title="$(cd "$project_path" && bd show --short "$bead" 2>/dev/null \
+    | sed 's/^[^ ]* *//' | cut -c1-30 || echo "")"
+  local eng_label="eng: ${bead}"
+  [[ -n "$bead_title" ]] && eng_label="eng: ${bead} — ${bead_title}"
+
   local persona
   persona="$(_resolve_persona "engineer" "$project_path")"
   local init_prompt
@@ -78,7 +85,7 @@ orc_spawn() {
     local target_window
     target_window="$(_tmux_pane_target "$goal_window" "$project_path")"
 
-    _tmux_split_with_agent "$target_window" "eng: ${bead}" "$persona" \
+    _tmux_split_with_agent "$target_window" "$eng_label" "$persona" \
       "$project_path" "$init_prompt" "$worktree"
 
     _tmux_set_window_status "$target_window" "●"
@@ -90,7 +97,7 @@ orc_spawn() {
     _tmux_new_window "$window_name" "$worktree" "$after"
 
     # Set engineering pane title and window status indicator
-    _tmux_set_pane_title "$window_name" "0" "eng: ${window_name}"
+    _tmux_set_pane_title "$window_name" "0" "$eng_label"
     _tmux_set_window_status "$window_name" "●"
 
     _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"

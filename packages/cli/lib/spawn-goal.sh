@@ -28,7 +28,7 @@ orc_spawn_goal() {
   goal_branch="$(_find_goal_branch "$project_path" "$goal")"
 
   local goal_window="${project}/${goal}"
-  local pane_title="goal: ${goal}"
+  local pane_title="goal: ${goal} (${goal_branch})"
 
   # ── Check for existing goal window (reuse or relaunch) ─────────────────
 
