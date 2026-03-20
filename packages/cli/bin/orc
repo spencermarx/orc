@@ -75,7 +75,7 @@ if [[ $# -eq 0 ]]; then
   # CWD-aware: if inside a registered project, offer to open it
   detected="$(_detect_project_from_cwd)"
   if [[ -n "$detected" ]]; then
-    printf '%s' "[orc] You're in '$detected'. Open its orchestrator? [Y/n] "
+    printf '%s' "[orc] You're inside project '$detected'. Start at project level? (n = root orchestrator) [Y/n] "
     read -r answer
     if [[ ! "$answer" =~ ^[Nn] ]]; then
       source "$LIB_DIR/start.sh"
