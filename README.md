@@ -580,6 +580,7 @@ Set `enabled = false` to keep your existing tmux theme and only apply functional
 | `border` | `"#30363d"` | Inactive pane/window borders. |
 | `muted` | `"#6e7681"` | De-emphasized text (version, separators). |
 | `activity` | `"#d29922"` | Window activity highlight (amber). |
+| `mouse` | `true` | Enable mouse support (pane selection, resizing, scrollback). Only when themed. |
 
 </details>
 
