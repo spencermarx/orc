@@ -68,7 +68,7 @@ Optional functions with default no-op behavior:
 - **WHEN** the codex adapter's `_adapter_inject_persona` is called
 - **WITH** persona content and worktree_path=/path/to/worktree
 - **THEN** it writes an `AGENTS.md` file to the worktree root
-- **OR** uses `--config developer_instructions` flag in the launch command
+- **AND** Codex auto-discovers it during launch
 
 #### Scenario: Missing required function
 - **WHEN** an adapter file is sourced
@@ -124,18 +124,18 @@ The adapter SHALL support:
 The system SHALL provide a `codex.sh` adapter supporting OpenAI's Codex CLI.
 
 The adapter SHALL support:
-- System prompt via `--config developer_instructions="$(cat file)"`
-  or `--config experimental_instructions_file=<path>`
+- System prompt via `AGENTS.md` file written to the worktree (Codex
+  auto-discovers it from git root through CWD)
 - Initial prompt as positional argument
 - Yolo mode via `--dangerously-bypass-approvals-and-sandbox`
-- Command installation compatible with Codex slash command mechanism
+- Post-teardown cleanup of orc-generated `AGENTS.md`
 
 #### Scenario: Codex engineer launch
 - **WHEN** `defaults.agent_cmd = "codex"`
-- **AND** an engineer is spawned
-- **THEN** the launch command includes
-  `--config developer_instructions="$(cat <persona_file>)"`
+- **AND** an engineer is spawned in a worktree
+- **THEN** `_adapter_inject_persona` writes `AGENTS.md` to the worktree root
 - **AND** the initial prompt is passed as positional argument
+- **AND** Codex reads the persona from `AGENTS.md` automatically
 
 #### Scenario: Codex yolo mode
 - **WHEN** `ORC_YOLO=1` is set

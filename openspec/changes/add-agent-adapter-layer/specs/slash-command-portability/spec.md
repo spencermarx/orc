@@ -40,19 +40,21 @@ correct location.
 
 #### Scenario: OpenCode command rendering
 - **WHEN** the opencode adapter installs commands
-- **THEN** canonical commands are rendered as agent markdown files
-- **OR** installed via the mechanism OpenCode supports for custom commands
+- **THEN** canonical commands are symlinked as markdown files to
+  `.opencode/commands/orc-{name}.md` (project) or
+  `~/.config/opencode/commands/orc-{name}.md` (global)
 
-#### Scenario: Codex command rendering
-- **WHEN** the codex adapter installs commands
-- **THEN** canonical commands are installed in Codex's slash command format
+#### Scenario: Codex has no custom commands
+- **WHEN** the codex adapter's `_adapter_install_commands` is called
+- **THEN** it logs a warning that Codex does not support custom slash commands
+- **AND** project context is delivered via AGENTS.md instead
 
 ### Requirement: Backward-Compatible Command Directories
 
-The system SHALL maintain backward compatibility with existing
-`packages/commands/claude/` and `packages/commands/windsurf/` directories
-during migration. Adapters SHALL prefer canonical commands when available
-and fall back to legacy directories otherwise.
+The system SHALL maintain backward compatibility with the existing
+`packages/commands/claude/` directory during migration. The claude adapter
+SHALL prefer canonical commands when available and fall back to the legacy
+directory otherwise.
 
 #### Scenario: Legacy directories still functional
 - **WHEN** canonical commands exist

@@ -32,6 +32,7 @@ staying true to orc's "shell over runtime" philosophy.
 **Goals:**
 - Structured, per-CLI adapter files that encapsulate all CLI-specific logic
 - First-class adapters for: Claude Code, OpenCode, Codex CLI, Gemini CLI
+- Generic fallback adapter for any CLI configurable via `agent_template`
 - Portable slash command definitions with per-CLI rendering
 - Clean lifecycle hooks for CLIs needing file-based setup
 - Backward-compatible — existing config continues to work
@@ -120,9 +121,8 @@ content — only the format and installation path differ.
 | CLI | Format | Location | Naming |
 |-----|--------|----------|--------|
 | Claude | MD, namespaced | `~/.claude/commands/orc/` | `{name}.md` |
-| Windsurf | MD, prefixed | `~/.windsurf/commands/` | `orc-{name}.md` |
-| OpenCode | MD agent files | `.opencode/agents/` | `orc-{name}.md` |
-| Codex | MD, namespaced | Custom commands dir | `orc-{name}.md` |
+| OpenCode | MD, prefixed | `.opencode/commands/` or `~/.config/opencode/commands/` | `orc-{name}.md` |
+| Codex | N/A | No custom command mechanism | Context via AGENTS.md |
 | Gemini | TOML | `.gemini/commands/orc/` | `{name}.toml` |
 
 **Canonical format** (markdown with YAML front-matter):
