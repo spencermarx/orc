@@ -1,3 +1,8 @@
+---
+description: Decompose a request into goals (project) or beads (goal)
+argument-hint: "[request description]"
+---
+
 # /orc:plan — Decompose Request into Goals
 
 **Role:** Orchestrator (project or goal)
@@ -73,11 +78,11 @@ After creating branches, check `echo $ORC_YOLO`:
 
 ## Instructions (Goal Orchestrator)
 
-### Phase 1 — Investigate
+### Phase 1 — Scout the Scope
 
-1. Read the project's README, CLAUDE.md, and key architecture files to understand the codebase.
-2. Identify the relevant areas of code that the goal touches.
-3. Assess complexity, risks, and dependencies.
+1. Read the project's README and CLAUDE.md for conventions and structure.
+2. Identify which files, modules, and areas of the codebase this goal touches — understand the **shape** of the work.
+3. Do NOT debug, identify root causes, or propose implementation fixes — that's the engineer's job. You're mapping the territory, not solving the problem.
 
 ### Phase 2 — Decompose into Beads
 

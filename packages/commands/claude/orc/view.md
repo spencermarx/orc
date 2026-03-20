@@ -1,3 +1,8 @@
+---
+description: Create or adjust tmux pane layouts for monitoring workers
+argument-hint: "[layout description or pattern name]"
+---
+
 # /orc:view — Create Monitoring Layouts
 
 **Role:** Orchestrator
@@ -10,25 +15,22 @@ $ARGUMENTS
 
 If no arguments provided, show current layout and available patterns.
 
-## Hub-and-Spoke Pane Model
+## Layout Model
 
-Orc uses a hub-and-spoke layout where agents share windows as panes instead of getting one window each:
+Each goal gets its own tmux window. The goal orchestrator is pane 0 (left/main), engineers split in on the right:
 
 ```
-{project}                        ← Project window (hub)
-  ├── pane 0: Project orchestrator
-  ├── pane N: Goal orchestrator   (title: "goal: <name>")
-  └── pane N+1: Goal orchestrator (title: "goal: <name>")
-
-{project}/{goal}                 ← Goal window (spoke)
-  ├── pane 0: Goal orchestrator
-  ├── pane N: Engineer            (title: "eng: <bead>")
-  └── pane N+1: Engineer          (title: "eng: <bead>")
+{project}                        ← Project orchestrator (own window)
+{project}/{goal}                 ← Goal window (main-vertical layout)
+  ├── pane 0: Goal orchestrator   (title: "goal: <name>", persistent, left ~60%)
+  ├── pane N: Engineer            (title: "eng: <bead>", right column)
+  ├── pane N+1: Engineer          (title: "eng: <bead>", right column)
+  └── pane N+2: Reviewer          (title: "review: ...", ephemeral, splits vertically below its eng pane)
 ```
 
-- **Goal orchestrators** spawn as panes in the project window via `orc spawn-goal`.
-- **Engineers** spawn as panes in the goal window via `orc spawn`. The goal window is created automatically when the first engineer for that goal is spawned.
-- **Review panes** split horizontally from the engineer's pane (40% width, title: `"review: <project>/<bead>"`).
+- **Goal orchestrators** get their own window via `orc spawn-goal` — they are pane 0 (left/main).
+- **Engineers** split into the right column of the goal window via `orc spawn`.
+- **Review panes** split vertically below their engineer's pane (40% height, title: `"review: <project>/<bead>"`). Destroyed after each review round.
 
 ### Overflow Windows
 
@@ -51,8 +53,8 @@ Panes are identified by their titles. Use these commands to find and interact wi
 # List all panes in a window with their titles
 tmux list-panes -t orc:<window> -F '#{pane_index}:#{pane_title}'
 
-# Find a specific goal orchestrator pane
-tmux list-panes -t "orc:<project>" -F '#{pane_index}:#{pane_title}' | grep "goal: <name>"
+# Find the goal orchestrator (pane 0 in its window)
+tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}:#{pane_title}' | grep "goal: <name>"
 
 # Find a specific engineer pane (check overflow windows too)
 tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}:#{pane_title}' | grep "eng: <bead>"
