@@ -320,7 +320,7 @@ Root Orchestrator ─── cross-project coordination
 | ↳ **Engineer** | Implements the bead (persistent — stays until the bead is done) | Push, merge, create PRs, modify beads |
 | ↳ **Reviewer** | Evaluates the engineer's work against acceptance criteria, writes a verdict (ephemeral — spawns per review cycle) | Modify code, change bead state |
 
-Reviewers are fully customizable — use the built-in persona, plug in your own review command, or add project-specific guidelines via natural language in config. See [`[review]`](#review--review-loop-settings) configuration.
+Reviewers are fully customizable — use the built-in persona, plug in your own review command, or add project-specific guidelines via natural language in config. See [`[review.dev]`](#reviewdev--dev-review-bead-level) and [`[review.goal]`](#reviewgoal--goal-review-goal-level) configuration.
 
 ### State Model
 
@@ -415,13 +415,33 @@ Three checkpoints where orc can pause for your go-ahead:
 </details>
 
 <details open>
-<summary><h3><code>[review]</code> — Review Loop Settings</h3></summary>
+<summary><h3><code>[review.dev]</code> — Dev Review (Bead-Level)</h3></summary>
+
+Fast, tight review loops during development. Each bead is reviewed before merging to the goal branch.
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `review_instructions` | `""` | How to perform the review — a slash command, natural language guidelines, or both. `""` = built-in reviewer persona. |
+| `verify_approval` | `""` | How to determine the review passed. `""` = parse `VERDICT: approved` from `.worker-feedback`. |
 | `max_rounds` | `3` | Max review-feedback cycles per bead before escalating to you. |
-| `command` | `""` | Reviewer strategy. `""` = built-in reviewer persona. `"/ocr:review"` = multi-agent OCR review. Or any custom command. |
-| `instructions` | `""` | Extra instructions appended to the reviewer's prompt. Use for project-specific review guidelines. |
+
+</details>
+
+<details>
+<summary><h3><code>[review.goal]</code> — Goal Review (Goal-Level)</h3></summary>
+
+Deep, comprehensive review after all beads pass dev review. This is the quality gate before delivery. **Opt-in: when `command` is empty (default), this tier is skipped.**
+
+Works with any review tool — e.g., [Open Code Review](https://github.com/spencermarx/open-code-review) (`/ocr:review`) for deep multi-agent review posted to PRs.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `review_instructions` | `""` | How to perform the goal-level review. `""` = skip, go straight to delivery. A slash command, natural language, or both. |
+| `verify_approval` | `""` | How to determine the review passed. Example: `"The review output contains no outstanding issues requiring changes"`. |
+| `address_feedback` | `""` | How engineers should address rejection feedback. Example: `"Run the review tool's address command with the path to the review output file"`. |
+| `max_rounds` | `3` | Max goal-level review cycles before escalating. If not approved, engineers address feedback and the goal-level review re-runs. |
+
+`review_instructions` is **how to review**. `verify_approval` is **how to know it passed**. `address_feedback` is **how to fix it if it didn't**.
 
 </details>
 
@@ -544,32 +564,41 @@ Orc **always** escalates to you, even in YOLO mode, when:
 
 ## Review Loop
 
-Every bead goes through a review before merge. No exceptions. The reviewer spawns directly below the engineer it's reviewing:
+Orc uses a **two-tier review model** — fast loops during development, deep review before delivery.
+
+### Dev Review (Short Cycle)
+
+Every bead goes through dev review before merging to the goal branch. The reviewer spawns directly below the engineer:
 
 ```
 ┌──────────────────────────────┐
-│                              │
 │     Engineer Pane            │
-│     (persistent — the        │
-│      engineer lives here)    │
-│                              │
+│     (persistent)             │
 ├──────────────────────────────┤
 │     Reviewer Pane            │
 │     (ephemeral — spawns per  │
-│      review cycle, ~40%      │
-│      height, destroyed       │
-│      when verdict is done)   │
+│      review cycle)           │
 └──────────────────────────────┘
 ```
 
-**The cycle:**
-
 1. Engineer finishes work, runs `/orc:done` → signals `review`
-2. Goal orchestrator spawns reviewer in the review pane
-3. Reviewer evaluates against acceptance criteria → writes verdict to `.worker-feedback`
+2. Goal orchestrator spawns reviewer with `[review.dev]` config
+3. Reviewer evaluates → writes verdict to `.worker-feedback`
 4. **Approved** → fast-forward merge bead to goal branch, tear down worktree
-5. **Not approved** → feedback delivered to engineer → engineer runs `/orc:feedback` → fixes → re-signals
-6. Repeats up to `max_rounds` (default 3), then escalates to you
+5. **Not approved** → feedback to engineer → fix → re-signal
+6. Repeats up to `[review.dev] max_rounds` (default 3), then escalates
+
+### Goal Review (Long Cycle)
+
+After all beads pass dev review, if `[review.goal] command` is configured, the goal orchestrator enters a deeper review cycle before delivery:
+
+1. Goal orchestrator runs the configured command (e.g., `/ocr:review`) against the full goal branch
+2. Review evaluates the entire deliverable — not just individual beads
+3. **Approved** → proceed to delivery
+4. **Not approved** → goal orchestrator creates new beads to address feedback, engineers fix, dev review runs, then goal review re-runs
+5. Repeats up to `[review.goal] max_rounds`, then escalates
+
+This tier is **opt-in**. When `[review.goal] command` is empty (default), the goal orchestrator skips straight to delivery after all beads pass dev review.
 
 ## Customizing Personas
 
