@@ -114,6 +114,12 @@ _teardown_bead() {
     _tmux_kill_window "$window_name"
   fi
 
+  # Adapter post-teardown hook (cleanup CLI-specific files)
+  if [[ -d "$worktree" ]]; then
+    _load_adapter "$project_path"
+    _adapter_post_teardown "$worktree" 2>/dev/null || _warn "Adapter post-teardown hook failed (non-fatal)."
+  fi
+
   # Remove git worktree
   if [[ -d "$worktree" ]]; then
     git -C "$project_path" worktree remove ".worktrees/$bead" --force 2>/dev/null || true
@@ -170,6 +176,10 @@ _teardown_goal() {
             _tmux_kill_pane "$eng_win" "$eng_pane"
           }
         fi
+
+        # Adapter post-teardown hook
+        _load_adapter "$project_path"
+        _adapter_post_teardown "$d" 2>/dev/null || true
 
         # Remove worktree and branch
         git -C "$project_path" worktree remove ".worktrees/$bead_name" --force 2>/dev/null || true
