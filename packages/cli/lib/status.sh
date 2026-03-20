@@ -163,10 +163,11 @@ for key in $keys; do
     continue
   fi
 
-  # Collect workers grouped by goal
-  # goal_map: associative array keyed by goal name, values are newline-separated bead entries
-  declare -A goal_map=()
+  # Collect workers grouped by goal (portable — no associative arrays)
+  local goal_tmpdir
+  goal_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/orc-status-XXXXXX")"
   ungrouped=""
+  local goal_names=""
 
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
@@ -184,15 +185,15 @@ for key in $keys; do
              \"$reason\""
     fi
 
-    # Group by goal
+    # Group by goal using temp files (one file per goal)
     if [[ "$wt_branch" == work/*/* ]]; then
       goal_name="${wt_branch#work/}"
       goal_name="${goal_name%/*}"
-      if [[ -n "${goal_map[$goal_name]+x}" ]]; then
-        goal_map[$goal_name]="${goal_map[$goal_name]}
-${entry}"
-      else
-        goal_map[$goal_name]="$entry"
+      echo "$entry" >> "$goal_tmpdir/$goal_name"
+      # Track unique goal names
+      if ! echo "$goal_names" | grep -qxF "$goal_name"; then
+        goal_names="${goal_names:+$goal_names
+}$goal_name"
       fi
     else
       if [[ -n "$ungrouped" ]]; then
@@ -204,8 +205,11 @@ ${entry}"
     fi
   done
 
-  # Print goal-grouped workers
-  for goal_name in $(echo "${!goal_map[@]}" | tr ' ' '\n' | sort); do
+  # Print goal-grouped workers (sorted)
+  local sorted_goals
+  sorted_goals="$(echo "$goal_names" | sort)"
+  while IFS= read -r goal_name; do
+    [[ -z "$goal_name" ]] && continue
     # Detect goal branch and goal orchestrator status
     goal_branch="$(_find_goal_branch "$path" "$goal_name" 2>/dev/null || true)"
     goal_status="$(_goal_worker_status "$path" "$goal_name")"
@@ -248,9 +252,12 @@ ${entry}"
 
     while IFS= read -r line; do
       [[ -n "$line" ]] && printf '  │ %s\n' "$line"
-    done <<< "${goal_map[$goal_name]}"
+    done < "$goal_tmpdir/$goal_name"
     printf '  └\n'
-  done
+  done <<< "$sorted_goals"
+
+  # Clean up temp dir
+  rm -rf "$goal_tmpdir"
 
   # Print ungrouped workers (no goal)
   if [[ -n "$ungrouped" ]]; then

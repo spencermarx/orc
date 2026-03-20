@@ -828,6 +828,11 @@ _tmux_split_with_agent() {
   ruflo_block="$(_ruflo_persona_block)"
   [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
 
+  # Note: Temp files (persona, prompt, launcher) are written to $TMPDIR and
+  # intentionally NOT cleaned up with a trap. Agent sessions may run for hours
+  # or days — a trap on EXIT would fire when the orc CLI exits (not when the
+  # agent exits), deleting files the agent still references. OS-level $TMPDIR
+  # cleanup handles eventual removal.
   local persona_file
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"

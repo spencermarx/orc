@@ -12,26 +12,34 @@ bead="$2"
 
 project_path="$(_require_project "$project")"
 
-# Detect window name from worktree branch (handles both work/<bead> and work/<goal>/<bead>)
+# Detect goal window from worktree branch (engineers are panes in goal windows)
 worktree_dir="$project_path/.worktrees/$bead"
-window_name="${project}/${bead}"
-if [[ -d "$worktree_dir" ]]; then
-  actual_branch="$(git -C "$worktree_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  if [[ "$actual_branch" == work/*/* ]]; then
-    goal_from_branch="${actual_branch#work/}"
-    goal_from_branch="${goal_from_branch%/*}"
-    window_name="${project}/${goal_from_branch}/${bead}"
-  fi
+if [[ ! -d "$worktree_dir" ]]; then
+  _die "Worktree for bead '$bead' not found at $worktree_dir" "$EXIT_STATE"
+fi
+
+actual_branch="$(git -C "$worktree_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+
+if [[ "$actual_branch" == work/*/* ]]; then
+  # Goal-aware: engineer is a pane in the goal window
+  goal_from_branch="${actual_branch#work/}"
+  goal_from_branch="${goal_from_branch%/*}"
+  window_name="${project}/${goal_from_branch}"
+else
+  # Legacy: engineer has its own window
+  window_name="${project}/${bead}"
 fi
 
 if ! _tmux_window_exists "$window_name"; then
   _die "No running window for '$window_name'." "$EXIT_STATE"
 fi
 
-# Send Ctrl-C to the engineering pane
-# Find engineering pane by title, fallback to pane 0
-eng_pane="$(_tmux_find_pane "$window_name" "eng:")"
-eng_pane="${eng_pane:-0}"
+# Find the engineer pane by title within the window
+eng_pane="$(_tmux_find_pane "$window_name" "eng: ${bead}")"
+if [[ -z "$eng_pane" ]]; then
+  # Legacy fallback: try pane 0
+  eng_pane=0
+fi
 tmux send-keys -t "$(_tmux_target "$window_name" "$eng_pane")" C-c
 
 _info "Sent interrupt to engineer '$project/$bead'."
