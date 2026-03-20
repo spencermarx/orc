@@ -73,18 +73,14 @@ set -- "${args[@]+"${args[@]}"}"
 
 if [[ $# -eq 0 ]]; then
   # CWD-aware: if inside a registered project, offer to open it
-  # CWD detection is a convenience prompt — skip it in YOLO mode
-  # (user typed `orc`, not `orc <project>`, so go to root orchestrator)
-  if [[ "$ORC_YOLO" != "1" ]]; then
-    detected="$(_detect_project_from_cwd)"
-    if [[ -n "$detected" ]]; then
-      printf '%s' "[orc] You're in '$detected'. Open its orchestrator? [Y/n] "
-      read -r answer
-      if [[ ! "$answer" =~ ^[Nn] ]]; then
-        source "$LIB_DIR/start.sh"
-        orc_start "$detected"
-        exit "$EXIT_OK"
-      fi
+  detected="$(_detect_project_from_cwd)"
+  if [[ -n "$detected" ]]; then
+    printf '%s' "[orc] You're in '$detected'. Open its orchestrator? [Y/n] "
+    read -r answer
+    if [[ ! "$answer" =~ ^[Nn] ]]; then
+      source "$LIB_DIR/start.sh"
+      orc_start "$detected"
+      exit "$EXIT_OK"
     fi
   fi
   source "$LIB_DIR/start.sh"
