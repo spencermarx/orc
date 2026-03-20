@@ -23,9 +23,9 @@ if [[ "${1:-}" == "--line" ]]; then
         ((goals++)) || true
         gs="$(head -1 "$gd/.worker-status" 2>/dev/null || echo "unknown")"
         case "$gs" in
-          review*)   ((goal_review++)) ;;
-          blocked*)  ((goal_blocked++)) ;;
-          done*)     ((goal_done++)) ;;
+          review*)   ((goal_review++)) || true ;;
+          blocked*)  ((goal_blocked++)) || true ;;
+          done*)     ((goal_done++)) || true ;;
         esac
       done
     fi
@@ -41,16 +41,15 @@ if [[ "${1:-}" == "--line" ]]; then
       [[ -d "$d" ]] || continue
       status="$(_worker_status "$d")"
       case "$status" in
-        working*)  ((working++)) ;;
-        review*)   ((review++)) ;;
-        blocked*)  ((blocked++)) ;;
+        working*)  ((working++)) || true ;;
+        review*)   ((review++)) || true ;;
+        blocked*)  ((blocked++)) || true ;;
         done*)     ;; # completed — not counted in active totals
-        *)         ((dead++)) ;;
+        *)         ((dead++)) || true ;;
       esac
     done
   done
   # Read theme colors for tmux status-right formatting
-  local c_accent c_fg c_activity c_error
   c_accent="$(_config_get "theme.accent" "#00ff88")"
   c_fg="$(_config_get "theme.fg" "#8b949e")"
   c_activity="$(_config_get "theme.activity" "#d29922")"
@@ -89,15 +88,15 @@ needs_attention=0
 
 # Count first
 for key in $keys; do
-  ((total_projects++))
+  ((total_projects++)) || true
   path="$(_project_path "$key")"
   [[ -d "$path/.worktrees" ]] || continue
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
-    ((total_workers++))
+    ((total_workers++)) || true
     status="$(_worker_status "$d")"
     case "$status" in
-      blocked*|unknown) ((needs_attention++)) ;;
+      blocked*|unknown) ((needs_attention++)) || true ;;
     esac
   done
 done
@@ -171,10 +170,9 @@ for key in $keys; do
   fi
 
   # Collect workers grouped by goal (portable — no associative arrays)
-  local goal_tmpdir
   goal_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/orc-status-XXXXXX")"
   ungrouped=""
-  local goal_names=""
+  goal_names=""
 
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
@@ -213,7 +211,7 @@ ${entry}"
   done
 
   # Print goal-grouped workers (sorted)
-  local sorted_goals
+  sorted_goals=""
   sorted_goals="$(echo "$goal_names" | sort)"
   while IFS= read -r goal_name; do
     [[ -z "$goal_name" ]] && continue
