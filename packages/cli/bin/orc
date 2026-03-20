@@ -75,6 +75,12 @@ if [[ $# -eq 0 ]]; then
   # CWD-aware: if inside a registered project, offer to open it
   detected="$(_detect_project_from_cwd)"
   if [[ -n "$detected" ]]; then
+    if [[ "$ORC_YOLO" == "1" ]]; then
+      # YOLO mode — auto-accept, no prompt
+      source "$LIB_DIR/start.sh"
+      orc_start "$detected"
+      exit "$EXIT_OK"
+    fi
     printf '%s' "[orc] You're in '$detected'. Open its orchestrator? [Y/n] "
     read -r answer
     if [[ ! "$answer" =~ ^[Nn] ]]; then
