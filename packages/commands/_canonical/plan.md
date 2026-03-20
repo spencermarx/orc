@@ -24,11 +24,50 @@ If no arguments provided, ask the user what they want to plan.
 
 ### Phase 1 — Investigate
 
-1. Read the project's README, CLAUDE.md, and key architecture files to understand the codebase.
+1. Read the project's README, CLAUDE.md, and high-level architecture files to understand the codebase.
 2. Identify the relevant areas of code that the request touches.
 3. Assess complexity, risks, and dependencies.
 
-### Phase 2 — Decompose into Goals
+### Phase 1.5 — Scout (for non-trivial requests)
+
+For anything beyond a trivial change, spawn **parallel codebase scouts** (sub-agents) to investigate the codebase before decomposing. Do NOT read source code yourself — scouts are your eyes into the codebase.
+
+**Round 1 — Discovery (parallel):**
+1. Form preliminary goal candidates from the user's request
+2. Dispatch one scout sub-agent per goal area in parallel. Brief each scout with:
+   - The user's original request for overall context
+   - The specific goal area this scout is investigating (name, description)
+   - Instruction to map: code touched, interfaces involved, data flows, external dependencies, test patterns
+   - The project's CLAUDE.md and `.claude/` rules for navigation context
+3. Wait for all scouts to return their findings
+
+**Synthesis (you):**
+- Collect all scout reports. Compare findings across goal areas.
+- Identify: overlapping files/interfaces, truly independent areas, hidden integration points, sequencing constraints
+
+**Round 2 — Follow-up (optional):** If synthesis reveals ambiguity, dispatch targeted follow-up scouts.
+
+For simple requests, skip scouting and proceed directly to decomposition.
+
+### Phase 2 — Read Branching Strategy
+
+Before naming any goals, read the branching strategy from config:
+```bash
+# Check project-level, then user-level, then global config
+cat .orc/config.toml 2>/dev/null | grep -A2 '\[branching\]'
+cat "$ORC_ROOT/config.local.toml" 2>/dev/null | grep -A2 '\[branching\]'
+cat "$ORC_ROOT/config.toml" 2>/dev/null | grep -A2 '\[branching\]'
+```
+
+The `[branching] strategy` field is a natural language description of how branches should be named. **Follow it exactly.** Common patterns:
+- `"use Jira ticket prefix like WEN-123, then kebab-case summary"` → branch names like `fix/WEN-889-auth-bug`
+- `"always prefix with team name: platform/"` → `feat/platform/add-sso`
+
+If the strategy mentions ticket prefixes (Jira, Linear, etc.), you MUST ask for the ticket ID if the user hasn't provided one, or look it up via the project's ticketing MCP/skill. The ticket prefix goes between the type prefix and the goal name: `<type>/<ticket>-<goal-name>`.
+
+If the strategy is empty, use the default convention: `<type>/<goal-name>`.
+
+### Phase 3 — Decompose into Goals
 
 Break the request into **goals**. Each goal should be:
 - **A cohesive unit of work** — one feature, one bug fix, or one task
@@ -36,7 +75,7 @@ Break the request into **goals**. Each goal should be:
 - **Suitable for a goal orchestrator** — can be further decomposed into beads
 
 For each goal, define:
-- **Goal name**: Short kebab-case identifier (used as branch suffix)
+- **Goal name**: Short kebab-case identifier (used as branch suffix). **Apply the branching strategy** — if a ticket prefix is required, include it (e.g., `WEN-889-copy-on-use-step-isolation`, not just `copy-on-use-step-isolation`)
 - **Goal type**: `feat`, `fix`, or `task`
 - **Description**: What needs to be accomplished
 - **Acceptance criteria**: How to know it's done
@@ -44,15 +83,15 @@ For each goal, define:
 
 For simple requests, a single goal is fine.
 
-### Phase 3 — Propose
+### Phase 4 — Propose
 
-Present the plan as a table:
+Present the plan as a table. **Goal names must include any ticket prefix required by the branching strategy**:
 
 ```
-Goal             | Type | Dependencies | Description
------------------|------|--------------|---------------------------
-<goal-name>      | feat | none         | <what to accomplish>
-<goal-name>      | fix  | <goal-name>  | <what to accomplish>
+Goal                          | Type | Dependencies | Description
+------------------------------|------|--------------|---------------------------
+<ticket-prefix-goal-name>     | feat | none         | <what to accomplish>
+<ticket-prefix-goal-name>     | fix  | <goal-name>  | <what to accomplish>
 ```
 
 Show the dependency graph if there are dependencies:
@@ -61,13 +100,13 @@ auth-refactor ──→ api-update ──→ docs-update
 billing-fix (independent)
 ```
 
-### Phase 4 — Wait for Approval
+### Phase 5 — Wait for Approval
 
 Ask: **"Approve this plan? I'll create the goal branches once confirmed. You can also ask me to adjust."**
 
 Do NOT create branches until the user approves.
 
-### Phase 5 — Create Goal Branches
+### Phase 6 — Create Goal Branches
 
 Once approved, create a branch for each goal:
 ```bash
@@ -80,11 +119,31 @@ After creating branches, check `echo $ORC_YOLO`:
 
 ## Instructions (Goal Orchestrator)
 
-### Phase 1 — Scout the Scope
+### Phase 1 — Investigate
 
-1. Read the project's README and CLAUDE.md for conventions and structure.
-2. Identify which files, modules, and areas of the codebase this goal touches — understand the **shape** of the work.
-3. Do NOT debug, identify root causes, or propose implementation fixes — that's the engineer's job. You're mapping the territory, not solving the problem.
+1. Read the project's README, CLAUDE.md, and high-level architecture files for conventions, structure, and coding standards.
+2. Read `git log` and `git diff` to understand recent changes relevant to the goal.
+
+### Phase 1.5 — Scout (for non-trivial requests)
+
+Spawn **parallel codebase scouts** (sub-agents) to investigate the codebase before decomposing. Do NOT read source code yourself — scouts are your eyes into the codebase.
+
+**Round 1 — Discovery (parallel):**
+1. Identify the areas of the codebase this goal touches (e.g., "API layer," "data model," "test infrastructure")
+2. Dispatch one scout sub-agent per area in parallel. Brief each scout with:
+   - The goal's description and acceptance criteria
+   - The goal branch and any work already merged to it
+   - The specific area to investigate
+   - Instruction to map: code touched, interfaces involved, data flows, external dependencies, test patterns
+3. Wait for all scouts to return their findings
+
+**Synthesis (you):**
+- Collect all scout reports. Compare findings across areas.
+- Identify: shared code paths, truly independent areas, hidden coupling, sequencing constraints
+
+**Round 2 — Follow-up (optional):** If synthesis reveals ambiguity, dispatch targeted follow-up scouts with specific questions.
+
+For simple requests (single-file fix, documentation typo), skip scouting and proceed directly to decomposition.
 
 ### Phase 2 — Decompose into Beads
 

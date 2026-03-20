@@ -70,8 +70,17 @@ orc_spawn_goal() {
   local persona
   persona="$(_resolve_persona "goal-orchestrator" "$project_path")"
 
+  # Inject branching strategy if configured
+  local branching_strategy
+  branching_strategy="$(_config_get_branching_strategy "$project_path")"
+
   local init_prompt
   init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
+  if [[ -n "$branching_strategy" ]]; then
+    init_prompt="${init_prompt}
+
+Branching strategy: ${branching_strategy}"
+  fi
   if [[ -n "$custom_prompt" ]]; then
     init_prompt="${init_prompt}
 
