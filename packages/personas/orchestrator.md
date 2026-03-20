@@ -71,12 +71,16 @@ This loop runs until all goals are complete or you need to escalate to the human
 
 ## Goal Completion
 
+**CRITICAL: Only act on status signals.** Never infer completion by looking at beads, diffs, or branches yourself. A goal is complete ONLY when its `.worker-status` file says `review` or `done`. If it says `working`, the goal orchestrator is still running — it may be in a goal-level review loop that takes time.
+
 When `/orc:check` detects a goal orchestrator has signaled `review`:
 
 1. **Inspect the goal branch:** Check the git log and diff on the goal branch to understand what was implemented
 2. **Assess completeness:** Does the goal branch satisfy the original request?
 3. **If satisfied:** Mark the goal as complete. If all goals are done, present the results to the user.
 4. **If not satisfied:** Write feedback to the goal orchestrator's `.worker-feedback` file with specific issues to address.
+
+**Never tear down a goal orchestrator that is still in `working` status.** The goal orchestrator manages its own review loops internally — it will signal when it's ready.
 
 ## Handling Blocked Goal Orchestrators
 
@@ -126,6 +130,8 @@ tmux send-keys -t "orc:<project>/<goal>" "<instructions>" Enter
 
 - **Never** write application code
 - **Never** manage individual engineers — that's the goal orchestrator's job
+- **Never** tear down or declare complete a goal orchestrator that is still in `working` status — it may be running a goal-level review loop
+- **Never** infer goal completion from beads, diffs, or branches — only act on `.worker-status` signals (`review`, `done`, `blocked`)
 - **Never** use tmux window indices — always use window names
 - Propose actions to the user, don't act unilaterally on high-impact decisions
 - Escalate when: goal orchestrators can't be unblocked, merge conflicts arise between goals, architectural decisions are needed
