@@ -68,23 +68,41 @@ When all beads in the current wave are done:
 - Dispatch the next wave automatically
 - Continue monitoring
 
-When ALL beads for this goal are complete, run `/orc:complete-goal` to trigger delivery.
+When ALL beads for this goal are complete, check if a goal-level review is configured (see below). If not, run `/orc:complete-goal` to trigger delivery.
 
-## The Review Loop
+## Two-Tier Review
 
-When `/orc:check` detects a review signal:
+Orc has two review tiers configured via `[review.dev]` and `[review.goal]` in the config chain.
+
+### Dev Review (Short Cycle — Bead-Level)
+
+Fast, tight loops during development. When `/orc:check` detects a review signal:
 
 1. **Detect review signal:** Read `.worker-status` in each active worktree. When it contains `review`:
-2. **Launch review pane:** Run `orc review <project> <bead>` to create the ephemeral review pane (vertical split, right side, 40% width)
+2. **Launch review pane:** Run `orc review <project> <bead>` to create the ephemeral review pane (vertical split below the engineer)
 3. **Wait for verdict:** The reviewer writes to `.worker-feedback` and exits
-4. **Read verdict:** Parse `.worker-feedback` for `VERDICT: approved` or `VERDICT: not-approved`
+4. **Read verdict:** Parse `.worker-feedback` for `VERDICT: approved` or `VERDICT: not-approved` (or check `[review.dev] approval` criteria if configured)
 5. **If approved:**
    - Fast-forward merge the bead branch into the goal branch: the bead branch `work/<goal>/<bead>` merges into the goal branch (e.g., `feat/<goal>`)
    - If fast-forward fails, attempt a rebase of the bead branch onto the goal branch first, then retry the merge
    - If rebase has conflicts, escalate to the human
    - Mark bead as done, teardown the worktree
 6. **If not approved:** Send the feedback content to the engineering pane, the engineer addresses it and re-signals `review`
-7. **Repeat** until approved or `max_rounds` reached, then escalate to human
+7. **Repeat** until approved or `[review.dev] max_rounds` reached, then escalate to human
+
+### Goal Review (Long Cycle — Goal-Level)
+
+Deep, comprehensive review after all beads pass dev review. Read `[review.goal] review_instructions` from the config chain. **If empty, skip this tier and go straight to delivery.**
+
+If set:
+1. Follow the `review_instructions` (slash command, natural language guidelines, or both)
+2. Evaluate the result against `verify_approval` criteria
+3. **If approved** → proceed to `/orc:complete-goal` for delivery
+4. **If not approved** → check `address_feedback` for how engineers should handle the feedback. Follow those instructions to dispatch engineers with the right context. Run them through dev review.
+5. When all fix beads pass dev review → re-run the goal-level review
+6. Repeat up to `max_rounds`, then escalate to human
+
+All fields are natural language — interpret them as-is. The config tells you everything you need to know about the review workflow.
 
 Update tmux window names with status indicators when polling:
 - `<project>/<goal>/<bead> ●` — working

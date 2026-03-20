@@ -39,6 +39,25 @@ Run the project's test suite against the goal branch to verify the integrated wo
 
 If tests fail, identify which bead's changes caused the failure and report it. Do not proceed with delivery.
 
+### Step 3.5 — Goal-Level Review (if configured)
+
+Check the goal-level review configuration by reading `[review.goal] review_instructions` from the config chain (`.orc/config.toml` → `$ORC_ROOT/config.local.toml` → `$ORC_ROOT/config.toml`).
+
+**If `[review.goal] review_instructions` is empty:** Skip this step — proceed to delivery.
+
+**If `[review.goal] review_instructions` is set:**
+
+1. Follow the `review_instructions` (slash command, natural language guidelines, or both)
+2. Evaluate the result against `[review.goal] verify_approval` criteria
+3. **If approved** → proceed to Step 4 (delivery)
+4. **If not approved** → do NOT proceed to delivery. Instead:
+   - Read `[review.goal] address_feedback` from config for how engineers should handle the feedback
+   - Follow those instructions to dispatch engineers with the right context
+   - If `address_feedback` is empty, read the review output directly and create beads from it
+   - Run engineers through the normal dev review cycle (`[review.dev]`)
+   - When all fix beads pass → re-run this goal-level review step
+5. Track the round count. If `[review.goal] max_rounds` is exceeded, escalate to the human
+
 ### Step 4 — Determine Delivery Mode
 
 Check the delivery configuration:

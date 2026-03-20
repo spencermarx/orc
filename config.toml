@@ -13,9 +13,22 @@ spawn = "ask"
 review = "auto"
 merge = "ask"
 
-[review]
+[review.dev]
+# Short cycle — bead-level review during development
+review_instructions = ""     # how to perform the review — a slash command, natural language guidelines, or both
+                             # empty = built-in reviewer persona
+                             # e.g., "/my-review-tool", "Enforce strict type safety", or "/ocr:review — focus on security"
+verify_approval = ""         # how to determine the review passed
+                             # empty = parse VERDICT: approved from .worker-feedback
 max_rounds = 3
-command = ""                 # empty = default reviewer persona; "/ocr:review" = OCR; or any command
+
+[review.goal]
+# Long cycle — goal-level review after all beads complete
+review_instructions = ""     # how to perform the goal-level review; empty = skip (go straight to delivery)
+                             # e.g., "/ocr:review" (see https://github.com/spencermarx/open-code-review)
+verify_approval = ""         # how to determine the review passed
+address_feedback = ""        # how engineers should address rejection feedback
+max_rounds = 3
 
 [branching]
 strategy = ""                # Natural language branch naming preference

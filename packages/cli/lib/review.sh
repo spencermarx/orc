@@ -126,20 +126,11 @@ orc_review() {
   persona="$(_resolve_persona "reviewer" "$project_path")"
 
   local review_instructions
-  review_instructions="$(_config_get "review.instructions" "" "$project_path")"
-  if [[ -n "$review_instructions" ]]; then
-    persona="$persona
-
-$review_instructions"
-  fi
-
-  # Determine initial prompt: custom review command or default
-  local review_cmd
-  review_cmd="$(_config_get "review.command" "" "$project_path")"
+  review_instructions="$(_config_get "review.dev.review_instructions" "" "$project_path")"
 
   local init_prompt
-  if [[ -n "$review_cmd" ]]; then
-    init_prompt="$review_cmd"
+  if [[ -n "$review_instructions" ]]; then
+    init_prompt="$review_instructions"
   else
     init_prompt="Review the engineer's changes now. Read .orch-assignment.md for context, run git diff main to see changes, run tests, then write your verdict to .worker-feedback. Start immediately."
   fi
