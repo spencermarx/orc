@@ -1252,7 +1252,10 @@ _worker_count() {
   [[ -d "$worktrees_dir" ]] || { echo 0; return; }
   local count=0
   for d in "$worktrees_dir"/*/; do
-    [[ -d "$d" ]] && ((count++))
+    [[ -d "$d" ]] || continue
+    # Skip internal state directories (not worktrees)
+    [[ "$(basename "$d")" == .* ]] && continue
+    ((count++)) || true
   done
   echo "$count"
 }

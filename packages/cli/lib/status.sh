@@ -39,6 +39,7 @@ if [[ "${1:-}" == "--line" ]]; then
     fi
     for d in "$path/.worktrees"/*/; do
       [[ -d "$d" ]] || continue
+      [[ "$(basename "$d")" == .* ]] && continue
       status="$(_worker_status "$d")"
       case "$status" in
         working*)  ((working++)) || true ;;
@@ -93,6 +94,7 @@ for key in $keys; do
   [[ -d "$path/.worktrees" ]] || continue
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
+    [[ "$(basename "$d")" == .* ]] && continue
     ((total_workers++)) || true
     status="$(_worker_status "$d")"
     case "$status" in
@@ -177,6 +179,8 @@ for key in $keys; do
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
     bead_name="$(basename "$d")"
+    # Skip internal state directories (not worktrees)
+    [[ "$bead_name" == .* ]] && continue
     wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     status="$(_worker_status "$d")"
     elapsed="$(_format_elapsed "$d/.worker-status")"

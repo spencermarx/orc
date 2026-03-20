@@ -147,6 +147,8 @@ _teardown_goal() {
       [[ -d "$d" ]] || continue
       local bead_name
       bead_name="$(basename "$d")"
+      # Skip internal state directories (not worktrees)
+      [[ "$bead_name" == .* ]] && continue
       # Check if this worktree's branch matches work/<goal>/*
       local wt_branch
       wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -277,6 +279,8 @@ _teardown_project() {
       [[ -d "$d" ]] || continue
       local bead
       bead="$(basename "$d")"
+      # Skip internal state directories (not worktrees)
+      [[ "$bead" == .* ]] && continue
       local wt_branch
       wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
       if [[ "$wt_branch" == work/*/* ]] && [[ "$wt_branch" != work/*//* ]]; then
