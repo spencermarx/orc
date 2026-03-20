@@ -1,3 +1,7 @@
+---
+description: Self-review work, commit, and signal for review
+---
+
 # /orc:done — Signal Work Complete
 
 **Role:** Engineer

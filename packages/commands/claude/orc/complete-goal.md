@@ -1,3 +1,7 @@
+---
+description: Trigger delivery when all beads and goal-level review are complete
+---
+
 # /orc:complete-goal — Signal Goal Complete
 
 **Role:** Goal Orchestrator

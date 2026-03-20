@@ -1,3 +1,7 @@
+---
+description: Poll worker statuses and handle review, blocked, or dead signals
+---
+
 # /orc:check — Poll Worker Statuses
 
 **Role:** Orchestrator (project or goal)

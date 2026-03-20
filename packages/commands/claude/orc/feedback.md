@@ -1,3 +1,7 @@
+---
+description: Read review feedback, address issues, and re-signal for review
+---
+
 # /orc:feedback — Address Review Feedback
 
 **Role:** Engineer

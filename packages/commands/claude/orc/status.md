@@ -1,3 +1,7 @@
+---
+description: Run orc status dashboard and highlight actionable items
+---
+
 # /orc:status — Dashboard
 
 Run the orc dashboard and highlight what needs attention.

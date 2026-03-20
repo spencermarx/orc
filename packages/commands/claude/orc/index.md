@@ -1,3 +1,7 @@
+---
+description: Detect your orc role and show available commands
+---
+
 # /orc — Orientation
 
 Detect your role and show what you can do.

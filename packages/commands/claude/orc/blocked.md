@@ -1,3 +1,8 @@
+---
+description: Signal blocked with a reason and stop working
+argument-hint: "[reason for being blocked]"
+---
+
 # /orc:blocked — Signal Blocked
 
 **Role:** Engineer

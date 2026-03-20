@@ -1,3 +1,7 @@
+---
+description: Spawn goal orchestrators or engineers for ready work
+---
+
 # /orc:dispatch — Spawn Goal Orchestrators or Engineers
 
 **Role:** Orchestrator (project or goal)

@@ -1,3 +1,7 @@
+---
+description: Report running state and detach from tmux
+---
+
 # /orc:leave — Detach from Orc
 
 **Role:** Any
