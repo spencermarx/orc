@@ -802,69 +802,19 @@ _tmux_split_with_agent() {
   tmux select-layout -t "$target" main-vertical 2>/dev/null || true
   _pane_min_size_check "$window" || true
 
-  # Build agent command and launch it in the new pane
-  local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
-  local agent_flags
-  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
-  local agent_template
-  agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
+  # Build agent command and launch it in the new pane via adapter
+  _send_to_pane() {
+    _tmux_send_pane "$window" "$new_pane" "bash $1"
+  }
 
-  # --yolo: append auto-accept flags
-  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
-    local yolo_flags
-    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-    if [[ -z "$yolo_flags" ]]; then
-      case "$agent_cmd" in
-        claude) yolo_flags="--dangerously-skip-permissions" ;;
-      esac
-    fi
-    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
-  fi
+  # Extract role hint from pane title (e.g., "eng: bd-xxx" → engineer, "goal: name" → goal-orchestrator)
+  local role="engineer"
+  case "$pane_title" in
+    goal:*) role="goal-orchestrator" ;;
+    eng:*)  role="engineer" ;;
+  esac
 
-  # Ruflo: ensure MCP server registered, append persona block
-  _ensure_ruflo_mcp
-  local ruflo_block
-  ruflo_block="$(_ruflo_persona_block)"
-  [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
-
-  # Note: Temp files (persona, prompt, launcher) are written to $TMPDIR and
-  # intentionally NOT cleaned up with a trap. Agent sessions may run for hours
-  # or days — a trap on EXIT would fire when the orc CLI exits (not when the
-  # agent exits), deleting files the agent still references. OS-level $TMPDIR
-  # cleanup handles eventual removal.
-  local persona_file
-  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
-  printf '%s' "$persona" > "$persona_file"
-
-  local launch_cmd
-  if [[ -n "$agent_template" ]]; then
-    launch_cmd="$agent_template"
-    launch_cmd="${launch_cmd//\{cmd\}/$agent_cmd}"
-    launch_cmd="${launch_cmd//\{prompt_file\}/$persona_file}"
-    launch_cmd="${launch_cmd//\{prompt\}/\$(cat $persona_file)}"
-  else
-    launch_cmd="$agent_cmd"
-    [[ -n "$agent_flags" ]] && launch_cmd="$launch_cmd $agent_flags"
-    launch_cmd="$launch_cmd --append-system-prompt \"\$(cat $persona_file)\""
-    if [[ -n "$initial_prompt" ]]; then
-      local prompt_file
-      prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-      printf '%s' "$initial_prompt" > "$prompt_file"
-      launch_cmd="$launch_cmd \"\$(cat $prompt_file)\""
-    fi
-  fi
-
-  # Write launcher script for clean terminal output
-  local launcher
-  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-  cat > "$launcher" <<LAUNCH_EOF
-#!/usr/bin/env bash
-clear
-$launch_cmd
-LAUNCH_EOF
-  chmod +x "$launcher"
-  _tmux_send_pane "$window" "$new_pane" "bash $launcher"
+  _build_and_launch _send_to_pane "$project_path" "$persona" "$initial_prompt" "$role" "$working_dir"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1007,31 +957,72 @@ _delete_goal_branch() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Agent adapter
+# Agent adapter — sourced-script pattern for CLI-specific logic
 # ─────────────────────────────────────────────────────────────────────────────
 
-_launch_agent_in_window() {
-  local window="$1"
-  local persona="$2"
-  local project_path="${3:-}"
-  local initial_prompt="${4:-}"
+# Load the adapter for the configured agent CLI.
+# Sources adapters/{agent_cmd}.sh, falling back to adapters/generic.sh.
+# Sourced once per session — subsequent calls are no-ops.
+_load_adapter() {
+  [[ -n "${_ORC_ADAPTER_LOADED+x}" ]] && return 0
 
+  local project_path="${1:-}"
   local agent_cmd
   agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+
+  local adapter_dir="$ORC_ROOT/packages/cli/lib/adapters"
+  local adapter_file="$adapter_dir/${agent_cmd}.sh"
+
+  if [[ -f "$adapter_file" ]]; then
+    # shellcheck source=/dev/null
+    source "$adapter_file"
+  else
+    # shellcheck source=/dev/null
+    source "$adapter_dir/generic.sh"
+  fi
+
+  # Validate required functions exist
+  local required_fn
+  for required_fn in _adapter_build_launch_cmd _adapter_inject_persona _adapter_yolo_flags _adapter_install_commands; do
+    if ! declare -F "$required_fn" &>/dev/null; then
+      _die "Adapter '${agent_cmd}' missing required function: ${required_fn}" "$EXIT_STATE"
+    fi
+  done
+
+  # Provide default no-ops for optional functions
+  if ! declare -F _adapter_pre_launch &>/dev/null; then
+    _adapter_pre_launch() { :; }
+  fi
+  if ! declare -F _adapter_post_teardown &>/dev/null; then
+    _adapter_post_teardown() { :; }
+  fi
+
+  export _ORC_ADAPTER_LOADED=1
+}
+
+# Common logic for building and launching an agent command.
+# Handles persona file creation, yolo flags, ruflo, and launcher script.
+# Returns nothing — sends the launch command to the specified tmux target.
+#
+# Usage: _build_and_launch <send_fn> <project_path> <persona> [initial_prompt] [role] [working_dir]
+#   send_fn: a function that takes one arg (the launcher path) and sends it
+_build_and_launch() {
+  local send_fn="$1"
+  local project_path="$2"
+  local persona="$3"
+  local initial_prompt="${4:-}"
+  local role="${5:-engineer}"
+  local working_dir="${6:-}"
+
+  _load_adapter "$project_path"
+
   local agent_flags
   agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
-  local agent_template
-  agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
 
-  # --yolo: append auto-accept flags
+  # --yolo: append auto-accept flags via adapter
   if [[ "${ORC_YOLO:-0}" == "1" ]]; then
     local yolo_flags
-    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-    if [[ -z "$yolo_flags" ]]; then
-      case "$agent_cmd" in
-        claude) yolo_flags="--dangerously-skip-permissions" ;;
-      esac
-    fi
+    yolo_flags="$(_adapter_yolo_flags "$project_path")"
     [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
   fi
 
@@ -1041,31 +1032,36 @@ _launch_agent_in_window() {
   ruflo_block="$(_ruflo_persona_block)"
   [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
 
+  # Inject persona into worktree (for file-based CLIs like OpenCode, Gemini)
+  if [[ -n "$working_dir" ]]; then
+    _adapter_inject_persona "$persona" "$working_dir" "$role"
+  fi
+
+  # Pre-launch hook
+  if [[ -n "$working_dir" ]]; then
+    _adapter_pre_launch "$working_dir" "$role"
+  fi
+
+  # Note: Temp files (persona, prompt, launcher) are written to $TMPDIR and
+  # intentionally NOT cleaned up with a trap. Agent sessions may run for hours
+  # or days — a trap on EXIT would fire when the orc CLI exits (not when the
+  # agent exits), deleting files the agent still references. OS-level $TMPDIR
+  # cleanup handles eventual removal.
   local persona_file
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"
 
-  # Build the command
-  local cmd
-  if [[ -n "$agent_template" ]]; then
-    cmd="$agent_template"
-    cmd="${cmd//\{cmd\}/$agent_cmd}"
-    cmd="${cmd//\{prompt_file\}/$persona_file}"
-    cmd="${cmd//\{prompt\}/\$(cat $persona_file)}"
-  else
-    cmd="$agent_cmd"
-    [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
-    cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\""
-    if [[ -n "$initial_prompt" ]]; then
-      local prompt_file
-      prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-      printf '%s' "$initial_prompt" > "$prompt_file"
-      cmd="$cmd \"\$(cat $prompt_file)\""
-    fi
+  local prompt_file=""
+  if [[ -n "$initial_prompt" ]]; then
+    prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
+    printf '%s' "$initial_prompt" > "$prompt_file"
   fi
 
-  # Write a launcher script so the raw command isn't echoed to the terminal.
-  # The user sees a clean screen, not a wall of $(cat /var/folders/...) noise.
+  # Build the command via adapter
+  local cmd
+  cmd="$(_adapter_build_launch_cmd "$persona_file" "$prompt_file" "$agent_flags" "$project_path")"
+
+  # Write launcher script for clean terminal output
   local launcher
   launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
   cat > "$launcher" <<LAUNCH_EOF
@@ -1074,7 +1070,22 @@ clear
 $cmd
 LAUNCH_EOF
   chmod +x "$launcher"
-  _tmux_send "$window" "bash $launcher"
+
+  # Send to tmux via the provided function
+  "$send_fn" "$launcher"
+}
+
+_launch_agent_in_window() {
+  local window="$1"
+  local persona="$2"
+  local project_path="${3:-}"
+  local initial_prompt="${4:-}"
+
+  _send_to_window() {
+    _tmux_send "$window" "bash $1"
+  }
+
+  _build_and_launch _send_to_window "$project_path" "$persona" "$initial_prompt"
 }
 
 # Launch an agent in the review pane of a worktree window.
@@ -1085,65 +1096,14 @@ _launch_agent_in_review_pane() {
   local project_path="${3:-}"
   local initial_prompt="${4:-}"
 
-  local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
-  local agent_flags
-  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
-  local agent_template
-  agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
+  _send_to_review_pane() {
+    local review_pane
+    review_pane="$(_tmux_find_pane "$window" "review:")"
+    review_pane="${review_pane:-1}"  # fallback to 1 if title not set yet
+    _tmux_send_pane "$window" "$review_pane" "bash $1"
+  }
 
-  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
-    local yolo_flags
-    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-    if [[ -z "$yolo_flags" ]]; then
-      case "$agent_cmd" in
-        claude) yolo_flags="--dangerously-skip-permissions" ;;
-      esac
-    fi
-    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
-  fi
-
-  # Ruflo: ensure MCP server registered, append persona block
-  _ensure_ruflo_mcp
-  local ruflo_block
-  ruflo_block="$(_ruflo_persona_block)"
-  [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
-
-  local persona_file
-  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
-  printf '%s' "$persona" > "$persona_file"
-
-  local cmd
-  if [[ -n "$agent_template" ]]; then
-    cmd="$agent_template"
-    cmd="${cmd//\{cmd\}/$agent_cmd}"
-    cmd="${cmd//\{prompt_file\}/$persona_file}"
-    cmd="${cmd//\{prompt\}/\$(cat $persona_file)}"
-  else
-    cmd="$agent_cmd"
-    [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
-    cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\""
-    if [[ -n "$initial_prompt" ]]; then
-      local prompt_file
-      prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-      printf '%s' "$initial_prompt" > "$prompt_file"
-      cmd="$cmd \"\$(cat $prompt_file)\""
-    fi
-  fi
-
-  local launcher
-  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-  cat > "$launcher" <<LAUNCH_EOF
-#!/usr/bin/env bash
-clear
-$cmd
-LAUNCH_EOF
-  chmod +x "$launcher"
-  # Find review pane by title, not hardcoded index
-  local review_pane
-  review_pane="$(_tmux_find_pane "$window" "review:")"
-  review_pane="${review_pane:-1}"  # fallback to 1 if title not set yet
-  _tmux_send_pane "$window" "$review_pane" "bash $launcher"
+  _build_and_launch _send_to_review_pane "$project_path" "$persona" "$initial_prompt" "reviewer"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1177,38 +1137,8 @@ _install_commands() {
   local target_dir="$1"
   local config_path="${2:-}"
 
-  local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$config_path")"
-
-  local source_dir="$ORC_ROOT/packages/commands"
-
-  case "$agent_cmd" in
-    claude)
-      local cmd_source="$source_dir/claude/orc"
-      # Install to user-level ~/.claude/commands/orc/ — available globally,
-      # zero footprint in any project directory.
-      local cmd_target="$HOME/.claude/commands/orc"
-      [[ -d "$cmd_source" ]] || return 0
-      mkdir -p "$cmd_target"
-      for f in "$cmd_source"/*.md; do
-        [[ -f "$f" ]] || continue
-        ln -sf "$f" "$cmd_target/$(basename "$f")"
-      done
-      ;;
-    windsurf)
-      local cmd_source="$source_dir/windsurf"
-      local cmd_target="$HOME/.windsurf/commands"
-      [[ -d "$cmd_source" ]] || return 0
-      mkdir -p "$cmd_target"
-      for f in "$cmd_source"/orc-*.md; do
-        [[ -f "$f" ]] || continue
-        ln -sf "$f" "$cmd_target/$(basename "$f")"
-      done
-      ;;
-    *)
-      _warn "No slash command templates for agent '$agent_cmd'. Skipping command install."
-      ;;
-  esac
+  _load_adapter "$config_path"
+  _adapter_install_commands "$ORC_ROOT/packages/commands" "$config_path"
 }
 
 # Ensure all orc runtime directories are excluded from git in the target project.
