@@ -19,20 +19,25 @@ If no arguments provided, show current layout and available patterns.
 
 ## Layout Model
 
-Each goal gets its own tmux window. The goal orchestrator is pane 0 (left/main), engineers split in on the right:
+Each goal gets its own tmux window using **main-vertical** layout. The goal orchestrator is pane 0 — a **full-height left pane** (~60% width). All engineers and reviewers stack in the right column (~40% width).
 
 ```
-{project}                        ← Project orchestrator (own window)
-{project}/{goal}                 ← Goal window (main-vertical layout)
-  ├── pane 0: Goal orchestrator   (title: "goal: <name>", persistent, left ~60%)
-  ├── pane N: Engineer            (title: "eng: <bead>", right column)
-  ├── pane N+1: Engineer          (title: "eng: <bead>", right column)
-  └── pane N+2: Reviewer          (title: "review: ...", ephemeral, splits vertically below its eng pane)
+┌──────────────────────┬──────────────┐
+│                      │ eng: bd-a1   │
+│  ⚔ goal: auth-bug   │              │
+│  (pane 0)            ├──────────────┤
+│  FULL HEIGHT         │ eng: bd-b2   │
+│  ~60% width          │              │
+│                      ├──────────────┤
+│                      │ ✓ review:... │
+│                      │ (ephemeral)  │
+└──────────────────────┴──────────────┘
 ```
 
-- **Goal orchestrators** get their own window via `orc spawn-goal` — they are pane 0 (left/main).
+- **Goal orchestrators** get their own window via `orc spawn-goal` — they are pane 0 (left, full height).
 - **Engineers** split into the right column of the goal window via `orc spawn`.
 - **Review panes** split vertically below their engineer's pane (40% height, title: `"review: <project>/<bead>"`). Destroyed after each review round.
+- **Goal windows ALWAYS use `main-vertical`.** Never apply `tiled` or other layouts to a goal window — it breaks the full-height orchestrator pane.
 
 ### Overflow Windows
 

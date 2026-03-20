@@ -81,6 +81,9 @@ orc_review() {
     # Brief pause so the new pane's shell initializes
     sleep 0.5
 
+    # Re-apply goal layout to keep pane 0 full-height left
+    _tmux_apply_goal_layout "$window_name"
+
     # The new pane is the active one — get its index
     review_pane="$(tmux display-message -t "$(_tmux_target "$window_name")" -p '#{pane_index}' 2>/dev/null)"
   else

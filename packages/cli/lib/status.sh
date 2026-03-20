@@ -49,6 +49,13 @@ if [[ "${1:-}" == "--line" ]]; then
       esac
     done
   done
+  # Read theme colors for tmux status-right formatting
+  local c_accent c_fg c_activity c_error
+  c_accent="$(_config_get "theme.accent" "#00ff88")"
+  c_fg="$(_config_get "theme.fg" "#8b949e")"
+  c_activity="$(_config_get "theme.activity" "#d29922")"
+  c_error="#f85149"
+
   parts=()
   if (( goals > 0 )); then
     goal_detail=""
@@ -61,10 +68,10 @@ if [[ "${1:-}" == "--line" ]]; then
       parts+=("${goals} goals")
     fi
   fi
-  (( working > 0 )) && parts+=("${working} ● working")
-  (( review > 0 ))  && parts+=("${review} ✓ review")
-  (( blocked > 0 )) && parts+=("${blocked} ✗ blocked")
-  (( dead > 0 ))    && parts+=("${dead} ✗ dead")
+  (( working > 0 )) && parts+=("#[fg=${c_accent}]${working} ● working#[fg=${c_fg}]")
+  (( review > 0 ))  && parts+=("#[fg=${c_activity}]${review} ✓ review#[fg=${c_fg}]")
+  (( blocked > 0 )) && parts+=("#[fg=${c_error}]${blocked} ✗ blocked#[fg=${c_fg}]")
+  (( dead > 0 ))    && parts+=("#[fg=${c_error}]${dead} ✗ dead#[fg=${c_fg}]")
   if (( ${#parts[@]} > 0 )); then
     printf '%s' "${parts[*]}"
   else

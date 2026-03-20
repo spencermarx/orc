@@ -67,6 +67,7 @@ command = ""                 # empty = built-in fallback (watch bd list)
 
 [theme]
 enabled = true               # false = respect user's tmux theme, only set functional options
+mouse = true                 # false = don't override mouse setting (only applies when themed)
 accent = "#00ff88"            # primary accent (status bar, active borders, current window)
 bg = "#0d1117"                # status bar background
 fg = "#8b949e"                # status bar text

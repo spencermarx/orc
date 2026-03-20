@@ -265,11 +265,12 @@ _tmux_ensure_session() {
     muted="$(_config_get "theme.muted" "#6e7681")"
     activity="$(_config_get "theme.activity" "#d29922")"
     local tab_bg="#161b22"
+    local error="#f85149"
 
     # Status bar
     tmux set-option -t "$ORC_TMUX_SESSION" status-style "bg=${bg},fg=${fg}"
     tmux set-option -t "$ORC_TMUX_SESSION" status-position bottom
-    tmux set-option -t "$ORC_TMUX_SESSION" status-left "#[bg=${accent},fg=${bg},bold]  orc  #[bg=${bg},fg=${accent}] "
+    tmux set-option -t "$ORC_TMUX_SESSION" status-left "#[bg=${accent},fg=${bg},bold] ⚔ orc #[fg=${accent},bg=${bg}]▸ "
     tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
     tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
     tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 80
@@ -280,10 +281,25 @@ _tmux_ensure_session() {
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-separator "#[fg=${border}]│"
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-activity-style "fg=${activity}"
 
-    # Pane borders
+    # Pane borders — role-aware icons and colors
     tmux set-option -t "$ORC_TMUX_SESSION" pane-border-style "fg=${border}"
     tmux set-option -t "$ORC_TMUX_SESSION" pane-active-border-style "fg=${accent}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #[fg=${muted}]#{pane_title} "
+    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#{pane_title} "
+
+    # Message bar
+    tmux set-option -t "$ORC_TMUX_SESSION" message-style "bg=${accent},fg=${bg},bold"
+    tmux set-option -t "$ORC_TMUX_SESSION" message-command-style "bg=${border},fg=${fg}"
+
+    # Copy/selection mode
+    tmux set-option -t "$ORC_TMUX_SESSION" mode-style "bg=${accent},fg=${bg}"
+    tmux set-option -t "$ORC_TMUX_SESSION" clock-mode-colour "${accent}"
+
+    # Mouse (configurable — only when themed so custom tmux users aren't affected)
+    local mouse_enabled
+    mouse_enabled="$(_config_get "theme.mouse" "true")"
+    if [[ "$mouse_enabled" == "true" ]]; then
+      tmux set-option -t "$ORC_TMUX_SESSION" mouse on
+    fi
   else
     # No theming — just functional status-right for health visibility
     tmux set-option -t "$ORC_TMUX_SESSION" status-right "#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) │ orc v${ORC_VERSION} "
@@ -595,22 +611,30 @@ _tmux_tile_panes() {
     layout="even-horizontal"
   elif [[ "$hint" == "rows" ]]; then
     layout="even-vertical"
+  elif [[ "$hint" == "main-vertical" ]]; then
+    layout="main-vertical"
   else
-    # Auto: pick layout based on pane count and window aspect ratio
-    local win_width win_height
-    win_width="$(tmux display-message -t "$target" -p '#{window_width}' 2>/dev/null || echo 120)"
-    win_height="$(tmux display-message -t "$target" -p '#{window_height}' 2>/dev/null || echo 40)"
-    if [[ "$pane_count" -eq 2 ]]; then
-      # 2 panes: prefer side-by-side if wide enough, else stacked
-      if [[ "$win_width" -ge 160 ]]; then
-        layout="even-horizontal"
-      else
-        layout="even-vertical"
-      fi
-    elif [[ "$pane_count" -le 4 ]]; then
-      layout="tiled"
+    # Auto: detect goal windows (pane 0 title starts with "goal:") → always main-vertical
+    local pane0_title
+    pane0_title="$(tmux display-message -t "${target}.0" -p '#{pane_title}' 2>/dev/null || echo "")"
+    if [[ "$pane0_title" == goal:* ]]; then
+      layout="main-vertical"
     else
-      layout="tiled"
+      # Non-goal windows: pick layout based on pane count and window aspect ratio
+      local win_width win_height
+      win_width="$(tmux display-message -t "$target" -p '#{window_width}' 2>/dev/null || echo 120)"
+      win_height="$(tmux display-message -t "$target" -p '#{window_height}' 2>/dev/null || echo 40)"
+      if [[ "$pane_count" -eq 2 ]]; then
+        if [[ "$win_width" -ge 160 ]]; then
+          layout="even-horizontal"
+        else
+          layout="even-vertical"
+        fi
+      elif [[ "$pane_count" -le 4 ]]; then
+        layout="tiled"
+      else
+        layout="tiled"
+      fi
     fi
   fi
 
@@ -629,6 +653,27 @@ _tmux_rebalance() {
 
   # Check constraints — warn but don't fail
   _pane_min_size_check "$window" || true
+}
+
+# Apply the canonical goal-window layout: pane 0 full-height left (~60%),
+# all other panes stacked in the right column.
+# Usage: _tmux_apply_goal_layout "window-name"
+_tmux_apply_goal_layout() {
+  local window="$1"
+  local target
+  target="$(_tmux_target "$window")"
+  local pane_count
+  pane_count="$(_tmux_pane_count "$window")"
+  [[ "$pane_count" -le 1 ]] && return 0
+
+  # Apply main-vertical: pane 0 is the full-height left "main" pane
+  tmux select-layout -t "$target" main-vertical 2>/dev/null || true
+
+  # Set pane 0 to ~60% of window width
+  local win_width
+  win_width="$(tmux display-message -t "$target" -p '#{window_width}' 2>/dev/null || echo 120)"
+  local main_width=$(( win_width * 60 / 100 ))
+  tmux resize-pane -t "${target}.0" -x "$main_width" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -675,13 +720,23 @@ _tmux_can_fit_pane() {
   right_col_width=$(( win_width * 40 / 100 ))
   [[ "$right_col_width" -lt "$min_width" ]] && return 1
 
-  # Number of children in right column after adding the new pane
+  # Count right-column "slots" (engineer panes), not total panes.
+  # Review panes sub-split engineers vertically and share a slot.
   if [[ "$pane_count" -le 1 ]]; then
-    # Only pane 0 exists — the new pane will be the first child
     right_col_children=1
   else
-    # pane_count - 1 existing children, plus the new one
-    right_col_children=$(( pane_count ))
+    local eng_count=0
+    local pane_titles
+    pane_titles="$(tmux list-panes -t "$target" -F '#{pane_title}' 2>/dev/null || true)"
+    while IFS= read -r title; do
+      case "$title" in
+        eng:*) ((eng_count++)) || true ;;
+      esac
+    done <<< "$pane_titles"
+    # After adding the new engineer, there will be eng_count + 1 slots
+    right_col_children=$(( eng_count + 1 ))
+    # Floor: at least 1 slot
+    [[ "$right_col_children" -lt 1 ]] && right_col_children=1
   fi
 
   # Each child pane gets equal vertical space minus separators (1 line each)
@@ -798,8 +853,8 @@ _tmux_split_with_agent() {
   min_h="$(_pane_overflow_min_height "$project_path")"
   _pane_registry_add "$window" "$new_pane" "$pane_title" "$min_w" "$min_h"
 
-  # Apply main-vertical layout and rebalance
-  tmux select-layout -t "$target" main-vertical 2>/dev/null || true
+  # Apply goal-window layout (main-vertical with 60% pane 0) and check constraints
+  _tmux_apply_goal_layout "$window"
   _pane_min_size_check "$window" || true
 
   # Build agent command and launch it in the new pane via adapter
