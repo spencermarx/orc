@@ -86,9 +86,19 @@ No action needed. Note elapsed time if available.
 
 #### Status: `review`
 The engineer has finished and is requesting review.
-1. Run `orc review <project> <bead>` to launch the review plane.
+1. Run `orc review <project> <bead>` to launch the review pane.
 2. The review agent will write its verdict to `.worker-feedback`.
-3. After review completes, read the verdict:
+3. **Wait for the reviewer to finish.** Monitor the review pane — when the reviewer has written its verdict and exited (or stopped responding), proceed.
+4. **Immediately tear down the review pane** — it is ephemeral and must not persist after the verdict is written:
+   ```bash
+   # Find and kill the review pane by its title
+   review_pane=$(tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}:#{pane_title}' | grep "review: <project>/<bead>" | cut -d: -f1)
+   if [ -n "$review_pane" ]; then
+     tmux kill-pane -t "orc:<project>/<goal>.$review_pane"
+   fi
+   # Also check overflow windows
+   ```
+5. Read the verdict from `.worker-feedback`:
    - **Approved**:
      - Fast-forward merge the bead branch into the goal branch. The bead branch is `work/<goal>/<bead>` and the goal branch is `feat/<goal>`, `fix/<goal>`, or `task/<goal>`. Run the merge from the project root:
        ```bash
@@ -108,11 +118,12 @@ The engineer has finished and is requesting review.
 #### Status: `blocked: <reason>`
 The engineer is stuck and has stopped.
 1. Read the block reason.
-2. Evaluate if you can resolve it:
+2. If needed, spawn a scout sub-agent to investigate the context of the blocker — do not read source code yourself.
+3. Evaluate if you can resolve it:
    - **Clarification needed**: Provide the answer and clear the block.
    - **Dependency issue**: Check if the blocking bead is close to done.
    - **Out of scope**: Escalate to the human.
-3. If resolved, clear `.worker-status` back to `working` and notify the engineer.
+4. If resolved, clear `.worker-status` back to `working` and notify the engineer.
 
 #### Status: `dead` (or no running agent process)
 The agent has crashed or exited unexpectedly.
