@@ -51,6 +51,10 @@ strategy = "Move tickets to `In Development` when goals start, and `Ready for Co
                              # e.g., "Add a comment to Linear issues with the goal branch name"
                              # Requires the project to have a skill or MCP for the ticketing system
 
+[layout]
+min_pane_width = 40          # minimum tmux pane width (columns) before creating overflow window
+min_pane_height = 10         # minimum tmux pane height (rows) before creating overflow window
+
 [board]
 command = ""                 # empty = built-in fallback (watch bd list)
 
