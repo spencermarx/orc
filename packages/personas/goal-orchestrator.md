@@ -135,7 +135,7 @@ When ALL beads for this goal are complete:
 
 1. **Read `[review.goal] review_instructions`** from the config chain
 2. **If empty** → skip goal review, go directly to `/orc:complete-goal` for delivery
-3. **If set** → enter the goal-level review loop (see below). Do NOT run `/orc:complete-goal` until the goal review approves.
+3. **If set** → enter the goal-level review loop (see below). **Delegate the review to an ephemeral reviewer sub-agent** — never run it yourself. Do NOT run `/orc:complete-goal` until the goal review approves.
 
 **CRITICAL:** You must complete the entire goal-level review loop BEFORE signaling completion or running `/orc:complete-goal`. The project orchestrator will NOT know you're in a goal review — it only sees your `.worker-status`. Until you signal `review` or `done`, the project orchestrator should leave you alone.
 
@@ -164,18 +164,58 @@ Fast, tight loops during development. When `/orc:check` detects a review signal:
 
 Deep, comprehensive review after all beads pass dev review. This happens BEFORE delivery — you must complete this loop before running `/orc:complete-goal`.
 
-1. Follow the `review_instructions` (slash command, natural language guidelines, or both)
-2. **Wait for the review to complete.** Do not proceed until the review tool finishes and produces output.
-3. **Read the review output carefully**, then evaluate it against the `verify_approval` criteria from config. The `verify_approval` criteria is the ONLY source of truth — do NOT rely on the review tool's own pass/fail signal. A review tool may say "approved" or "approved with suggestions" but if the output contains items that violate the `verify_approval` criteria (e.g., "should fix" items when the criteria says "no should-fix issues"), the review has NOT passed.
-4. **If the `verify_approval` criteria is satisfied** → proceed to `/orc:complete-goal` for delivery
-5. **If the `verify_approval` criteria is NOT satisfied:**
-   a. Check `address_feedback` for how engineers should handle the feedback
-   b. Follow those instructions to dispatch engineers with the right context
-   c. Run them through dev review (short cycle)
-   d. When all fix beads pass dev review → **re-run this goal-level review from step 1**
-6. Repeat up to `max_rounds`, then escalate to human
+**CRITICAL: You must ALWAYS delegate goal-level review to an ephemeral reviewer sub-agent.** Never run the `review_instructions` in your own context. This preserves your context window for orchestration and maintains the separation between reviewing and orchestrating.
 
-**This is the most important loop in orc.** Do NOT skip it. Do NOT signal completion before it passes. Do NOT let the project orchestrator tear you down while you're still running it. All fields are natural language — interpret them as-is.
+#### Config Fields
+
+The goal review loop is driven by three natural language config fields in `[review.goal]`. Read them from the config chain (project `.orc/config.toml` → `$ORC_ROOT/config.local.toml` → `$ORC_ROOT/config.toml`):
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `review_instructions` | **What to review and how.** The task given to the ephemeral reviewer sub-agent. Can be a slash command, natural language, or both. | `"/ocr:review"`, `"Review for security and performance"`, `"/ocr:review — focus on type safety and test coverage"` |
+| `verify_approval` | **How YOU determine the review passed.** Natural language criteria that YOU (the goal orchestrator) evaluate against the reviewer's output. This is the ONLY source of truth — not the reviewer's own verdict. | `"No must-fix or should-fix items"`, `"All security findings addressed, no critical issues"` |
+| `max_rounds` | Maximum review→fix cycles before escalating to human. | `3` (default) |
+| `address_feedback` | **How engineers should handle rejection.** Natural language instructions included in corrective bead descriptions when the review fails. | `"/ocr:address"`, `"Fix all must-fix items, address should-fix items where reasonable"` |
+
+If `review_instructions` is **empty** → skip goal review entirely, go straight to `/orc:complete-goal`.
+
+#### The Flow
+
+**Step 1 — Delegate the review to an ephemeral sub-agent:**
+
+Spawn a reviewer sub-agent (using the Agent tool) with:
+- The `review_instructions` value as the task to execute
+- The project path and goal branch for context
+- Instruction to return its full review findings when complete
+
+**Do NOT run the review_instructions yourself** — not even "just this once." Running review tools (like `/ocr:review`) consumes significant context and is the reviewer's job, not yours. You spawn, you wait, you evaluate.
+
+**Step 2 — Wait** for the reviewer sub-agent to complete and return its findings.
+
+**Step 3 — Evaluate the review output against `verify_approval`:**
+
+Read the `verify_approval` criteria from config. This is YOUR job — the reviewer reports findings, you decide pass/fail.
+
+- If `verify_approval` is **empty** → parse the reviewer's output for a clear `VERDICT: approved` or equivalent. Use your judgment.
+- If `verify_approval` is **set** → it is the ONLY source of truth. Evaluate the reviewer's output strictly against these criteria. Do NOT rely on the reviewer's own pass/fail signal. A reviewer may say "approved with suggestions" but if its output contains items that violate your `verify_approval` criteria, the review has **NOT passed**.
+
+  Example: if `verify_approval` = `"No must-fix or should-fix items"` and the review output contains a "should-fix" item → the review **fails**, even if the reviewer said "approved."
+
+**Step 4 — If approved** → proceed to `/orc:complete-goal` for delivery.
+
+**Step 5 — If NOT approved:**
+
+a. Read `address_feedback` from config — this tells engineers HOW to handle the rejection.
+b. Create corrective beads for each issue. In each bead description, include:
+   - The specific issue from the review output
+   - The `address_feedback` instructions (so the engineer knows the expected approach)
+c. Dispatch engineers for the corrective beads
+d. Run them through dev review (short cycle)
+e. When all corrective beads pass dev review → **re-run goal-level review from Step 1** (spawn a NEW ephemeral reviewer sub-agent — never reuse the old one)
+
+**Step 6 — Repeat** up to `max_rounds`, then escalate to human.
+
+**This is the most important loop in orc.** Do NOT skip it. Do NOT signal completion before it passes. Do NOT let the project orchestrator tear you down while you're still running it.
 
 Update tmux window names with status indicators when polling:
 - `<project>/<goal>/<bead> ●` — working
