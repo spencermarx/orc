@@ -1,3 +1,14 @@
+## 0.2.4 (2026-03-23)
+
+### 🚀 Features
+
+- **cli:** add --background flag for launching project orchestrators without switching ([219ac80](https://github.com/spencermarx/orc/commit/219ac80))
+
+### ❤️ Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.3 (2026-03-23)
 
 ### 🩹 Fixes
