@@ -15,60 +15,120 @@ yolo_flags = ""                  # auto-accept flags per agent (--yolo); empty =
                                  # codex=--dangerously-bypass-approvals-and-sandbox, gemini=--yolo
 max_workers = 3
 
+# ─── PLANNING ─────────────────────────────────────────────────────────────────
+# These fields control the planning phase BEFORE engineers are dispatched.
+# The goal orchestrator reads them but delegates execution to sub-agents.
+
 [planning.goal]
-plan_creation_instructions = ""  # How to create the plan — given to a planner sub-agent after investigation
-                                 # Can be a slash command, natural language, or both
-                                 # e.g., "/openspec:proposal", "Create a design doc in .orc-state/goals/{goal}/plan.md"
+plan_creation_instructions = ""  # WHO: executed by the PLANNER sub-agent (not the goal orchestrator)
+                                 # WHEN: after codebase investigation, before bead decomposition
+                                 # WHAT: the tool or approach that creates planning artifacts
+                                 # SUPPORTS: slash commands, natural language, conditional logic
+                                 # BOUNDARY: do NOT include bead decomposition guidance, engineer
+                                 #   briefing instructions, or orchestration actions (like "notify the
+                                 #   user" or "ask before proceeding") — those belong in other fields
+                                 # e.g., "/openspec:proposal"
+                                 # e.g., "If bug fix, skip. Otherwise run /openspec:proposal"
                                  # empty = no planning phase (goal orchestrator decomposes directly)
-bead_creation_instructions = ""  # How to create beads from plan artifacts — project-specific decomposition conventions
-                                 # e.g., "Decompose beads from tasks.md. Each bead maps to one or more task items."
+bead_creation_instructions = ""  # WHO: read by the GOAL ORCHESTRATOR (not a sub-agent)
+                                 # WHEN: after plan artifacts are created, during bead decomposition
+                                 # WHAT: how to map plan output to beads (project-specific conventions)
+                                 # BOUNDARY: do NOT include planning tool directives — those belong in
+                                 #   plan_creation_instructions above
+                                 # e.g., "Decompose beads from tasks.md. Each bead = one or more tasks."
                                  # empty = goal orchestrator uses default judgment
-when_to_involve_user_in_plan = "" # When to pause for user review before decomposing into beads
+when_to_involve_user_in_plan = "" # WHO: evaluated by the GOAL ORCHESTRATOR
+                                  # WHEN: after planner completes, before bead decomposition
+                                  # WHAT: condition for pausing to get user review of the plan
+                                  # BOUNDARY: this is a GATE (when to pause), not an action (what to do)
                                   # e.g., "always", "never", "when the plan involves more than 3 beads"
                                   # empty = "always"
 
+# ─── DISPATCH ─────────────────────────────────────────────────────────────────
+# Controls what engineers receive when they start work.
+
 [dispatch.goal]
-assignment_instructions = ""     # What to include in every engineer's assignment when dispatched
-                                 # Applied to ALL dispatches, whether from a plan or direct decomposition
-                                 # e.g., "Include the full proposal directory path. Quote specific tasks verbatim."
-                                 # e.g., "Always include the project's test command. Reference relevant CLAUDE.md sections."
+assignment_instructions = ""     # WHO: read by the GOAL ORCHESTRATOR when writing .orch-assignment.md
+                                 # WHEN: every time an engineer is dispatched (planned or unplanned goals)
+                                 # WHAT: content to include in every engineer assignment, on top of bead
+                                 #   description and acceptance criteria
+                                 # BOUNDARY: do NOT include planning or review logic — just briefing content
+                                 # e.g., "Include the proposal directory path. Quote tasks verbatim."
+                                 # e.g., "Always include the test command and CLAUDE.md references."
                                  # empty = goal orchestrator uses default judgment
 
+# ─── APPROVAL GATES ───────────────────────────────────────────────────────────
+# Binary gates: "ask" (pause for confirmation) or "auto" (proceed immediately).
+# These are separate from lifecycle hooks — they control WHETHER to pause, not
+# what to do.
+
 [approval]
-ask_before_dispatching = "ask"   # "ask" = confirm before spawning workers, "auto" = proceed automatically
-ask_before_reviewing = "auto"    # "ask" = confirm before starting reviews, "auto" = proceed automatically
-ask_before_merging = "ask"       # "ask" = confirm before merging beads, "auto" = proceed automatically
+ask_before_dispatching = "ask"   # Pause before spawning engineers? "ask" or "auto"
+ask_before_reviewing = "auto"    # Pause before starting code review? "ask" or "auto"
+ask_before_merging = "ask"       # Pause before merging approved beads? "ask" or "auto"
+
+# ─── REVIEW ───────────────────────────────────────────────────────────────────
+# Two tiers: dev review (per bead, fast) and goal review (full deliverable, deep).
+# Review tools are executed by REVIEWER sub-agents, not the goal orchestrator.
 
 [review.dev]
-# Short cycle — bead-level review during development
-review_instructions = ""     # how to perform the review — a slash command, natural language guidelines, or both
-                             # empty = built-in reviewer persona
-                             # e.g., "/my-review-tool", "Enforce strict type safety", or "/ocr:review — focus on security"
-how_to_determine_if_review_passed = ""  # how to determine the review passed
-                             # empty = parse VERDICT: approved from .worker-feedback
+# Short cycle — every bead is reviewed before merging to the goal branch
+review_instructions = ""         # WHO: executed by REVIEWER sub-agent
+                                 # WHEN: after an engineer signals "review"
+                                 # WHAT: how to perform the review (tool or guidelines)
+                                 # BOUNDARY: review only — do NOT include delivery actions (like posting
+                                 #   to a PR) or ticket updates. Those belong in [delivery.goal]
+                                 # e.g., "Focus on security and type safety"
+                                 # empty = built-in reviewer persona
+how_to_determine_if_review_passed = ""  # WHO: evaluated by GOAL ORCHESTRATOR against reviewer output
+                                 # WHAT: criteria for pass/fail — the orchestrator is the judge, not the reviewer
+                                 # empty = parse VERDICT: approved from .worker-feedback
 max_rounds = 3
 
 [review.goal]
-# Long cycle — goal-level review after all beads complete
-review_instructions = ""     # how to perform the goal-level review; empty = skip (go straight to delivery)
-                             # e.g., "/ocr:review" (see https://github.com/spencermarx/open-code-review)
-how_to_determine_if_review_passed = ""  # how to determine the review passed
-how_to_address_review_feedback = ""     # how engineers should address rejection feedback
+# Long cycle — after ALL beads pass dev review, before delivery
+review_instructions = ""         # WHO: executed by REVIEWER sub-agent
+                                 # WHEN: after all beads complete, before delivery
+                                 # WHAT: how to perform the goal-level review (tool or guidelines)
+                                 # BOUNDARY: review only — do NOT include delivery actions (like posting
+                                 #   to a PR or transitioning tickets). Those belong in [delivery.goal]
+                                 # empty = skip goal review, go straight to delivery
+how_to_determine_if_review_passed = ""  # Same as [review.dev] — goal orchestrator evaluates
+how_to_address_review_feedback = ""     # WHO: read by GOAL ORCHESTRATOR when creating corrective beads
+                                        # WHAT: how engineers should fix rejected work
+                                        # e.g., "Fix all must-fix items"
 max_rounds = 3
+
+# ─── BRANCHING ────────────────────────────────────────────────────────────────
 
 [branching]
 strategy = ""                # Natural language branch naming preference
                              # Default: feat/, fix/, task/ + ticket prefix if available
                              # e.g., "always use feat/ prefix" or "use JIRA ticket as prefix"
 
+# ─── DELIVERY ─────────────────────────────────────────────────────────────────
+# Controls what happens when a goal is complete and all reviews have passed.
+# The goal orchestrator executes delivery actions DIRECTLY (not a sub-agent).
+
 [delivery.goal]
-on_completion_instructions = ""  # What to do when a goal is complete — natural language or slash command
-                                 # e.g., "push the goal branch and create a PR targeting develop"
-                                 # e.g., "push the goal branch, create a PR targeting main, archive the openspec change"
-                                 # empty = signal review to project orchestrator (today's default behavior)
-when_to_involve_user_in_delivery = ""  # When to pause for user approval before executing delivery
+on_completion_instructions = ""  # WHO: executed by GOAL ORCHESTRATOR directly
+                                 # WHEN: after all beads complete and goal review passes
+                                 # WHAT: the delivery pipeline — push, PR, ticket updates, archival, etc.
+                                 # BOUNDARY: these are ACTIONS to execute. If you want to notify the user
+                                 #   with results (like a PR URL), include that as the last step here.
+                                 #   Do NOT put notification instructions in when_to_involve_user_in_delivery.
+                                 # e.g., "Push the branch and create a PR targeting main"
+                                 # e.g., "Push, create PR, archive openspec change, notify user with PR URL"
+                                 # empty = present the branch for manual inspection (no auto-delivery)
+when_to_involve_user_in_delivery = ""  # WHO: evaluated by GOAL ORCHESTRATOR
+                                       # WHEN: BEFORE executing on_completion_instructions
+                                       # WHAT: condition for pausing to get user approval before delivery runs
+                                       # BOUNDARY: this is a GATE (when to pause), not an action. Do NOT
+                                       #   put post-delivery behavior here — that goes in on_completion_instructions.
                                        # e.g., "always", "never", "when the PR targets main"
                                        # empty = "always"
+
+# ─── INTEGRATIONS ─────────────────────────────────────────────────────────────
 
 [agents]
 ruflo = "off"                # "off" (default), "auto", or "require"
@@ -81,11 +141,16 @@ sound = false                # true = audible alert on notification
 check_on_launch = true       # false = disable update check on orc launch
 
 [tickets]
-strategy = "Move tickets to `In Development` when goals start, and `Ready for Code Review` when goals are complete"                # Natural language ticket integration strategy (project-level concern)
-                             # empty = don't touch tickets
-                             # e.g., "Move Jira tickets to In Progress when goals start, Done when complete"
-                             # e.g., "Add a comment to Linear issues with the goal branch name"
-                             # Requires the project to have a skill or MCP for the ticketing system
+strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrators
+                             # WHEN: throughout the goal lifecycle (start, progress, completion, blocked)
+                             # WHAT: how to keep external ticket trackers in sync
+                             # BOUNDARY: this handles LIFECYCLE-WIDE ticket updates. One-time delivery
+                             #   ticket actions (like "move to In Code Review when PR is created") can go
+                             #   in on_completion_instructions instead to avoid duplication.
+                             # e.g., "Move Jira tickets to In Development when goals start"
+                             # empty = do not touch tickets
+
+# ─── LAYOUT & THEME ──────────────────────────────────────────────────────────
 
 [layout]
 min_pane_width = 40          # minimum tmux pane width (columns) before creating overflow window
