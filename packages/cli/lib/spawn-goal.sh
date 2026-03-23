@@ -27,6 +27,18 @@ orc_spawn_goal() {
   local goal_branch
   goal_branch="$(_find_goal_branch "$project_path" "$goal")"
 
+  # ── Create or reuse goal worktree ──────────────────────────────────────
+  local goal_worktree="$project_path/.worktrees/goal-${goal}"
+
+  if [[ ! -d "$goal_worktree" ]]; then
+    mkdir -p "$project_path/.worktrees"
+    git -C "$project_path" worktree add ".worktrees/goal-${goal}" "$goal_branch" 2>/dev/null || {
+      # Worktree may already be registered but directory missing — try removing first
+      git -C "$project_path" worktree remove ".worktrees/goal-${goal}" --force 2>/dev/null || true
+      git -C "$project_path" worktree add ".worktrees/goal-${goal}" "$goal_branch"
+    }
+  fi
+
   local goal_window="${project}/${goal}"
   local pane_title="goal: ${goal} (${goal_branch})"
 
@@ -58,7 +70,7 @@ orc_spawn_goal() {
 
   local after
   after="$(_last_project_window "$project")"
-  _tmux_new_window "$goal_window" "$project_path" "$after"
+  _tmux_new_window "$goal_window" "$goal_worktree" "$after"
 
   # Set pane 0 title
   _tmux_set_pane_title "$goal_window" "0" "$pane_title"
@@ -75,7 +87,19 @@ orc_spawn_goal() {
   branching_strategy="$(_config_get_branching_strategy "$project_path")"
 
   local init_prompt
-  init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}' at ${project_path}. The goal branch is '${goal_branch}'. Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
+  init_prompt="You are the goal orchestrator for goal '${goal}' in project '${project}'. The goal branch is '${goal_branch}'.
+
+Your working directory is an isolated worktree at ${goal_worktree}, checked out to the goal branch. You and your sub-agents (planners, scouts) work here freely — the developer's main workspace is untouched.
+
+IMPORTANT PATHS:
+- Working directory (your worktree): ${goal_worktree}
+- Project root (for bd commands and status files): ${project_path}
+- Status file: ${project_path}/.worktrees/.orc-state/goals/${goal}/.worker-status
+
+When running bd commands, use: cd ${project_path} && bd <command>
+When writing status, use the project root path: echo \"review\" > ${project_path}/.worktrees/.orc-state/goals/${goal}/.worker-status
+
+Start by investigating the codebase and understanding the scope of this goal, then run /orc:plan to decompose it into beads."
   if [[ -n "$branching_strategy" ]]; then
     init_prompt="${init_prompt}
 

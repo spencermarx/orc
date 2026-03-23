@@ -191,6 +191,15 @@ _teardown_goal() {
     done
   fi
 
+  # ── 1.5. Remove goal orchestrator worktree ──
+  local goal_worktree="$project_path/.worktrees/goal-${goal}"
+  if [[ -d "$goal_worktree" ]]; then
+    _load_adapter "$project_path"
+    _adapter_post_teardown "$goal_worktree" 2>/dev/null || true
+    git -C "$project_path" worktree remove ".worktrees/goal-${goal}" --force 2>/dev/null || true
+    _info "Removed goal worktree for '${goal}'."
+  fi
+
   # ── 2. Kill goal window and any overflow windows ──
 
   # Kill overflow windows first
@@ -281,6 +290,15 @@ _teardown_project() {
       bead="$(basename "$d")"
       # Skip internal state directories (not worktrees)
       [[ "$bead" == .* ]] && continue
+      # Skip goal orchestrator worktrees (handled by _teardown_goal)
+      if [[ "$bead" == goal-* ]]; then
+        local goal_from_dir="${bead#goal-}"
+        if ! echo "$goals_seen" | grep -qxF "$goal_from_dir"; then
+          goals_seen="${goals_seen:+$goals_seen
+}$goal_from_dir"
+        fi
+        continue
+      fi
       local wt_branch
       wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
       if [[ "$wt_branch" == work/*/* ]] && [[ "$wt_branch" != work/*//* ]]; then
