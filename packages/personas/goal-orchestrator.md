@@ -205,7 +205,7 @@ Orc has two review tiers configured via `[review.dev]` and `[review.goal]` in th
 Fast, tight loops during development. When `/orc:check` detects a review signal:
 
 1. **Detect review signal:** Read `.worker-status` in each active worktree. When it contains `review`:
-2. **Launch review pane:** Run `orc review <project> <bead>` to create the ephemeral review pane (vertical split below the engineer)
+2. **Launch review pane:** Run `orc review <project> <bead>` directly as a Bash command (NOT via a sub-agent). This creates the ephemeral review pane (vertical split below the engineer). The `orc review` CLI handles pane creation, reviewer persona loading, and agent launching.
 3. **Wait for verdict:** The reviewer writes to `.worker-feedback` and exits
 4. **Tear down the review pane immediately.** Review panes are ephemeral — they MUST be destroyed as soon as the reviewer finishes, regardless of verdict. Find and kill the pane by its title (pattern: `review: <project>/<bead>`). The engineer pane reclaims the vertical space.
 5. **Read verdict:** Parse `.worker-feedback` for `VERDICT: approved` or `VERDICT: not-approved` (or check `[review.dev] how_to_determine_if_review_passed` criteria if configured)
