@@ -186,17 +186,26 @@ The root orchestrator may send you config change requests during `orc doctor --f
 
 **ALWAYS use window names, NEVER window indices.** Indices shift when windows are created or destroyed.
 
+**For multi-line instructions** (more than one line), write to a temp file and use load-buffer to avoid TUI paste buffering:
 ```bash
-# CORRECT — target by name:
-tmux send-keys -t "orc:wrkbelt/WEN-874-booking" "your instructions" Enter
-
-# WRONG — target by index (fragile, will break):
-tmux send-keys -t "orc:4" "your instructions" Enter
+cat > /tmp/orc-msg-$$.txt << 'INSTRUCTIONS'
+Your multi-line instructions here
+INSTRUCTIONS
+tmux load-buffer /tmp/orc-msg-$$.txt
+tmux paste-buffer -t "orc:wrkbelt/WEN-874-booking"
+sleep 0.2
+tmux send-keys -t "orc:wrkbelt/WEN-874-booking" Enter
+rm /tmp/orc-msg-$$.txt
 ```
 
-To send instructions to a goal orchestrator (pane 0 in its window):
+**For short single-line instructions**, direct send-keys is fine:
 ```bash
-tmux send-keys -t "orc:<project>/<goal>" "<instructions>" Enter
+tmux send-keys -t "orc:wrkbelt/WEN-874-booking" "short instruction" Enter
+```
+
+**WRONG — target by index (fragile, will break):**
+```bash
+tmux send-keys -t "orc:4" "your instructions" Enter
 ```
 
 ## Boundaries

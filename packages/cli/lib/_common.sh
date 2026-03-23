@@ -339,12 +339,28 @@ _tmux_send() {
   local cmd="$2"
   local target
   target="$(_tmux_target "$name")"
-  # Send text and Enter separately — agent TUIs (Claude Code) treat large
-  # send-keys as paste events and buffer them. A separate Enter after a brief
-  # delay ensures the paste is submitted rather than left in the input buffer.
-  tmux send-keys -t "$target" "$cmd"
-  sleep 0.1
-  tmux send-keys -t "$target" Enter
+
+  # For short commands (single line, < 200 chars), send directly.
+  # For longer text, write to a temp file and use tmux load-buffer + paste-buffer
+  # to avoid TUI paste buffering issues in agent CLIs (Claude Code, etc.).
+  local cmd_len=${#cmd}
+  local newline_count
+  newline_count="$(printf '%s' "$cmd" | grep -c $'\n' || true)"
+
+  if [[ "$cmd_len" -lt 200 && "$newline_count" -eq 0 ]]; then
+    # Short single-line: direct send-keys is safe
+    tmux send-keys -t "$target" "$cmd" Enter
+  else
+    # Multi-line or long text: use load-buffer to avoid paste buffering
+    local tmpfile
+    tmpfile="$(mktemp "${TMPDIR:-/tmp}/orc-send-XXXXXX")"
+    printf '%s' "$cmd" > "$tmpfile"
+    tmux load-buffer "$tmpfile"
+    tmux paste-buffer -t "$target"
+    sleep 0.2
+    tmux send-keys -t "$target" Enter
+    rm -f "$tmpfile"
+  fi
 }
 
 # Check if a window exists. Supports exact match or prefix match
@@ -455,10 +471,24 @@ _tmux_send_pane() {
   local cmd="$3"
   local target
   target="$(_tmux_target "$window" "$pane")"
-  # Send text and Enter separately (see _tmux_send comment for rationale)
-  tmux send-keys -t "$target" "$cmd"
-  sleep 0.1
-  tmux send-keys -t "$target" Enter
+
+  # Same logic as _tmux_send — use load-buffer for long/multi-line text
+  local cmd_len=${#cmd}
+  local newline_count
+  newline_count="$(printf '%s' "$cmd" | grep -c $'\n' || true)"
+
+  if [[ "$cmd_len" -lt 200 && "$newline_count" -eq 0 ]]; then
+    tmux send-keys -t "$target" "$cmd" Enter
+  else
+    local tmpfile
+    tmpfile="$(mktemp "${TMPDIR:-/tmp}/orc-send-XXXXXX")"
+    printf '%s' "$cmd" > "$tmpfile"
+    tmux load-buffer "$tmpfile"
+    tmux paste-buffer -t "$target"
+    sleep 0.2
+    tmux send-keys -t "$target" Enter
+    rm -f "$tmpfile"
+  fi
 }
 
 _tmux_kill_pane() {
