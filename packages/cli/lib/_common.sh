@@ -336,7 +336,14 @@ _tmux_new_window() {
 _tmux_send() {
   local name="$1"
   local cmd="$2"
-  tmux send-keys -t "$(_tmux_target "$name")" "$cmd" Enter
+  local target
+  target="$(_tmux_target "$name")"
+  # Send text and Enter separately — agent TUIs (Claude Code) treat large
+  # send-keys as paste events and buffer them. A separate Enter after a brief
+  # delay ensures the paste is submitted rather than left in the input buffer.
+  tmux send-keys -t "$target" "$cmd"
+  sleep 0.1
+  tmux send-keys -t "$target" Enter
 }
 
 # Check if a window exists. Supports exact match or prefix match
@@ -445,7 +452,12 @@ _tmux_send_pane() {
   local window="$1"
   local pane="$2"
   local cmd="$3"
-  tmux send-keys -t "$(_tmux_target "$window" "$pane")" "$cmd" Enter
+  local target
+  target="$(_tmux_target "$window" "$pane")"
+  # Send text and Enter separately (see _tmux_send comment for rationale)
+  tmux send-keys -t "$target" "$cmd"
+  sleep 0.1
+  tmux send-keys -t "$target" Enter
 }
 
 _tmux_kill_pane() {
