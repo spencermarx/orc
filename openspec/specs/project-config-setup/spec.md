@@ -61,6 +61,8 @@ Scouts SHALL investigate:
 
 The project orchestrator SHALL delegate config assembly to an ephemeral **configurator** sub-agent. The project orchestrator manages the conversation with the user and synthesizes scout findings; the configurator produces the actual config file.
 
+The setup briefing SHALL inline the full `config.toml` (with its WHO/WHEN/WHAT/BOUNDARY structured comments) as the authoritative schema reference. This is the single source of truth for valid sections, fields, and value constraints. The agent SHALL NOT invent sections or fields that do not appear in the schema.
+
 The configurator persona (`packages/personas/configurator.md`) SHALL:
 - Receive the full config schema with descriptions and examples for every field
 - Receive scout findings about the project's available tools and infrastructure
@@ -99,6 +101,14 @@ This follows the same delegation pattern as:
 
 The project orchestrator in setup mode SHALL guide the user through a structured conversation covering each lifecycle phase, informed by scout findings. The conversation SHALL be adaptive — questions are informed by what the scouts discovered, not a generic checklist.
 
+The project orchestrator SHALL use plain language when asking questions — avoiding orc field names and internal terminology. The user does not need to know about `plan_creation_instructions` or `bead_creation_instructions`. The orchestrator asks about the user's workflow in their terms, then maps the answers to the correct config fields.
+
+The project orchestrator SHALL disambiguate user intent when answers conflate related concepts. Common misunderstandings to probe:
+- User says "involve me in delivery" — clarify: do they want to approve before delivery runs, or be notified after delivery completes? (These map to different fields.)
+- User describes planning and work breakdown together — ask separately about the planning tool and bead decomposition conventions (these are distinct fields with different executors).
+- User says "always review" — clarify: do they mean code review of every bead (default behavior), or personal approval before agents start working (an approval gate)?
+- User describes ticket updates as part of delivery — clarify: should ticket updates only happen at completion, or throughout the lifecycle?
+
 The conversation flow SHALL cover:
 
 1. **Present findings** — "I investigated your project. Here's what I found: [planning tools, review tools, delivery infrastructure, ticketing, test framework]."
@@ -108,7 +118,7 @@ The conversation flow SHALL cover:
 5. **Delivery** — "What should happen when a goal is complete? Push + PR? Which branch? Any ticket updates or other actions?"
 6. **Approval gates** — "Do you want to approve before dispatching workers? Before merging?"
 7. **Tickets** — "I found a Jira MCP. Want to integrate ticket updates? What should happen at each stage?"
-8. **Review and confirm** — present the assembled config, let the user adjust, then write it.
+8. **Review and confirm** — present a plain-language workflow summary first ("When you describe work, orc will..."), then show the raw TOML for technical review. The user approves the workflow, not the syntax.
 
 The project orchestrator SHALL skip questions that aren't relevant (e.g., don't ask about ticket integration if no ticketing tool exists) and elaborate on questions where scout findings reveal relevant context.
 
@@ -121,9 +131,22 @@ The project orchestrator SHALL skip questions that aren't relevant (e.g., don't 
 - **WHEN** scouts found both OpenSpec and Kiro specs in the project
 - **THEN** the project orchestrator asks: "I found both OpenSpec and Kiro in your project. Which would you like to use for plan creation?"
 
+#### Scenario: User intent disambiguation
+- **WHEN** the user says "I want to be involved in delivery"
+- **THEN** the project orchestrator does NOT directly map this to a field
+- **AND** instead asks a clarifying question: "When a goal is finished and ready to ship, do you want to approve before anything happens, or should it push and create the PR automatically and just tell you when it is done?"
+- **AND** maps the clarified answer to the correct field (`when_to_involve_user_in_delivery` vs. a notification step in `on_completion_instructions`)
+
+#### Scenario: User conflates planning and decomposition
+- **WHEN** the user describes planning tool usage and bead structure in a single answer
+- **THEN** the project orchestrator separates the concerns: asks about the planning tool first, then about how plan output maps to work items
+- **AND** maps the answers to `plan_creation_instructions` and `bead_creation_instructions` respectively
+
 #### Scenario: User reviews and adjusts final config
 - **WHEN** the configurator returns the assembled config
-- **THEN** the project orchestrator presents it to the user in a readable format
+- **THEN** the project orchestrator first presents a plain-language workflow summary describing what will happen when the user gives orc a task (planning, dispatch, review, delivery steps in human terms)
+- **AND** if reconfiguring, calls out key behavioral changes from the previous config
+- **AND** then shows the raw TOML for technical review
 - **AND** asks: "Here's your project config. Want to adjust anything before I write it?"
 - **AND** iterates if the user requests changes
 - **AND** writes `.orc/config.toml` only after explicit approval

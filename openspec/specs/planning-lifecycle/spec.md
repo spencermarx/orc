@@ -8,9 +8,9 @@ TBD - created by archiving change add-planning-lifecycle-and-notifications. Upda
 The system SHALL provide a `[planning.goal]` configuration section with three natural-language fields that control the planning lifecycle at goal level.
 
 The fields SHALL be:
-- `plan_creation_instructions` — instructions for how to create the plan, given to a planner sub-agent after codebase investigation. Can be a slash command, natural language, or both. Empty means no planning phase (goal orchestrator decomposes directly).
-- `bead_creation_instructions` — instructions for how the goal orchestrator should create beads from plan artifacts. Describes how to map plan output to beads — which items become beads, granularity, dependencies. Read by the goal orchestrator after the planner completes. Empty means the goal orchestrator uses default judgment.
-- `when_to_involve_user_in_plan` — natural-language description of when to involve the user in reviewing the plan before decomposition into beads. The goal orchestrator interprets this to decide whether to pause and notify. Empty defaults to "always".
+- `plan_creation_instructions` — instructions for how to create the plan, executed by a PLANNER sub-agent after codebase investigation. Can be a slash command, natural language, or both. Empty means no planning phase (goal orchestrator decomposes directly). This field SHALL NOT contain bead decomposition guidance, engineer briefing instructions, or orchestration actions (like "notify the user" or "ask before proceeding") — those belong in other fields.
+- `bead_creation_instructions` — instructions for how the goal orchestrator should create beads from plan artifacts. Describes how to map plan output to beads — which items become beads, granularity, dependencies. Read by the GOAL ORCHESTRATOR (not a sub-agent) after the planner completes. Empty means the goal orchestrator uses default judgment. This field SHALL NOT contain planning tool directives — those belong in `plan_creation_instructions`.
+- `when_to_involve_user_in_plan` — natural-language description of when to involve the user in reviewing the plan before decomposition into beads. The goal orchestrator interprets this as a GATE (when to pause), not an action (what to do). Empty defaults to "always".
 
 The configuration SHALL follow the same resolution chain as other config: project `.orc/config.toml` > `config.local.toml` > `config.toml`.
 

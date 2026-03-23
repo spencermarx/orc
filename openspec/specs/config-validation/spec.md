@@ -7,10 +7,14 @@ TBD - created by archiving change add-planning-lifecycle-and-notifications. Upda
 
 The system SHALL provide an `orc doctor` CLI command with three modes that validate config files and assist with migration.
 
+The command signature SHALL be: `orc doctor [project] [--auto-fix|--fix]`
+
+When a project argument is provided, validation and fixes are scoped to that project's config (plus global configs for context). When omitted, all registered projects are checked.
+
 The modes SHALL be:
-- `orc doctor` — fast bash validation. Reads all config files, validates against schema, reports issues with actionable guidance. Deterministic, no agent involvement.
-- `orc doctor --auto-fix` — applies mechanical migrations (field renames where the value is unchanged). Leaves semantic migrations that require user decisions.
-- `orc doctor --fix` — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The agent converses with the user to resolve semantic migrations that require context and decisions.
+- `orc doctor [project]` — fast bash validation. Reads all config files, validates against schema, reports issues with actionable guidance. Deterministic, no agent involvement.
+- `orc doctor [project] --auto-fix` — applies mechanical migrations (field renames where the value is unchanged). Leaves semantic migrations that require user decisions.
+- `orc doctor [project] --fix` — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The agent reviews field VALUES against the schema's WHO/WHEN/WHAT/BOUNDARY constraints (not just field names) and converses with the user to resolve issues.
 
 #### Scenario: Fast validation with no issues
 - **WHEN** the user runs `orc doctor`
@@ -23,6 +27,11 @@ The modes SHALL be:
 - **THEN** the command reports each issue with file path, field name, and migration guidance
 - **AND** suggests `orc doctor --auto-fix` for mechanical renames
 - **AND** suggests `orc doctor --fix` for semantic migrations
+
+#### Scenario: Project-scoped validation
+- **WHEN** the user runs `orc doctor myapp`
+- **THEN** validation checks `config.toml`, `config.local.toml`, and `myapp/.orc/config.toml`
+- **AND** does NOT check other registered projects' configs
 
 #### Scenario: Auto-fix applies mechanical renames
 - **WHEN** the user runs `orc doctor --auto-fix`
@@ -40,14 +49,23 @@ The modes SHALL be:
 
 When the user runs `orc doctor --fix`, the system SHALL launch the root orchestrator in doctor mode — an interactive, conversational migration experience that leverages the agent hierarchy.
 
+The doctor mode briefing SHALL inline the full config schema (from `config.toml`) as the authoritative reference for validation, identical to how `orc setup` inlines it. Every field in the schema has WHO/WHEN/WHAT/BOUNDARY structured comments that define what values are valid.
+
+The root orchestrator in doctor mode SHALL review THREE types of issues:
+- **Structural** — wrong field names, removed sections, unknown fields (also caught by fast validation)
+- **Content** — field values that violate the WHO/WHEN/BOUNDARY constraints documented in the schema (e.g., `plan_creation_instructions` containing bead decomposition guidance, or a gate field containing actions)
+- **Logical** — contradictions between fields, missing companions, references to nonexistent tools
+
 The root orchestrator in doctor mode SHALL:
 1. Read `migrations/CHANGELOG.md` from the orc repo root to understand what changed, why, and the intended migration path
 2. Read the validation output from the fast validation pass (run automatically before entering doctor mode)
-3. Spawn sub-agents per affected project to read each project's full config and understand its specific context (what tools the project uses, what its delivery pipeline looks like, what review patterns are in place)
-4. Converse with the user to resolve semantic migrations — presenting the old config, explaining the change, suggesting a migration, and asking for confirmation or adjustments
-5. After the user confirms all migrations, delegate the actual config changes to the respective project orchestrators (for project-level `.orc/config.toml`) or apply directly (for `config.local.toml`)
+3. For each config file, read it fully and check every field value against the schema's WHO/WHEN/WHAT/BOUNDARY constraints
+4. Present every issue to the user — showing the current value, explaining the problem in plain language, suggesting a corrected value, and asking for confirmation or adjustments
+5. If the user declines a fix, add a TOML inline comment documenting the override
+6. Apply all confirmed changes
+7. Run `orc doctor` at the end to verify structural issues are resolved
 
-The root orchestrator SHALL NOT silently apply changes. Every semantic migration SHALL be presented to the user with rationale before being applied.
+The root orchestrator SHALL NOT silently apply changes. Every issue SHALL be presented to the user with rationale before being applied. This requirement holds even when the agent CLI is running in YOLO/auto-accept mode — doctor mode always requires explicit user confirmation for config changes.
 
 #### Scenario: Interactive migration of delivery config
 - **WHEN** the user runs `orc doctor --fix`
@@ -106,9 +124,11 @@ The breaking changelog SHALL be the source of truth that the root orchestrator r
 
 ### Requirement: Config Schema Definition
 
-The CLI SHALL maintain an internal schema definition (in `_common.sh` or a dedicated schema file) that enumerates all valid config sections and fields with their types.
+The CLI SHALL maintain an internal schema definition in `doctor.sh` that enumerates all valid config fields as a flat list (bash 3.2 compatible — no associative arrays).
 
-The schema SHALL be the single source of truth for `orc doctor` validation. When new config fields are added or renamed, the schema is updated and `orc doctor` automatically detects the change.
+The schema SHALL be the single source of truth for `orc doctor` fast validation. When new config fields are added or renamed, the schema is updated and `orc doctor` automatically detects the change.
+
+For agent-assisted modes (`--fix` and `orc setup`), the full `config.toml` with its WHO/WHEN/WHAT/BOUNDARY structured comments is inlined into the agent briefing as the authoritative schema reference. The field list in `doctor.sh` and the structured comments in `config.toml` are complementary: the field list powers fast validation; the structured comments power value-level review by agents.
 
 #### Scenario: Schema updated with new field
 - **WHEN** a new config field is added to orc
