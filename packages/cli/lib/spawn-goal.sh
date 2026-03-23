@@ -79,6 +79,10 @@ orc_spawn_goal() {
   # Set window status indicator
   _tmux_set_window_status "$goal_window" "●"
 
+  # Set layout hook — re-apply main-vertical after any pane split to prevent tiling
+  local layout_cmd="select-layout -t ${ORC_TMUX_SESSION}:${goal_window} main-vertical"
+  tmux set-hook -t "${ORC_TMUX_SESSION}:${goal_window}" after-split-window "$layout_cmd" 2>/dev/null || true
+
   # Launch the goal orchestrator agent in pane 0
   local persona
   persona="$(_resolve_persona "goal-orchestrator" "$project_path")"
