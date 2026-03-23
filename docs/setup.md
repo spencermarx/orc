@@ -17,7 +17,9 @@ Together they ensure every registered project has a correct, up-to-date configur
 orc setup myapp
 ```
 
-The project orchestrator scouts your codebase first, then walks you through each lifecycle phase --- planning, review, delivery, testing --- asking only the questions that are relevant to what it found. The result is a config file tuned to your actual toolchain rather than a blank template.
+The setup agent receives the full `config.toml` schema inlined in its briefing --- including WHO/WHEN/BOUNDARY comments on every lifecycle field. This means the agent understands the purpose, executor, and limits of each field, so it can disambiguate your plain-language answers into the correct config fields. For example, if you say "I want a PR when work is done," the agent knows that belongs in `on_completion_instructions` (an action executed by the goal orchestrator), not `when_to_involve_user_in_delivery` (a gate that controls when to pause).
+
+The agent scouts your codebase first, then walks you through each lifecycle phase --- planning, review, delivery, testing --- asking only the questions that are relevant to what it found. The result is a config file tuned to your actual toolchain rather than a blank template.
 
 ## What It Discovers
 
@@ -65,19 +67,22 @@ No files in your working tree are modified. The `.orc/` directory is yours to cr
 
 ## Config Doctor
 
-`orc doctor` validates every registered project's config against the current orc schema. It catches renamed fields, removed options, and structural issues introduced by orc updates.
+`orc doctor` validates config files against the current orc schema. It catches renamed fields, removed options, and structural issues introduced by orc updates. By default it checks all registered projects; pass a project name to scope it to one project.
 
 Three modes are available:
 
 ```bash
 # Fast validation --- reports issues and prints migration guidance
 orc doctor
+orc doctor myapp          # Scoped to one project
 
 # Mechanical fixes --- applies safe renames (field name changes) automatically
 orc doctor --auto-fix
+orc doctor myapp --auto-fix
 
 # Interactive migration --- launches an agent that walks you through semantic changes
 orc doctor --fix
+orc doctor myapp --fix
 ```
 
 The `--fix` flag starts the root orchestrator with your migration context loaded. It reads `migrations/CHANGELOG.md`, understands what changed and why, inspects each affected project's config, and suggests concrete migrations conversationally.

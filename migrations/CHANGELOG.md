@@ -81,6 +81,32 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ### New Capabilities
 
+#### New: Self-Documenting Config Schema
+
+**What it does:** Every lifecycle hook field in `config.toml` now has structured WHO / WHEN / WHAT / BOUNDARY comments that document who executes the field, when it fires, what belongs in it, and what does NOT belong. `orc setup` and `orc doctor --fix` read these comments to correctly assemble and validate config values.
+
+**Default (unconfigured):** No action needed. The comments are in the committed defaults.
+
+**Impact:** Setup agents produce correct configs by respecting field boundaries. Doctor agents validate field VALUES (not just names) against documented boundaries.
+
+---
+
+#### New: `orc doctor` Accepts Project Argument
+
+**What it does:** `orc doctor [project] [--auto-fix|--fix]` now accepts an optional project name to scope validation and review to a specific project.
+
+**Usage:** `orc doctor wrkbelt --fix` reviews only wrkbelt's config.
+
+---
+
+#### Changed: Bash 3.2+ Minimum (was 4+)
+
+**What changed:** `orc doctor` was rewritten to avoid bash 4+ features (`declare -A`). All orc scripts now run on bash 3.2+ (macOS default).
+
+**Impact:** No need to install a newer bash. Orc works out of the box on macOS.
+
+---
+
 #### New: Goal Orchestrator Worktree Isolation
 
 **What it does:** Goal orchestrators now run in dedicated git worktrees at `.worktrees/goal-<name>`, checked out to the goal branch. Previously they shared the project root, which caused workspace contamination when multiple goals ran concurrently.

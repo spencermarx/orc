@@ -66,7 +66,9 @@ max_rounds = 3
 [review.goal]
 # Instructions for reviewing the full goal branch.
 # Leave empty to skip goal review entirely.
-review_instructions = "/ocr:review — post the review to the GitHub PR"
+# BOUNDARY: review only — do not include delivery actions (like posting to a PR
+# or transitioning tickets). Those belong in [delivery.goal].
+review_instructions = "/ocr:review — focus on cross-cutting concerns and architectural consistency"
 
 # Override how the goal orchestrator determines pass/fail.
 how_to_determine_if_review_passed = "The review output contains no outstanding issues requiring changes"
@@ -88,6 +90,8 @@ The `review_instructions` field is the integration point. It accepts:
 - **Both** — `"/ocr:review — focus on type safety and error handling"`
 
 The reviewer agent receives these instructions as its primary directive. Whatever tool or process you specify, the reviewer runs it and produces output that the goal orchestrator can evaluate.
+
+**Boundary:** `review_instructions` is for review only. Do not include delivery actions (like posting comments to a GitHub PR or updating ticket status) --- those belong in `[delivery.goal] on_completion_instructions`.
 
 Examples:
 

@@ -52,11 +52,13 @@ max_workers = 5
 
 Controls how goals are planned before decomposition into beads. See [Core Concepts: The Lifecycle](concepts.md#the-lifecycle).
 
+Each field has a **WHO** (which agent executes it), **WHEN** (at what point in the lifecycle), and **BOUNDARY** (what does not belong here).
+
 | Key | Default | Description |
 |-----|---------|-------------|
-| `plan_creation_instructions` | `""` | How to create the plan — given to a planner sub-agent after investigation. Can be a slash command, natural language, or both. Empty = skip planning. |
-| `bead_creation_instructions` | `""` | How to create beads from plan artifacts. Project-specific decomposition conventions. Empty = goal orchestrator uses default judgment. |
-| `when_to_involve_user_in_plan` | `""` | When to pause for user review before decomposing. Empty = `"always"`. |
+| `plan_creation_instructions` | `""` | **WHO:** executed by the **planner sub-agent** (not the goal orchestrator). **WHEN:** after codebase investigation, before bead decomposition. Accepts a slash command, natural language, or both. **BOUNDARY:** do not include bead decomposition guidance, engineer briefing instructions, or orchestration actions (like "notify the user") — those belong in other fields. Empty = skip planning (goal orchestrator decomposes directly). |
+| `bead_creation_instructions` | `""` | **WHO:** read by the **goal orchestrator** (not a sub-agent). **WHEN:** after plan artifacts are created, during bead decomposition. Describes how to map plan output to beads (project-specific conventions). **BOUNDARY:** do not include planning tool directives — those belong in `plan_creation_instructions`. Empty = goal orchestrator uses default judgment. |
+| `when_to_involve_user_in_plan` | `""` | **WHO:** evaluated by the **goal orchestrator**. **WHEN:** after planner completes, before bead decomposition. This is a **gate** (when to pause for user review), not an action. Empty = `"always"`. |
 
 **Example — use OpenSpec for planning:**
 
@@ -75,7 +77,7 @@ Controls what context engineers receive when dispatched.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `assignment_instructions` | `""` | Included in every engineer's assignment. Applied to all dispatches, whether from a plan or direct decomposition. Empty = goal orchestrator uses default judgment. |
+| `assignment_instructions` | `""` | **WHO:** read by the **goal orchestrator** when writing `.orch-assignment.md`. **WHEN:** every time an engineer is dispatched (planned or unplanned goals). Content is included in every engineer's assignment on top of bead description and acceptance criteria. **BOUNDARY:** do not include planning or review logic — just briefing content. Empty = goal orchestrator uses default judgment. |
 
 **Example:**
 
@@ -106,8 +108,8 @@ The short review cycle. Runs after each engineer signals completion. See [Core C
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `review_instructions` | `""` | How to perform the review — a slash command, natural language, or both. Empty = built-in reviewer persona. |
-| `how_to_determine_if_review_passed` | `""` | How to parse the review result. Empty = parse `VERDICT: approved` from `.worker-feedback`. |
+| `review_instructions` | `""` | **WHO:** executed by a **reviewer sub-agent**. **WHEN:** after an engineer signals `review`. Accepts a slash command, natural language, or both. **BOUNDARY:** review only — do not include delivery actions (like posting to a PR or updating tickets). Those belong in `[delivery.goal]`. Empty = built-in reviewer persona. |
+| `how_to_determine_if_review_passed` | `""` | **WHO:** evaluated by the **goal orchestrator** against reviewer output. Criteria for pass/fail — the orchestrator is the judge, not the reviewer. Empty = parse `VERDICT: approved` from `.worker-feedback`. |
 | `max_rounds` | `3` | Maximum review iterations before escalating to a human. |
 
 **Example — custom review tool with strict rules:**
@@ -126,9 +128,9 @@ The long review cycle. Runs after all beads are merged into the goal branch. Opt
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `review_instructions` | `""` | How to perform the goal-level review. Empty = skip goal-level review. |
-| `how_to_determine_if_review_passed` | `""` | How to parse the review result. Empty = parse `VERDICT: approved`. |
-| `how_to_address_review_feedback` | `""` | How engineers should address rejection feedback from goal-level review. |
+| `review_instructions` | `""` | **WHO:** executed by a **reviewer sub-agent**. **WHEN:** after all beads complete, before delivery. **BOUNDARY:** review only — do not include delivery actions (like posting to a PR or transitioning tickets). Those belong in `[delivery.goal]`. Empty = skip goal-level review. |
+| `how_to_determine_if_review_passed` | `""` | **WHO:** evaluated by the **goal orchestrator** against reviewer output. Same semantics as `[review.dev]`. Empty = parse `VERDICT: approved`. |
+| `how_to_address_review_feedback` | `""` | **WHO:** read by the **goal orchestrator** when creating corrective beads. Describes how engineers should fix rejected work. |
 | `max_rounds` | `3` | Maximum goal-level review iterations before escalating. |
 
 **Example:**
@@ -163,8 +165,8 @@ Controls what happens when a goal is complete. See [Core Concepts: The Lifecycle
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `on_completion_instructions` | `""` | What to do when a goal is complete. Natural language or slash command. Empty = signal review to project orchestrator. |
-| `when_to_involve_user_in_delivery` | `""` | When to pause for user approval before executing delivery. Empty = `"always"`. |
+| `on_completion_instructions` | `""` | **WHO:** executed by the **goal orchestrator** directly (not a sub-agent). **WHEN:** after all beads complete and goal review passes. Describes the delivery pipeline — push, PR, ticket updates, archival, etc. **BOUNDARY:** these are actions to execute. If you want to notify the user with results (like a PR URL), include that as the last step here — do not put notification instructions in `when_to_involve_user_in_delivery`. Empty = present the goal branch for manual inspection (no auto-delivery). |
+| `when_to_involve_user_in_delivery` | `""` | **WHO:** evaluated by the **goal orchestrator**. **WHEN:** before executing `on_completion_instructions`. This is a **gate** (when to pause for user approval), not an action field. Do not put post-delivery behavior here — that belongs in `on_completion_instructions`. Empty = `"always"`. |
 
 **Example — auto-PR to develop:**
 
@@ -180,7 +182,7 @@ when_to_involve_user_in_delivery = "never"
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `strategy` | `"Move tickets to 'In Development' when goals start, and 'Ready for Code Review' when goals are complete"` | Natural language ticket integration strategy. Empty = do not touch tickets. Requires the project to have a skill or MCP for the ticketing system. |
+| `strategy` | `""` | **WHO:** interpreted by **goal and project orchestrators**. **WHEN:** throughout the goal lifecycle (start, progress, completion, blocked). Natural language ticket integration strategy describing how to keep external ticket trackers in sync. **BOUNDARY:** handles lifecycle-wide ticket updates. One-time delivery ticket actions (like "move to In Code Review when PR is created") can go in `on_completion_instructions` instead to avoid duplication. Empty = do not touch tickets. Requires the project to have a skill or MCP for the ticketing system. |
 
 **Example:**
 

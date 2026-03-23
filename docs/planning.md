@@ -32,6 +32,8 @@ Goal created → Scout investigates → Decompose into beads → Dispatch engine
 
 The `plan_creation_instructions` field accepts a slash command, natural language instructions, or both. The goal orchestrator passes these to the planner sub-agent, which executes them with full codebase context.
 
+**Boundary:** `plan_creation_instructions` should only describe the planning tool or approach. Do not include bead decomposition guidance, engineer briefing instructions, or orchestration actions (like "notify the user" or "ask before proceeding") --- those belong in other fields (`bead_creation_instructions`, `assignment_instructions`, `when_to_involve_user_in_plan`).
+
 ```toml
 # In {project}/.orc/config.toml
 
@@ -133,12 +135,12 @@ The plan adapts to reality rather than forcing engineers to work around incorrec
 
 All planning fields live under `[planning.goal]` and `[dispatch.goal]` in your project config.
 
-| Field | Section | Default | Purpose |
-|-------|---------|---------|---------|
-| `plan_creation_instructions` | `[planning.goal]` | `""` | What planning tool to run. Empty = skip planning. |
-| `bead_creation_instructions` | `[planning.goal]` | `""` | How to map plan artifacts to beads. Empty = goal orchestrator judgment. |
-| `when_to_involve_user_in_plan` | `[planning.goal]` | `""` | When to pause for user review. Empty = always. |
-| `assignment_instructions` | `[dispatch.goal]` | `""` | What to include in every engineer's assignment. |
+| Field | Section | Default | Executed by | Purpose |
+|-------|---------|---------|-------------|---------|
+| `plan_creation_instructions` | `[planning.goal]` | `""` | Planner sub-agent | What planning tool to run. Empty = skip planning. |
+| `bead_creation_instructions` | `[planning.goal]` | `""` | Goal orchestrator | How to map plan artifacts to beads. Empty = goal orchestrator judgment. |
+| `when_to_involve_user_in_plan` | `[planning.goal]` | `""` | Goal orchestrator (gate) | When to pause for user review. Empty = always. |
+| `assignment_instructions` | `[dispatch.goal]` | `""` | Goal orchestrator | What to include in every engineer's assignment. |
 
 Set these in `{project}/.orc/config.toml` for per-project planning, or in `config.local.toml` for a global default. Per-project config takes precedence. See [Configuration](configuration.md) for the full resolution order.
 

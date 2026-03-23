@@ -60,7 +60,7 @@ Each step is executed in order. If a step requires a tool the project does not h
 
 ## User Involvement
 
-The `when_to_involve_user_in_delivery` field controls when orc pauses for your approval before executing the delivery pipeline.
+The `when_to_involve_user_in_delivery` field is a **gate** --- it controls when orc pauses for your approval *before* executing the delivery pipeline. It is not an action field. Do not put post-delivery behavior here (like "notify the user with the PR URL") --- that belongs in `on_completion_instructions`.
 
 ```toml
 [delivery.goal]
@@ -79,6 +79,20 @@ Examples:
 - `"when the goal touches more than 5 files"`
 - `"when the PR targets main or a release branch"`
 - `"never"` — combine with YOLO mode for full automation.
+
+## Notifying the User
+
+If you want the goal orchestrator to notify the user after delivery completes (for example, with a PR URL), include that as the **last step** of `on_completion_instructions`:
+
+```toml
+[delivery.goal]
+on_completion_instructions = """
+  Push the goal branch and create a PR targeting develop.
+  Notify the user with the PR URL.
+"""
+```
+
+This keeps all delivery actions in one place. The `when_to_involve_user_in_delivery` gate controls whether to pause *before* delivery runs --- it does not handle post-delivery notifications.
 
 ## Branching
 
