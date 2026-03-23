@@ -65,7 +65,7 @@ _is_linux() { [[ "$OSTYPE" == linux* ]]; }
 # Reserved names — subcommands that can't be used as project keys
 # ─────────────────────────────────────────────────────────────────────────────
 
-ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave"
+ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave doctor notify setup"
 
 _is_reserved_name() {
   local name="$1"
@@ -1308,60 +1308,154 @@ _list_active_goals() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Delivery helpers
+# Notification helpers — condition-based notifications with auto-resolution
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Get the delivery mode from config (defaults to "review").
-_delivery_mode() {
-  local project_path="${1:-}"
-  _config_get "delivery.mode" "review" "$project_path"
+_orc_state_dir() {
+  echo "${TMPDIR:-/tmp}/orc-state"
 }
 
-# Determine the PR target branch based on delivery.target_strategy config.
-# Falls back to "main" if not configured.
-_delivery_target_branch() {
-  local project_path="${1:-}"
-  local strategy
-  strategy="$(_config_get "delivery.target_strategy" "" "$project_path")"
-  if [[ -z "$strategy" ]]; then
-    echo "main"
-  else
-    # The strategy is natural language — the agent interprets it.
-    # For CLI use, return the raw strategy so callers can decide.
-    echo "$strategy"
+_orc_notify_log() {
+  echo "$(_orc_state_dir)/notifications.log"
+}
+
+# Append a notification to the log. Optionally triggers OS notification.
+# Usage: _orc_notify <level> <scope> <message>
+# Levels: PLAN_REVIEW, PLAN_INVALIDATED, QUESTION, BLOCKED, GOAL_REVIEW,
+#         DELIVERY, GOAL_COMPLETE, ESCALATION, RESOLVED
+_orc_notify() {
+  local level="$1"
+  local scope="$2"
+  local message="$3"
+
+  local log_file
+  log_file="$(_orc_notify_log)"
+  mkdir -p "$(dirname "$log_file")"
+
+  local timestamp
+  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%S')"
+
+  printf '%s %s %s "%s"\n' "$timestamp" "$level" "$scope" "$message" >> "$log_file"
+
+  # OS-level notification (only for condition notifications, not RESOLVED/GOAL_COMPLETE)
+  if [[ "$level" != "RESOLVED" && "$level" != "GOAL_COMPLETE" ]]; then
+    local system_notify
+    system_notify="$(_config_get "notifications.system" "false")"
+    if [[ "$system_notify" == "true" ]]; then
+      local sound_flag=""
+      local sound_enabled
+      sound_enabled="$(_config_get "notifications.sound" "false")"
+      if _is_macos && command -v terminal-notifier &>/dev/null; then
+        local tn_args=(-title "orc" -subtitle "$level" -message "$message" -group "orc-$scope")
+        [[ "$sound_enabled" == "true" ]] && tn_args+=(-sound default)
+        terminal-notifier "${tn_args[@]}" &>/dev/null &
+      elif _is_linux && command -v notify-send &>/dev/null; then
+        notify-send "orc — $level" "$message" &>/dev/null &
+      fi
+    fi
   fi
 }
 
-# Push a goal branch and create a PR via gh.
-# Usage: _deliver_pr <project_path> <goal_branch> <title> <body>
-_deliver_pr() {
-  local project_path="$1"
-  local goal_branch="$2"
-  local title="$3"
-  local body="$4"
+# Convenience: resolve (clear) a notification for a scope.
+# Usage: _orc_resolve <scope> <message>
+_orc_resolve() {
+  local scope="$1"
+  local message="$2"
+  _orc_notify "RESOLVED" "$scope" "$message"
+}
 
-  _require "gh" "brew install gh"
+# Count active (unresolved) notifications.
+# An active notification is one without a matching RESOLVED entry for its scope.
+_orc_notify_active_count() {
+  local log_file
+  log_file="$(_orc_notify_log)"
+  [[ -f "$log_file" ]] || { echo 0; return; }
 
-  local target
-  target="$(_delivery_target_branch "$project_path")"
+  # Collect all notification scopes and resolution scopes
+  local count=0
+  local resolved_scopes=""
 
-  _info "Pushing goal branch '${goal_branch}'..."
-  git -C "$project_path" push -u origin "$goal_branch"
+  # Read log in reverse to find resolved scopes first
+  while IFS= read -r line; do
+    local level scope
+    level="$(echo "$line" | awk '{print $2}')"
+    scope="$(echo "$line" | awk '{print $3}')"
 
-  _info "Creating PR: ${title}"
-  local pr_url
-  pr_url="$(gh pr create \
-    --repo "$(git -C "$project_path" remote get-url origin)" \
-    --base "$target" \
-    --head "$goal_branch" \
-    --title "$title" \
-    --body "$body" 2>&1)" || {
-    _error "Failed to create PR: $pr_url"
-    return 1
-  }
+    if [[ "$level" == "RESOLVED" ]]; then
+      resolved_scopes="${resolved_scopes}${scope}"$'\n'
+    fi
+  done < "$log_file"
 
-  _info "PR created: $pr_url"
-  echo "$pr_url"
+  # Count notifications without matching RESOLVED
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local level scope
+    level="$(echo "$line" | awk '{print $2}')"
+    scope="$(echo "$line" | awk '{print $3}')"
+
+    # Skip RESOLVED entries and GOAL_COMPLETE (always immediately resolved)
+    [[ "$level" == "RESOLVED" ]] && continue
+
+    # Check if this scope has been resolved
+    if ! echo "$resolved_scopes" | grep -qxF "$scope"; then
+      ((count++)) || true
+    fi
+  done < "$log_file"
+
+  echo "$count"
+}
+
+# List active (unresolved) notifications.
+# Prints: <index> <level> <scope> <message>
+_orc_notify_active_list() {
+  local log_file
+  log_file="$(_orc_notify_log)"
+  [[ -f "$log_file" ]] || return 0
+
+  local resolved_scopes=""
+  while IFS= read -r line; do
+    local level scope
+    level="$(echo "$line" | awk '{print $2}')"
+    scope="$(echo "$line" | awk '{print $3}')"
+    [[ "$level" == "RESOLVED" ]] && resolved_scopes="${resolved_scopes}${scope}"$'\n'
+  done < "$log_file"
+
+  local idx=0
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local level scope
+    level="$(echo "$line" | awk '{print $2}')"
+    scope="$(echo "$line" | awk '{print $3}')"
+    [[ "$level" == "RESOLVED" ]] && continue
+    if ! echo "$resolved_scopes" | grep -qxF "$scope"; then
+      ((idx++)) || true
+      echo "$line"
+    fi
+  done < "$log_file"
+}
+
+# Set a pane's border to the activity color (attention indicator).
+# Usage: _orc_pane_highlight <window> <pane_index>
+_orc_pane_highlight() {
+  local window="$1"
+  local pane="$2"
+  local activity_color
+  activity_color="$(_config_get "theme.activity" "#d29922")"
+  tmux select-pane -t "$(_tmux_target "$window" "$pane")" \
+    -P "fg=default,bg=default" \
+    -p "fg=${activity_color}" 2>/dev/null || true
+}
+
+# Clear a pane's border highlight (restore default).
+# Usage: _orc_pane_unhighlight <window> <pane_index>
+_orc_pane_unhighlight() {
+  local window="$1"
+  local pane="$2"
+  local border_color
+  border_color="$(_config_get "theme.border" "#30363d")"
+  tmux select-pane -t "$(_tmux_target "$window" "$pane")" \
+    -P "fg=default,bg=default" \
+    -p "fg=${border_color}" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
