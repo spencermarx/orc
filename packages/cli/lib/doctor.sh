@@ -7,78 +7,64 @@ set -euo pipefail
 # Config schema — single source of truth for validation
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Valid sections and their fields (field:type)
-declare -A ORC_SCHEMA=(
-  # [defaults]
-  ["defaults.agent_cmd"]="string"
-  ["defaults.agent_flags"]="string"
-  ["defaults.agent_template"]="string"
-  ["defaults.yolo_flags"]="string"
-  ["defaults.max_workers"]="integer"
-  # [planning.goal]
-  ["planning.goal.plan_creation_instructions"]="string"
-  ["planning.goal.bead_creation_instructions"]="string"
-  ["planning.goal.when_to_involve_user_in_plan"]="string"
-  # [dispatch.goal]
-  ["dispatch.goal.assignment_instructions"]="string"
-  # [approval]
-  ["approval.ask_before_dispatching"]="string"
-  ["approval.ask_before_reviewing"]="string"
-  ["approval.ask_before_merging"]="string"
-  # [review.dev]
-  ["review.dev.review_instructions"]="string"
-  ["review.dev.how_to_determine_if_review_passed"]="string"
-  ["review.dev.max_rounds"]="integer"
-  # [review.goal]
-  ["review.goal.review_instructions"]="string"
-  ["review.goal.how_to_determine_if_review_passed"]="string"
-  ["review.goal.how_to_address_review_feedback"]="string"
-  ["review.goal.max_rounds"]="integer"
-  # [branching]
-  ["branching.strategy"]="string"
-  # [delivery.goal]
-  ["delivery.goal.on_completion_instructions"]="string"
-  ["delivery.goal.when_to_involve_user_in_delivery"]="string"
-  # [agents]
-  ["agents.ruflo"]="string"
-  # [tickets]
-  ["tickets.strategy"]="string"
-  # [notifications]
-  ["notifications.system"]="boolean"
-  ["notifications.sound"]="boolean"
-  # [updates]
-  ["updates.check_on_launch"]="boolean"
-  # [layout]
-  ["layout.min_pane_width"]="integer"
-  ["layout.min_pane_height"]="integer"
-  # [board]
-  ["board.command"]="string"
-  # [theme]
-  ["theme.enabled"]="boolean"
-  ["theme.mouse"]="boolean"
-  ["theme.accent"]="string"
-  ["theme.bg"]="string"
-  ["theme.fg"]="string"
-  ["theme.border"]="string"
-  ["theme.muted"]="string"
-  ["theme.activity"]="string"
-)
+# Valid config fields — one per line (bash 3.2 compatible, no associative arrays)
+ORC_VALID_FIELDS="
+defaults.agent_cmd
+defaults.agent_flags
+defaults.agent_template
+defaults.yolo_flags
+defaults.max_workers
+planning.goal.plan_creation_instructions
+planning.goal.bead_creation_instructions
+planning.goal.when_to_involve_user_in_plan
+dispatch.goal.assignment_instructions
+approval.ask_before_dispatching
+approval.ask_before_reviewing
+approval.ask_before_merging
+review.dev.review_instructions
+review.dev.how_to_determine_if_review_passed
+review.dev.max_rounds
+review.goal.review_instructions
+review.goal.how_to_determine_if_review_passed
+review.goal.how_to_address_review_feedback
+review.goal.max_rounds
+branching.strategy
+delivery.goal.on_completion_instructions
+delivery.goal.when_to_involve_user_in_delivery
+agents.ruflo
+tickets.strategy
+notifications.system
+notifications.sound
+updates.check_on_launch
+layout.min_pane_width
+layout.min_pane_height
+board.command
+theme.enabled
+theme.mouse
+theme.accent
+theme.bg
+theme.fg
+theme.border
+theme.muted
+theme.activity
+"
 
-# Migration mapping: old_field → new_field | classification (mechanical|semantic)
-declare -A ORC_MIGRATIONS=(
-  # Review renames (mechanical)
-  ["review.dev.verify_approval"]="review.dev.how_to_determine_if_review_passed|mechanical"
-  ["review.goal.verify_approval"]="review.goal.how_to_determine_if_review_passed|mechanical"
-  ["review.dev.address_feedback"]="review.dev.how_to_address_review_feedback|mechanical"
-  ["review.goal.address_feedback"]="review.goal.how_to_address_review_feedback|mechanical"
-  # Approval renames (mechanical)
-  ["approval.spawn"]="approval.ask_before_dispatching|mechanical"
-  ["approval.review"]="approval.ask_before_reviewing|mechanical"
-  ["approval.merge"]="approval.ask_before_merging|mechanical"
-  # Delivery replacements (semantic)
-  ["delivery.mode"]="delivery.goal.on_completion_instructions|semantic"
-  ["delivery.target_strategy"]="delivery.goal.on_completion_instructions|semantic"
-)
+# Migration mapping: old_field=new_field|classification (one per line)
+ORC_MIGRATIONS="
+review.dev.verify_approval=review.dev.how_to_determine_if_review_passed|mechanical
+review.goal.verify_approval=review.goal.how_to_determine_if_review_passed|mechanical
+review.dev.address_feedback=review.dev.how_to_address_review_feedback|mechanical
+review.goal.address_feedback=review.goal.how_to_address_review_feedback|mechanical
+approval.spawn=approval.ask_before_dispatching|mechanical
+approval.review=approval.ask_before_reviewing|mechanical
+approval.merge=approval.ask_before_merging|mechanical
+delivery.mode=delivery.goal.on_completion_instructions|semantic
+delivery.target_strategy=delivery.goal.on_completion_instructions|semantic
+"
+
+# Lookup helpers
+_schema_has_field() { echo "$ORC_VALID_FIELDS" | grep -qxF "$1"; }
+_migration_for() { echo "$ORC_MIGRATIONS" | grep "^${1}=" | head -1 | cut -d= -f2-; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Validation
@@ -94,10 +80,11 @@ _doctor_validate_file() {
     [[ -z "$key" ]] && continue
 
     # Check if key is in the migration mapping (old field)
-    if [[ -n "${ORC_MIGRATIONS[$key]+x}" ]]; then
-      local mapping="${ORC_MIGRATIONS[$key]}"
-      local new_field="${mapping%%|*}"
-      local classification="${mapping##*|}"
+    local migration
+    migration="$(_migration_for "$key")"
+    if [[ -n "$migration" ]]; then
+      local new_field="${migration%%|*}"
+      local classification="${migration##*|}"
       if [[ "$classification" == "mechanical" ]]; then
         printf '  ✗ %s — renamed to '\''%s'\'' [mechanical: orc doctor --auto-fix]\n' "$key" "$new_field"
       else
@@ -108,16 +95,11 @@ _doctor_validate_file() {
     fi
 
     # Check if key is valid
-    if [[ -z "${ORC_SCHEMA[$key]+x}" ]]; then
-      # Try fuzzy match for typo detection
-      local suggestion=""
-      for valid_key in "${!ORC_SCHEMA[@]}"; do
-        # Simple prefix match for suggestions
-        if [[ "$valid_key" == "${key%.*}."* ]]; then
-          suggestion="$valid_key"
-          break
-        fi
-      done
+    if ! _schema_has_field "$key"; then
+      # Try fuzzy match: find any valid field with the same section prefix
+      local section_prefix="${key%.*}"
+      local suggestion
+      suggestion="$(echo "$ORC_VALID_FIELDS" | grep "^${section_prefix}\." | head -1)"
       if [[ -n "$suggestion" ]]; then
         printf '  ? %s — unknown field. Did you mean '\''%s'\''?\n' "$key" "$suggestion"
       else
@@ -134,16 +116,23 @@ _doctor_validate() {
   local total_issues=0
   local files_checked=0
 
-  # Check all config files in resolution chain
+  # Check config files — scoped to a project if specified
   local files=("$ORC_ROOT/config.toml")
   [[ -f "$ORC_ROOT/config.local.toml" ]] && files+=("$ORC_ROOT/config.local.toml")
 
-  # Check registered project configs
-  for key in $(_project_keys); do
+  if [[ -n "${_doctor_project:-}" ]]; then
+    # Scoped to one project
     local path
-    path="$(_project_path "$key")"
+    path="$(_project_path "$_doctor_project")"
     [[ -f "$path/.orc/config.toml" ]] && files+=("$path/.orc/config.toml")
-  done
+  else
+    # All registered projects
+    for key in $(_project_keys); do
+      local path
+      path="$(_project_path "$key")"
+      [[ -f "$path/.orc/config.toml" ]] && files+=("$path/.orc/config.toml")
+    done
+  fi
 
   for file in "${files[@]}"; do
     [[ -f "$file" ]] || continue
@@ -190,27 +179,35 @@ _doctor_auto_fix_file() {
   local tmpfile
   tmpfile="$(mktemp)"
 
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    local modified=0
-    for old_key in "${!ORC_MIGRATIONS[@]}"; do
-      local mapping="${ORC_MIGRATIONS[$old_key]}"
-      local classification="${mapping##*|}"
-      [[ "$classification" != "mechanical" ]] && continue
+  # Build a sed script for all mechanical renames
+  local sed_script=""
+  local IFS_save="$IFS"
+  IFS=$'\n'
+  for mapping_line in $ORC_MIGRATIONS; do
+    [[ -z "$mapping_line" ]] && continue
+    local old_key="${mapping_line%%=*}"
+    local rest="${mapping_line#*=}"
+    local classification="${rest##*|}"
+    [[ "$classification" != "mechanical" ]] && continue
 
-      local new_key="${mapping%%|*}"
-      # Extract just the field name (last segment after last dot)
-      local old_field="${old_key##*.}"
-      local new_field="${new_key##*.}"
+    local old_field="${old_key##*.}"
+    local new_key="${rest%%|*}"
+    local new_field="${new_key##*.}"
 
-      if [[ "$line" =~ ^[[:space:]]*${old_field}[[:space:]]*= ]]; then
-        line="${line/$old_field/$new_field}"
-        ((fixed++)) || true
-        modified=1
-        _info "  Renamed: $old_field → $new_field in $(basename "$file")"
-      fi
-    done
-    printf '%s\n' "$line"
-  done < "$file" > "$tmpfile"
+    # Check if this rename applies to the file
+    if grep -q "^[[:space:]]*${old_field}[[:space:]]*=" "$file" 2>/dev/null; then
+      sed_script="${sed_script}s/^\\([[:space:]]*\\)${old_field}\\([[:space:]]*=\\)/\\1${new_field}\\2/;"
+      ((fixed++)) || true
+      _info "  Renamed: $old_field → $new_field in $(basename "$file")"
+    fi
+  done
+  IFS="$IFS_save"
+
+  if [[ -n "$sed_script" ]]; then
+    sed "$sed_script" "$file" > "$tmpfile"
+  else
+    cp "$file" "$tmpfile"
+  fi
 
   if [[ "$fixed" -gt 0 ]]; then
     mv "$tmpfile" "$file"
@@ -227,11 +224,17 @@ _doctor_auto_fix() {
   local files=()
   [[ -f "$ORC_ROOT/config.local.toml" ]] && files+=("$ORC_ROOT/config.local.toml")
 
-  for key in $(_project_keys); do
+  if [[ -n "${_doctor_project:-}" ]]; then
     local path
-    path="$(_project_path "$key")"
+    path="$(_project_path "$_doctor_project")"
     [[ -f "$path/.orc/config.toml" ]] && files+=("$path/.orc/config.toml")
-  done
+  else
+    for key in $(_project_keys); do
+      local path
+      path="$(_project_path "$key")"
+      [[ -f "$path/.orc/config.toml" ]] && files+=("$path/.orc/config.toml")
+    done
+  fi
 
   if [[ ${#files[@]} -eq 0 ]]; then
     _info "No user config files to fix (config.toml is committed defaults)."
@@ -257,79 +260,109 @@ _doctor_auto_fix() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _doctor_fix() {
-  # Run fast validation first to capture output
+  # Run fast validation to capture output (passed to the agent as context)
   local validation_output
   validation_output="$(_doctor_validate 2>&1)" || true
-
-  if echo "$validation_output" | grep -q "All configs valid"; then
-    echo "$validation_output"
-    return 0
-  fi
 
   echo "$validation_output"
   echo ""
   _info "Launching interactive migration assistant..."
 
-  # Build doctor-mode briefing for the root orchestrator
-  local briefing
-  briefing="$(cat <<DOCTOR_EOF
-You are running in DOCTOR MODE — a temporary operating mode for config migration.
+  # Resolve project context for the briefing
+  local project_context=""
+  if [[ -n "${_doctor_project:-}" ]]; then
+    local proj_path
+    proj_path="$(_project_path "$_doctor_project")"
+    project_context="
+## Project Focus: ${_doctor_project}
+
+You are scoped to project ${_doctor_project} at: ${proj_path}
+
+Read this project config file and review ALL field values (not just field names):
+- ${proj_path}/.orc/config.toml
+
+Also check the global configs for context:
+- ${ORC_ROOT}/config.local.toml (if it exists)
+- ${ORC_ROOT}/config.toml (committed defaults)"
+  fi
+
+  # Read the authoritative schema (same as setup — config.toml IS the schema reference)
+  local config_schema=""
+  if [[ -f "$ORC_ROOT/config.toml" ]]; then
+    config_schema="$(cat "$ORC_ROOT/config.toml")"
+  fi
+
+  # Build doctor-mode briefing — write to temp file to avoid heredoc quoting issues
+  local briefing_file
+  briefing_file="$(mktemp "${TMPDIR:-/tmp}/orc-doctor-briefing-XXXXXX")"
+
+  cat > "$briefing_file" <<'STATIC_DOCTOR_EOF'
+You are running in DOCTOR MODE — a temporary operating mode for config review and migration.
 
 ## Your Task
 
-Help the user migrate their orc configuration to the current schema. You have:
+Review orc configuration for THREE types of issues:
+a. Structural — wrong field names, removed sections, unknown fields
+b. Content — field values that violate the WHO/WHEN/BOUNDARY documented in the schema
+c. Logical — contradictions between fields, missing companions, references to nonexistent tools
 
-1. **Validation output** showing which config files have issues:
-$validation_output
+## Authoritative Schema Reference
 
-2. **Breaking changelog** at: $ORC_ROOT/migrations/CHANGELOG.md
-   Read this to understand what changed, why, and the migration path for each field.
+Every field below has WHO / WHEN / WHAT / BOUNDARY comments. These are the rules. When reviewing a config value, check it against the BOUNDARY for that field. If the value contains something the boundary says does not belong, that is a content issue.
 
-3. **Affected config files** — read each one to understand the user's current setup.
+--- BEGIN CONFIG SCHEMA ---
+STATIC_DOCTOR_EOF
+
+  cat "$ORC_ROOT/config.toml" >> "$briefing_file"
+
+  cat >> "$briefing_file" <<'STATIC_DOCTOR2_EOF'
+--- END CONFIG SCHEMA ---
 
 ## Your Workflow
 
-1. Read migrations/CHANGELOG.md for migration context
-2. For each affected config file, read the full file to understand the user's intent
-3. Present each semantic migration to the user conversationally:
-   - Show the old config
-   - Explain what changed and why
-   - Suggest the new config based on their current values
+1. Read migrations/CHANGELOG.md at the orc repo root for migration context
+2. For each config file, read it FULLY and check every field value against the schema:
+   - Does the value respect the WHO? (e.g., plan_creation_instructions is for the planner, not the goal orch)
+   - Does the value respect the BOUNDARY? (e.g., gate fields should not contain actions, review fields should not contain delivery actions)
+   - Are there logical contradictions between fields?
+   - Do referenced tools/skills actually exist in the project?
+   - Is there duplicate logic across fields (e.g., same ticket transition in two places)?
+3. Present EVERY issue to the user. For each:
+   - Show the current value
+   - Explain the problem in plain language (avoid orc jargon)
+   - Suggest a corrected value
    - Ask for confirmation or adjustments
-4. Apply confirmed changes (edit the config files directly)
-5. Run \`orc doctor\` at the end to verify all issues are resolved
-
-## Delegation Model Awareness
-
-When reviewing or suggesting lifecycle hook values, keep the delegation model in mind:
-
-- plan_creation_instructions: executed by a PLANNER sub-agent, not the goal orchestrator. Slash commands and conditional logic are valid. The planner evaluates conditions and runs tools in the goal worktree.
-- review_instructions: executed by a REVIEWER sub-agent, not the goal orchestrator.
-- bead_creation_instructions: read by the goal orchestrator to guide plan-to-bead decomposition.
-- assignment_instructions in [dispatch.goal]: read by the goal orchestrator when writing engineer assignments.
-- on_completion_instructions: executed by the goal orchestrator directly (delivery actions).
-
-If you see config values that assume the goal orchestrator runs planning tools directly (e.g., step-by-step instructions mixing planning tool execution with bead decomposition in a single field), suggest splitting them: planning tool directives go in plan_creation_instructions, decomposition conventions go in bead_creation_instructions.
+4. If the user DECLINES a fix, add a TOML inline comment documenting the override:
+   # orc-doctor: <issue> — user override: <rationale or "acknowledged">
+5. Apply all confirmed changes
+6. Run orc doctor at the end to verify structural issues are resolved
 
 ## Boundaries
 
-- Mechanical renames should already be handled by --auto-fix
-- When done, this session ends — do not transition to normal root orchestrator mode
-DOCTOR_EOF
-)"
+- Mechanical renames (field name changes) should already be handled by --auto-fix
+- When done, this session ends
+STATIC_DOCTOR2_EOF
 
-  # Add YOLO hint if active
-  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
-    briefing="${briefing}
+  # Append dynamic context
+  {
+    echo ""
+    echo "${project_context}"
+    echo ""
+    echo "## Validation Output (structural check)"
+    echo ""
+    echo "${validation_output}"
+  } >> "$briefing_file"
 
-## YOLO Mode Active
+  local briefing
+  briefing="$(cat "$briefing_file")"
+  rm -f "$briefing_file"
 
-You are in YOLO mode. Do NOT ask for confirmation. Read the breaking changelog, read each affected config file, determine the best migration for each semantic field based on context, apply all changes immediately, and run \`orc doctor\` to verify. Present a summary of what you changed for awareness but do not wait for approval."
-  else
-    briefing="${briefing}
+  # Doctor ALWAYS requires user confirmation for config changes, even in YOLO mode.
+  # YOLO only affects the agent CLI permission flags (auto-accept tool calls), not the
+  # conversational review of config changes.
+  briefing="${briefing}
 
-Never silently apply semantic changes — always present and confirm with the user."
-  fi
+ALWAYS present every issue and proposed fix to the user. ALWAYS wait for confirmation before applying changes. Never silently modify config files — the user must approve each change."
 
   # Launch root orchestrator with doctor-mode briefing
   _require tmux "brew install tmux"
@@ -353,14 +386,32 @@ Never silently apply semantic changes — always present and confirm with the us
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-case "${1:-}" in
-  --auto-fix)
+# Parse arguments: orc doctor [project] [--auto-fix|--fix]
+_doctor_project=""
+_doctor_mode="validate"
+
+for _arg in "$@"; do
+  case "$_arg" in
+    --auto-fix) _doctor_mode="auto-fix" ;;
+    --fix)      _doctor_mode="fix" ;;
+    -*)         _die "Unknown flag: $_arg. Usage: orc doctor [project] [--auto-fix|--fix]" "$EXIT_USAGE" ;;
+    *)          _doctor_project="$_arg" ;;
+  esac
+done
+
+# If a project was specified, validate it exists
+if [[ -n "$_doctor_project" ]]; then
+  _require_project "$_doctor_project" > /dev/null
+fi
+
+case "$_doctor_mode" in
+  auto-fix)
     _doctor_auto_fix
     ;;
-  --fix)
+  fix)
     _doctor_fix
     ;;
-  *)
-    _doctor_validate || exit 0
+  validate)
+    _doctor_validate
     ;;
 esac

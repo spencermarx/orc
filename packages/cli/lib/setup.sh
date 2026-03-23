@@ -63,27 +63,15 @@ cat "$ORC_ROOT/config.toml" >> "$briefing_file"
 cat >> "$briefing_file" <<'STATIC2_EOF'
 --- END CONFIG SCHEMA ---
 
-## IMPORTANT: How Lifecycle Hooks Are Executed (Delegation Model)
+## IMPORTANT: The Schema Is Self-Documenting
 
-Orc uses a delegation model — the goal orchestrator NEVER runs lifecycle tools directly. It delegates to sub-agents:
+Each field in the schema above has WHO / WHEN / WHAT / BOUNDARY comments. READ THEM before writing values. They tell you exactly who executes the field, when it fires, what to put in it, and what NOT to put in it.
 
-- plan_creation_instructions: executed by a PLANNER sub-agent (not the goal orchestrator). Write values that make sense as instructions for the planner. The planner receives the goal context and scout findings alongside these instructions.
-- review_instructions: executed by a REVIEWER sub-agent (not the goal orchestrator).
-- on_completion_instructions: executed by the goal orchestrator directly (delivery is infrastructure, not artifact creation).
-
-When writing plan_creation_instructions:
-- Slash commands (e.g., "/openspec:proposal") are run by the planner in the goal worktree
-- Conditional logic is valid (e.g., "if bug fix, skip planning") — the planner evaluates conditions
-- The goal orchestrator passes these instructions as-is to the planner and handles the response
-- Do NOT write instructions that assume the goal orchestrator runs them directly
-
-When writing bead_creation_instructions:
-- These ARE read by the goal orchestrator (not a sub-agent) to guide bead decomposition from plan artifacts
-- Write conventions for how plan output maps to beads (e.g., "each task group in tasks.md becomes a bead")
-
-When writing assignment_instructions in [dispatch.goal]:
-- These ARE read by the goal orchestrator when writing engineer assignments
-- Applied universally to every dispatch, whether from a plan or direct decomposition
+Key rules:
+- If a field says "WHO: PLANNER sub-agent" — the value will be executed by an autonomous sub-agent, not the goal orchestrator. Do not include orchestration actions like "notify the user" or "ask before proceeding."
+- If a field says "BOUNDARY: this is a GATE" — only put conditions here (when to pause), not actions (what to do).
+- If a field says "BOUNDARY: review only" — do not include delivery actions like posting to PRs or updating tickets.
+- Every field documents what does NOT belong in it. Follow these boundaries strictly.
 
 ## Your Workflow
 
@@ -97,11 +85,22 @@ When writing assignment_instructions in [dispatch.goal]:
 
 2. Present findings — show what you found, organized by lifecycle phase. Be specific: name the tools, paths, and commands you discovered.
 
-3. Converse about each lifecycle phase (skip phases where no relevant tools were found):
+3. Converse about each lifecycle phase (skip phases where no relevant tools were found).
+   For each phase, probe for the user INTENT — do not just transcribe what they say. Users often conflate related concepts. Your job is to disambiguate and map their intent to the right fields.
+
+   When asking questions, use plain language — avoid orc field names and internal terminology. The user does not need to know about plan_creation_instructions or bead_creation_instructions. Ask about their workflow in their terms, then YOU map the answers to the right fields.
+
+   Common misunderstandings to watch for and how to clarify:
+   - User says "involve me in delivery" — ask: "When a goal is finished and ready to ship, do you want to approve before anything happens, or should it push and create the PR automatically and just tell you when it is done?"
+   - User describes planning and work breakdown together — ask separately: "What tool should create the plan?" then "After the plan is created, how should it be broken into work items?"
+   - User says "always review" — ask: "Do you mean every piece of work should be code-reviewed before merging (that is on by default), or that you want to personally approve before agents start working?"
+   - User describes ticket updates as part of delivery — ask: "Should ticket updates only happen when a goal ships, or throughout the whole lifecycle (started, in progress, done)?"
+
+   Phases to cover:
    - Planning: what tool creates the plan, how to decompose plan artifacts into beads, when to involve user
    - Dispatch: what should every engineer receive in their assignment (regardless of planning)
    - Review: what tool, pass criteria, feedback handling
-   - Delivery: what happens on completion, when to involve user
+   - Delivery: what happens on completion, should the pipeline pause for approval or run automatically
    - Approval gates: dispatch, review, merge confirmation preferences
    - Tickets: integration strategy (only if ticketing tools found)
 
@@ -110,13 +109,27 @@ When writing assignment_instructions in [dispatch.goal]:
    - Add descriptive inline TOML comments explaining the value
    - Leave fields empty that the user did not express a preference for (empty = sensible defaults)
 
-5. Present for review — show the complete assembled config to the user
+5. Present for review — BEFORE showing the raw TOML, present a plain-language summary of the resulting workflow. Walk through what will happen when the user gives orc a task:
+   - "When you describe work, orc will..."
+   - "Planning: [tool] will create [artifacts]. You will [be asked to review / not be interrupted]."
+   - "Engineers will receive [what] in their assignments."
+   - "Code review: [built-in / tool name]. Pass criteria: [criteria]."
+   - "When a goal is done: [pipeline steps]. You will [approve first / be notified after]."
+   - "Tickets: [strategy summary / not configured]."
+
+   If reconfiguring (existing config was loaded), also call out KEY BEHAVIORAL CHANGES:
+   - "Changed: delivery now runs automatically without pausing for approval (was: always ask first)"
+   - "Changed: planning now uses /openspec:proposal (was: no planning phase)"
+   - "Unchanged: review still uses built-in reviewer with 3 rounds max"
+
+   Then show the raw TOML for technical review. The user approves the WORKFLOW, not the syntax.
 
 6. Write the file — after explicit approval, write to .orc/config.toml
 
 ## Boundaries
 
 - ONLY use sections and fields from the schema above — do not invent new ones
+- ONLY reference slash commands, skills, and MCPs that scouts CONFIRMED exist in the project — never assume a tool is available
 - Skip questions for tools that are not available
 - This session ends after the config is written
 STATIC2_EOF

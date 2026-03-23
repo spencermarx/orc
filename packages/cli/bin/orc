@@ -37,7 +37,7 @@ Admin:
   config [project]                Open config in \$EDITOR
   board <project>                 Open board view
   leave                           Detach from tmux
-  doctor [--auto-fix|--fix]       Validate config and assist with migration
+  doctor [project] [--auto-fix|--fix]  Validate config and assist with migration
   notify [--all|--clear|--goto N] View and navigate notifications
   setup <project>                 Guided project config setup
 

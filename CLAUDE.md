@@ -252,7 +252,7 @@ Project personas are ADDITIVE — they layer on top of CLAUDE.md, .claude/ rules
 
 ## Prerequisites
 
-`bd` (Beads), `tmux` (3.0+), `git`, `bash` (4+), an agent CLI (`claude`/`opencode`/`codex`).
+`bd` (Beads), `tmux` (3.0+), `git`, `bash` (3.2+), an agent CLI (`claude`/`opencode`/`codex`).
 
 ## Code Conventions
 

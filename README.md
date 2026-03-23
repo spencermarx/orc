@@ -11,7 +11,7 @@
 <p align="center">
   <a href="#quick-start"><img src="https://img.shields.io/badge/get_started-5_minutes-00ff88?style=flat-square" alt="Get Started" /></a>
   <a href="#configuration"><img src="https://img.shields.io/badge/config-TOML-8b949e?style=flat-square" alt="Config" /></a>
-  <img src="https://img.shields.io/badge/runtime-bash_4+-d29922?style=flat-square" alt="Bash 4+" />
+  <img src="https://img.shields.io/badge/runtime-bash_3.2+-d29922?style=flat-square" alt="Bash 3.2+" />
   <img src="https://img.shields.io/badge/build_step-none-30363d?style=flat-square" alt="No Build Step" />
   <img src="https://img.shields.io/badge/framework_lock--in-zero-30363d?style=flat-square" alt="No Lock-in" />
 </p>
@@ -104,7 +104,7 @@ Here is what happens next:
 | [Beads](https://github.com/thefinalsource/beads) (`bd`) | Work tracking (Dolt-backed) | See Beads repo |
 | [tmux](https://github.com/tmux/tmux) 3.0+ | Session management | `brew install tmux` / `apt install tmux` |
 | `git` | Worktrees and branching | Pre-installed on most systems |
-| `bash` 4+ | CLI runtime | `brew install bash` (macOS ships 3.x) |
+| `bash` 3.2+ | CLI runtime | Pre-installed on macOS and Linux |
 | Agent CLI | Your AI coding agents | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 
 Optional: [`gh`](https://cli.github.com/) — only needed if you want orc to auto-create PRs.
