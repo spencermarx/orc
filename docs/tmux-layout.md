@@ -21,7 +21,9 @@ Window names are stable identifiers. Orc never renames them during a session, so
 
 ## Inside a Goal Window
 
-Each goal window uses a `main-vertical` layout. The goal orchestrator occupies the left pane (persistent, roughly 60% width). Engineers stack on the right, each in its own pane:
+Each goal window uses a `main-vertical` layout. The goal orchestrator occupies the left pane (persistent, roughly 60% width). Engineers stack on the right, each in its own pane.
+
+Each goal window's working directory is the goal orchestrator's worktree (`{project}/.worktrees/goal-<name>`), not the project root.
 
 ```
 +------------------------------+------------------+

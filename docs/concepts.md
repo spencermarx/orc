@@ -54,7 +54,9 @@ Every engineer works in an isolated git worktree — a separate checkout of the 
 - **Clean isolation.** Each bead's changes are contained in its own directory.
 - **Fast-forward merges.** When a bead is approved, it merges cleanly back into the goal branch.
 
-Worktrees live at `{project}/.worktrees/` (gitignored) and are created automatically by `orc spawn`. They are torn down after a bead is approved and merged.
+Goal orchestrators also run in isolated worktrees, checked out to their goal branch. This ensures the developer's main workspace stays clean — you can have five goals running concurrently without any of them touching the project root. Planners and scouts spawned by the goal orchestrator inherit its worktree.
+
+Worktrees live at `{project}/.worktrees/` (gitignored). Goal orchestrator worktrees are created by `orc spawn-goal` (named `goal-<name>`). Engineer worktrees are created by `orc spawn` (named by bead ID). Both are torn down automatically.
 
 ---
 

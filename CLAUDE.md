@@ -60,7 +60,7 @@ Four-tier agent hierarchy:
 
 1. **Root Orchestrator** — conversational session coordinating across projects. Optional; skip with `orc <project>` for single-project work.
 2. **Project Orchestrator** — receives user requests, decomposes them into goals, dispatches goal orchestrators, monitors goal-level progress. Never writes code or manages engineers directly.
-3. **Goal Orchestrator** — owns one goal (feature/bug/task). Runs as a separate agent session. Spawns a planner to decompose the goal into beads, dispatches engineers, manages the review loop, fast-forward merges approved beads to the goal branch, and handles delivery.
+3. **Goal Orchestrator** — owns one goal (feature/bug/task). Runs in a dedicated git worktree checked out to the goal branch. Spawns a planner to decompose the goal into beads, dispatches engineers, manages the review loop, fast-forward merges approved beads to the goal branch, and handles delivery.
 4. **Engineers** — autonomous agent sessions in isolated git worktrees, each assigned a single bead.
 
 Ephemeral sub-agents: **Planner** (decomposes goals into beads during planning), **Configurator** (guides project config setup via `orc setup`), **Reviewer** (reviews bead output).

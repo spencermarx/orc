@@ -81,6 +81,16 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ### New Capabilities
 
+#### New: Goal Orchestrator Worktree Isolation
+
+**What it does:** Goal orchestrators now run in dedicated git worktrees at `.worktrees/goal-<name>`, checked out to the goal branch. Previously they shared the project root, which caused workspace contamination when multiple goals ran concurrently.
+
+**Default (unconfigured):** Automatic. Every `orc spawn-goal` creates a worktree. No config needed.
+
+**Impact:** The developer's main workspace stays clean on its current branch. Planners and scouts run in the goal worktree. Teardown removes goal worktrees automatically.
+
+---
+
 #### New: `[planning.goal]` — Plan Creation and Bead Decomposition
 
 **Fields:** `plan_creation_instructions`, `bead_creation_instructions`, `when_to_involve_user_in_plan`

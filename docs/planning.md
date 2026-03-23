@@ -22,7 +22,7 @@ Goal created → Scout investigates → Decompose into beads → Dispatch engine
 ## How It Works
 
 1. The **goal orchestrator** receives a goal and runs its investigation phase (scouting), building context about the codebase areas involved.
-2. It delegates plan creation to an ephemeral **planner sub-agent** that runs your configured tool with full codebase context from scout findings.
+2. It delegates plan creation to an ephemeral **planner sub-agent** that runs your configured tool with full codebase context from scout findings. The planner sub-agent runs in the goal orchestrator's worktree (checked out to the goal branch), so it can freely create planning artifacts without affecting the developer's main workspace.
 3. The planner produces **plan artifacts** — design docs, specs, task lists, or whatever your tool generates.
 4. If `when_to_involve_user_in_plan` triggers, orc pauses for your review. You approve, reject, or revise.
 5. The goal orchestrator reads the plan artifacts and **decomposes them into beads**, following your `bead_creation_instructions` if set.
