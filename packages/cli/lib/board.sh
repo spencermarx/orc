@@ -14,26 +14,33 @@ _require tmux "brew install tmux"
 
 window_name="${project}/board"
 
-if _tmux_window_exists "$window_name"; then
-  _info "Board already open. Switching."
-  _orc_goto "$window_name"
-  exit "$EXIT_OK"
-fi
-
 _tmux_ensure_session
+
+# If the board window exists, check if it's alive. Kill stale windows.
+if _tmux_window_exists "$window_name"; then
+  if _tmux_is_pane_alive "$window_name" "0" 2>/dev/null; then
+    _info "Board running. Attaching."
+    _orc_goto "$window_name"
+    exit "$EXIT_OK"
+  fi
+  # Stale — kill and recreate
+  _tmux_kill_window "$window_name"
+fi
 
 board_cmd="$(_config_get "board.command" "" "$project_path")"
 
 after="$(_last_project_window "$project")"
 _tmux_new_window "$window_name" "$project_path" "$after"
 
-if [[ -n "$board_cmd" ]] && command -v "$board_cmd" &>/dev/null; then
+if [[ -n "$board_cmd" ]]; then
+  # User-configured board command — run as-is
   _tmux_send "$window_name" "$board_cmd"
-elif [[ -n "$board_cmd" ]]; then
-  _warn "Board tool '$board_cmd' not found on PATH. Using built-in fallback."
-  _tmux_send "$window_name" "while true; do clear; bd list; sleep 5; done"
+elif command -v abacus &>/dev/null && [[ -f "$project_path/.beads/beads.db" ]]; then
+  # Abacus detected with beads DB — use it automatically
+  _tmux_send "$window_name" "abacus -db-path $project_path/.beads/beads.db -skip-version-check"
 else
-  _tmux_send "$window_name" "while true; do clear; bd list; sleep 5; done"
+  # Fallback — watch bd list
+  _tmux_send "$window_name" "while true; do clear; cd $project_path && bd list; sleep 5; done"
 fi
 
 _info "Board opened for '$project'."
