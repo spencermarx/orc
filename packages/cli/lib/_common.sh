@@ -66,7 +66,7 @@ _is_linux() { [[ "$OSTYPE" == linux* ]]; }
 # Reserved names — subcommands that can't be used as project keys
 # ─────────────────────────────────────────────────────────────────────────────
 
-ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave doctor notify setup"
+ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave doctor notify setup send"
 
 _is_reserved_name() {
   local name="$1"

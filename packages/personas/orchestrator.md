@@ -182,22 +182,22 @@ The root orchestrator may send you config change requests during `orc doctor --f
 2. Apply the change to your project's `.orc/config.toml`
 3. Confirm the change was applied
 
-## tmux Targeting
+## Sending Instructions to Goal Orchestrators
 
-**ALWAYS use window names, NEVER window indices.** Indices shift when windows are created or destroyed.
+Use `orc send` to deliver instructions to goal orchestrators. Always use window names, never indices.
 
 ```bash
-# CORRECT — send instructions via load-buffer (works for any length):
-printf '%s' "your instructions" | tmux load-buffer -
-tmux paste-buffer -t "orc:wrkbelt/WEN-874-booking"
-sleep 0.15
-tmux send-keys -t "orc:wrkbelt/WEN-874-booking" Enter
+# Short instructions:
+orc send <project>/<goal> "your instructions"
 
-# WRONG — target by index (fragile, will break):
-tmux send-keys -t "orc:4" "your instructions" Enter
+# Multi-line instructions (pipe via stdin):
+cat << 'EOF' | orc send <project>/<goal> --stdin
+Your multi-line instructions here.
+Can span as many lines as needed.
+EOF
 ```
 
-Do NOT use `tmux send-keys` with the full instruction text — agent TUIs buffer large pastes and instructions get stuck without submitting. Always use the `load-buffer` + `paste-buffer` + `Enter` pattern above.
+Do NOT use `tmux send-keys` directly — agent TUIs buffer large pastes. `orc send` handles this reliably.
 
 ## Boundaries
 

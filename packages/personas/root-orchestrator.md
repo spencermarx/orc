@@ -38,15 +38,17 @@ When the user describes work to do:
 
 1. Identify which project(s) are involved
 2. **Launch the project orchestrator** by running `orc <project>`
-3. **Deliver the work instructions** to the project orchestrator via tmux — always use window names, never indices:
+3. **Deliver the work instructions** to the project orchestrator:
    ```bash
-   printf '%s' "<the user's work instructions>" | tmux load-buffer -
-   tmux paste-buffer -t "orc:<project>"
-   sleep 0.15
-   tmux send-keys -t "orc:<project>" Enter
+   orc send <project> "<the user's work instructions>"
    ```
-   This works for any length — single-line or multi-line. Do NOT use `tmux send-keys` with the full text directly — agent TUIs buffer large pastes and the instructions get stuck without submitting.
-
+   For multi-line instructions, pipe via stdin:
+   ```bash
+   cat << 'EOF' | orc send <project> --stdin
+   Your multi-line work instructions here.
+   Can span as many lines as needed.
+   EOF
+   ```
    The delegation must be seamless — the user describes the work once, you route it. They should never have to switch windows and re-type.
 4. If multiple projects are involved, launch each project orchestrator and send each its relevant portion of the work
 5. **Monitor** — after delegating, begin checking on progress periodically via `orc status`
@@ -112,8 +114,12 @@ orc config [project]    # Open config in $EDITOR
 orc <project>           # Launch or navigate to a project orchestrator
 orc teardown [project]  # Hierarchical cleanup
 
-# Deliver instructions to a project orchestrator (always use window names):
-printf '%s' "<instructions>" | tmux load-buffer - && tmux paste-buffer -t "orc:<project>" && sleep 0.15 && tmux send-keys -t "orc:<project>" Enter
+# Deliver instructions to a project orchestrator:
+orc send <project> "<instructions>"
+# For multi-line, pipe via stdin:
+# cat << 'EOF' | orc send <project> --stdin
+# multi-line instructions
+# EOF
 ```
 
 ## Boundaries
