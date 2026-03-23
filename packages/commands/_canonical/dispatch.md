@@ -85,6 +85,12 @@ For each ready bead, confirm it has:
 
 If any bead is missing context, flag it and skip it.
 
+### Step 3.5 — Apply Assignment Instructions
+
+Read `[dispatch.goal] assignment_instructions` from config. If set, ensure every engineer's assignment includes the specified content. This is applied when the goal orchestrator writes `.orch-assignment.md` for each bead — on top of the bead description, acceptance criteria, and any plan context.
+
+If empty, the goal orchestrator uses default judgment for assignment content.
+
 ### Step 4 — Check Spawn Approval
 
 Run `echo $ORC_YOLO` to check the mode.

@@ -51,75 +51,33 @@ If tests fail, identify which bead's changes caused the failure and report it. D
 
 If `[review.goal] review_instructions` is configured, verify the review has been completed and approved before proceeding. If it hasn't, do NOT proceed — return to the goal-level review loop.
 
-### Step 4 — Determine Delivery Mode
+### Step 4 — Read Delivery Configuration
 
-Check the delivery configuration:
+Read `[delivery.goal] on_completion_instructions` and `[delivery.goal] when_to_involve_user_in_delivery` from the config chain.
 
-```bash
-# Read from config (defaults to "review")
-# Check [delivery] mode in config.toml or project .orc/config.toml
-```
+### Step 5a — No delivery configured (default)
 
-### Step 5a — Review Mode (default)
+If `on_completion_instructions` is empty:
 
-Signal completion to the project orchestrator:
-
-1. Derive the goal name from your goal branch by stripping the type prefix (`feat/`, `fix/`, `task/`). For example, `fix/auth-bug` → `auth-bug`.
-
-2. Write `review` to your per-goal status file at `.worktrees/.orc-state/goals/{goal}/.worker-status`:
-   ```bash
-   # Example: goal branch "fix/auth-bug" → goal name "auth-bug"
-   echo "review" > .worktrees/.orc-state/goals/<goal-name>/.worker-status
-   ```
-
-3. Present a summary of what was accomplished:
-   ```
-   Goal complete: <goal name>
-   Branch: <goal-branch>
-   Beads completed: N
-     - bd-XXXX: <title>
-     - bd-YYYY: <title>
-
-   Ready for review. The project orchestrator will inspect this branch.
-   ```
-
+1. Signal completion by writing `review` to `.worktrees/.orc-state/goals/{goal}/.worker-status`
+2. Present a summary of what was accomplished
+3. Emit: `_orc_notify GOAL_COMPLETE "<project>/<goal>" "Goal delivered"` (immediately resolved — informational)
 4. **STOP.** Wait for the project orchestrator to review the goal branch.
 
-### Step 5b — PR Mode
+### Step 5b — Delivery instructions configured
 
-Push the goal branch and create a PR:
+If `on_completion_instructions` is set:
 
-1. Push the goal branch:
-   ```bash
-   git push -u origin <goal-branch>
-   ```
-
-2. Generate PR title and body from the completed beads and their descriptions.
-
-3. Create the PR:
-   ```bash
-   gh pr create --base <target-branch> --head <goal-branch> \
-     --title "<type>: <goal description>" \
-     --body "$(cat <<'EOF'
-   ## Summary
-   <goal description and what was accomplished>
-
-   ## Beads Completed
-   - bd-XXXX: <title>
-   - bd-YYYY: <title>
-
-   ## Test Results
-   <test summary>
-   EOF
-   )"
-   ```
-
-   The target branch is determined by the `[delivery] target_strategy` config. If not set, default to `main`.
-
-4. Report the PR URL and signal completion (derive goal name by stripping branch type prefix):
-   ```bash
-   echo "done" > .worktrees/.orc-state/goals/<goal-name>/.worker-status
-   ```
+1. **Evaluate user involvement**: read `when_to_involve_user_in_delivery` (defaults to "always" if empty)
+   - If involvement needed: emit `_orc_notify DELIVERY "<project>/<goal>" "Goal ready for delivery, awaiting approval"` and **pause** for user approval
+   - On resume: `_orc_resolve "<project>/<goal>" "Delivery approved"`
+2. **Execute delivery instructions**: follow the natural-language instructions directly. Common actions:
+   - `git push -u origin <goal-branch>` — push the branch
+   - `gh pr create --base <target> --head <goal-branch> --title "..." --body "..."` — create PR
+   - Ticket updates — if the instructions mention ticket actions, execute them (these take precedence over `[tickets] strategy` for the completion moment)
+   - Slash commands — if instructions reference a slash command, run it
+3. **Signal completion**: write `done` to `.worktrees/.orc-state/goals/{goal}/.worker-status`
+4. Emit: `_orc_notify GOAL_COMPLETE "<project>/<goal>" "Goal delivered"` (immediately resolved)
 
 ### Step 6 — STOP
 

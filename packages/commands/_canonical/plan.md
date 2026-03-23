@@ -117,6 +117,8 @@ After creating branches, check `echo $ORC_YOLO`:
 - **If `ORC_YOLO=1` (YOLO mode):** Do NOT prompt the user. Immediately proceed to run `/orc:dispatch` yourself to spawn goal orchestrators. No questions, no delays.
 - **Otherwise:** Confirm: "Plan created. N goals ready. Run `/orc:dispatch` to start spawning goal orchestrators."
 
+> **Note:** Project-level planning hooks (`[planning.project]`) are a future extension point. The same lifecycle pattern (instructions + involvement criteria) can be applied at the project level for cross-goal planning when needed.
+
 ## Instructions (Goal Orchestrator)
 
 ### Phase 1 — Investigate
@@ -145,7 +147,26 @@ Spawn **parallel codebase scouts** (sub-agents) to investigate the codebase befo
 
 For simple requests (single-file fix, documentation typo), skip scouting and proceed directly to decomposition.
 
+### Phase 1.75 — Plan (if configured)
+
+Check `[planning.goal] plan_creation_instructions` from the config chain. If it is set (non-empty):
+
+1. **Delegate to a planner sub-agent** — spawn an ephemeral planner with:
+   - The goal description and acceptance criteria
+   - Your synthesized scout findings from Phase 1.5
+   - The `plan_creation_instructions` value as the directive
+   - Do NOT run the planning tool yourself
+2. **Wait for completion** — the planner returns what was created, where, and a summary
+3. **Evaluate user involvement** — read `[planning.goal] when_to_involve_user_in_plan` (defaults to "always" if empty)
+   - If involvement needed: notify the user and pause until they provide input
+   - If not needed: proceed directly
+4. **Use plan output** to inform Phase 2 decomposition. Also read `[planning.goal] bead_creation_instructions` — if set, follow these project conventions when creating beads from the plan.
+
+If `plan_creation_instructions` is empty → skip this phase and proceed to Phase 2 (today's behavior).
+
 ### Phase 2 — Decompose into Beads
+
+**Check config**: Read `[planning.goal] bead_creation_instructions`. If set, follow these conventions for how plan artifacts map to beads. Also read `[dispatch.goal] assignment_instructions` — if set, include this content in every bead's description/assignment context.
 
 Break the goal into **beads** (units of work). Each bead should be:
 - **Independently implementable** by a single engineer agent in an isolated worktree

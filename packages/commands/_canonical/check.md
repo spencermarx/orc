@@ -112,7 +112,7 @@ The engineer has finished and is requesting review.
        git -C <project_path> fetch . work/<goal>/<bead>:<goal-branch>
        ```
        If rebase has conflicts, **escalate to the human** — do not force merge.
-     - Mark the bead as done. Proceed to teardown based on `approval.merge` config.
+     - Mark the bead as done. Proceed to teardown based on `approval.ask_before_merging` config.
    - **Not approved**: The feedback is already in `.worker-feedback`. Send a message to the engineering pane to trigger `/orc:feedback`, or note it for manual follow-up.
 
 #### Status: `blocked: <reason>`
@@ -124,15 +124,34 @@ The engineer is stuck and has stopped.
    - **Dependency issue**: Check if the blocking bead is close to done.
    - **Out of scope**: Escalate to the human.
 4. If resolved, clear `.worker-status` back to `working` and notify the engineer.
+   - Emit: `_orc_notify BLOCKED "<project>/<goal>/<bead>" "Engineer blocked: <reason>"`
+   - On resolution: `_orc_resolve "<project>/<goal>/<bead>" "Block cleared"`
+
+#### Status: `question: <question>`
+The engineer needs clarification to proceed correctly.
+1. Read the question from `.worker-status`.
+2. Attempt to answer from plan context or by spawning a targeted scout sub-agent.
+3. **If you can answer:**
+   - Write the answer to `.worker-feedback`
+   - Reset `.worker-status` to `working`
+4. **If you cannot answer** (requires domain knowledge or user decision):
+   - Emit notification: `_orc_notify QUESTION "<project>/<goal>/<bead>" "Engineer needs clarification: <question summary>"`
+   - Highlight the pane: `_orc_pane_highlight "<project>/<goal>" <pane_index>`
+   - Pause until the user provides the answer
+   - Write answer to `.worker-feedback`, reset status to `working`
+   - Resolve: `_orc_resolve "<project>/<goal>/<bead>" "Question answered"`
+   - Clear: `_orc_pane_unhighlight "<project>/<goal>" <pane_index>`
 
 #### Status: `dead` (or no running agent process)
 The agent has crashed or exited unexpectedly.
 1. Report the dead worker with any available context.
 2. Suggest options: respawn in the same worktree, teardown, or manual inspection.
 
-### Step 3 — Check for Discoveries
+### Step 3 — Check for Discoveries and Plan Issues
 
-Look for `found:` annotations in any `.worker-status` files. Discoveries are out-of-scope findings that may affect other beads or the overall plan. Surface them to the user.
+Look for `found:` annotations in any `.worker-status` files:
+- **`found: plan-issue — <description>`**: The plan itself needs revision. Emit `_orc_notify PLAN_INVALIDATED "<project>/<goal>" "Plan needs revision: <description>"`. Pause affected beads, re-engage the planner sub-agent, evaluate user involvement, re-decompose.
+- **`found: <other>`**: Out-of-scope discovery. Create a new bead for it, set dependencies, add to queue. Surface to user.
 
 ### Step 4 — Summarize
 
