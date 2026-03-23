@@ -113,6 +113,8 @@ Spawn the planner using the **Agent tool** (subagent spawning). Include in the p
 - The full `plan_creation_instructions` value — do not modify or filter it
 - The project path for context
 
+**CRITICAL — do NOT use worktree isolation.** When calling the Agent tool, do NOT set `isolation: "worktree"`. The planner must run in YOUR worktree (inherited CWD), not in a separate Claude Code worktree. Claude Code's worktree isolation creates a `.claude/worktrees/` checkout that conflicts with orc's `.worktrees/` checkout on the same branch — git cannot have two worktrees on the same branch, so orc's worktree gets removed and your shell CWD becomes invalid.
+
 **CRITICAL — use the Agent tool, NOT the Plan tool.** The Agent tool spawns a separate sub-agent that runs independently. The Plan tool enters planning mode in YOUR context — that violates the delegation boundary. You must never run planning tools or slash commands from `plan_creation_instructions` yourself, not even in Plan mode. The planner sub-agent runs them in its own context.
 
 **Step 2 — Verify worktree and handle the planner's response.**
@@ -238,10 +240,12 @@ If `review_instructions` is **empty** → skip goal review entirely, go straight
 
 **Step 1 — Delegate the review to an ephemeral sub-agent:**
 
-Spawn a reviewer sub-agent (using the Agent tool) with:
+Spawn a reviewer sub-agent (using the Agent tool, **without** `isolation: "worktree"`) with:
 - The `review_instructions` value as the task to execute
 - The project path and goal branch for context
 - Instruction to return its full review findings when complete
+
+**Do NOT use worktree isolation** — same as with the planner. The reviewer runs in your worktree.
 
 **Do NOT run the review_instructions yourself** — not even "just this once." Running review tools consumes significant context and is the reviewer's job, not yours. You spawn, you wait, you evaluate.
 
