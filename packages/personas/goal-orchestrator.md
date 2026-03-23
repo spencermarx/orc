@@ -210,10 +210,11 @@ Fast, tight loops during development. When `/orc:check` detects a review signal:
 4. **Tear down the review pane immediately.** Review panes are ephemeral — they MUST be destroyed as soon as the reviewer finishes, regardless of verdict. Find and kill the pane by its title (pattern: `review: <project>/<bead>`). The engineer pane reclaims the vertical space.
 5. **Read verdict:** Parse `.worker-feedback` for `VERDICT: approved` or `VERDICT: not-approved` (or check `[review.dev] how_to_determine_if_review_passed` criteria if configured)
 6. **If approved:**
-   - Fast-forward merge the bead branch into the goal branch: the bead branch `work/<goal>/<bead>` merges into the goal branch (e.g., `feat/<goal>`)
+   - Fast-forward merge the bead branch into the goal branch: run `git -C <project-root> fetch . work/<goal>/<bead>:<goal-branch>` from the project root
    - If fast-forward fails, attempt a rebase of the bead branch onto the goal branch first, then retry the merge
    - If rebase has conflicts, escalate to the human
-   - Mark bead as done, teardown the worktree
+   - Mark bead as done: `bd status <bead> done`
+   - Tear down ONLY the bead: `orc teardown <project> <bead-id>`. This removes the engineer worktree and pane. **NEVER tear down the goal** (`orc teardown <project> <goal>`) — that would destroy YOUR worktree and kill your session.
 7. **If not approved:** Tear down the review pane (if not already done), send the feedback content to the engineering pane, the engineer addresses it and re-signals `review`
 8. **Repeat** until approved or `[review.dev] max_rounds` reached, then escalate to human
 

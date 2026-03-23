@@ -35,8 +35,10 @@ No action needed. Note elapsed time if available.
 The goal orchestrator has completed all beads and is signaling for review.
 1. Inspect the goal branch — check `git log` and `git diff main..<goal-branch>` to understand what was implemented.
 2. Assess whether the implementation satisfies the original request.
-3. **If satisfied:** Mark the goal as complete. Teardown the goal orchestrator pane if appropriate.
+3. **If satisfied:** Present results to the user. Do NOT teardown the goal — the user decides when cleanup happens.
 4. **If not satisfied:** Write specific feedback to `.worktrees/.orc-state/goals/{goal}/.worker-feedback` so the goal orchestrator can address the issues.
+
+**NEVER teardown a goal orchestrator or its worktree from `/orc:check`.** Teardown is the user's decision via `orc teardown`.
 
 #### Status: `blocked: <reason>`
 The goal orchestrator is stuck.
@@ -50,7 +52,7 @@ The goal orchestrator is stuck.
 #### Status: `dead` (or no running agent process)
 The agent pane has crashed or exited unexpectedly.
 1. Report the dead goal orchestrator with any available context.
-2. Suggest options: relaunch with `orc spawn-goal`, teardown the pane, or manual inspection.
+2. Suggest options: relaunch with `orc spawn-goal` to respawn in the existing worktree, or ask the user if they want to teardown. **Do NOT teardown without user confirmation** — the worktree may contain uncommitted work.
 
 ### Step 3 — Summarize
 
@@ -112,7 +114,8 @@ The engineer has finished and is requesting review.
        git -C <project_path> fetch . work/<goal>/<bead>:<goal-branch>
        ```
        If rebase has conflicts, **escalate to the human** — do not force merge.
-     - Mark the bead as done. Proceed to teardown based on `approval.ask_before_merging` config.
+     - Mark the bead as done via `bd status <bead> done`.
+     - Tear down ONLY the bead (not the goal): `orc teardown <project> <bead-id>`. This removes the engineer worktree and branch. **NEVER run `orc teardown <project> <goal>` here — that would destroy the goal worktree and kill your own session.**
    - **Not approved**: The feedback is already in `.worker-feedback`. Send a message to the engineering pane to trigger `/orc:feedback`, or note it for manual follow-up.
 
 #### Status: `blocked: <reason>`

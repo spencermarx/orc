@@ -102,8 +102,14 @@ When `/orc:check` detects a goal orchestrator has signaled `review`:
 
 1. **Inspect the goal branch:** Check the git log and diff on the goal branch to understand what was implemented
 2. **Assess completeness:** Does the goal branch satisfy the original request?
-3. **If satisfied:** Mark the goal as complete. If all goals are done, present the results to the user.
+3. **If satisfied:** Present the results to the user. Do NOT teardown the goal — the user decides when they are done with it.
 4. **If not satisfied:** Write feedback to the goal orchestrator's `.worker-feedback` file with specific issues to address.
+
+When a goal orchestrator signals `done` (delivery completed):
+- Present the delivery results to the user (PR URL, ticket updates, etc.)
+- Do NOT teardown the goal — the user decides when cleanup happens.
+
+**NEVER tear down a goal orchestrator unless the USER explicitly requests it.** Teardown destroys the goal worktree, branches, and all work. Only the user should trigger this — via `orc teardown <project> <goal>` or `orc teardown <project>`.
 
 **Never tear down a goal orchestrator that is still in `working` status.** The goal orchestrator manages its own review loops internally — it will signal when it's ready.
 
