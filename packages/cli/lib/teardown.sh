@@ -375,17 +375,17 @@ _teardown_project() {
 }
 
 _teardown_all() {
-  # Kill the tmux session FIRST so the user sees a clean exit immediately.
-  # Git/worktree cleanup follows — it doesn't need tmux.
+  # Clean up each project FIRST (while tmux is still alive for pane operations)
+  for key in $(_project_keys); do
+    _teardown_project "$key" 2>/dev/null || _warn "Partial cleanup for '$key' — manual cleanup may be needed."
+  done
+
+  # Kill the tmux session AFTER project cleanup is done
   tmux kill-session -t "$ORC_TMUX_SESSION" 2>/dev/null || true
 
   # Clean up notification log
   local state_dir="$(_orc_state_dir)"
   rm -rf "$state_dir" 2>/dev/null || true
-
-  for key in $(_project_keys); do
-    _teardown_project "$key" 2>/dev/null || _warn "Partial cleanup for '$key' — manual cleanup may be needed."
-  done
 
   _info "Torn down everything. Clean slate."
 }
