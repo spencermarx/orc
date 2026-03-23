@@ -299,6 +299,18 @@ $validation_output
 4. Apply confirmed changes (edit the config files directly)
 5. Run \`orc doctor\` at the end to verify all issues are resolved
 
+## Delegation Model Awareness
+
+When reviewing or suggesting lifecycle hook values, keep the delegation model in mind:
+
+- plan_creation_instructions: executed by a PLANNER sub-agent, not the goal orchestrator. Slash commands and conditional logic are valid. The planner evaluates conditions and runs tools in the goal worktree.
+- review_instructions: executed by a REVIEWER sub-agent, not the goal orchestrator.
+- bead_creation_instructions: read by the goal orchestrator to guide plan-to-bead decomposition.
+- assignment_instructions in [dispatch.goal]: read by the goal orchestrator when writing engineer assignments.
+- on_completion_instructions: executed by the goal orchestrator directly (delivery actions).
+
+If you see config values that assume the goal orchestrator runs planning tools directly (e.g., step-by-step instructions mixing planning tool execution with bead decomposition in a single field), suggest splitting them: planning tool directives go in plan_creation_instructions, decomposition conventions go in bead_creation_instructions.
+
 ## Boundaries
 
 - Mechanical renames should already be handled by --auto-fix

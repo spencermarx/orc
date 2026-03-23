@@ -63,6 +63,28 @@ cat "$ORC_ROOT/config.toml" >> "$briefing_file"
 cat >> "$briefing_file" <<'STATIC2_EOF'
 --- END CONFIG SCHEMA ---
 
+## IMPORTANT: How Lifecycle Hooks Are Executed (Delegation Model)
+
+Orc uses a delegation model — the goal orchestrator NEVER runs lifecycle tools directly. It delegates to sub-agents:
+
+- plan_creation_instructions: executed by a PLANNER sub-agent (not the goal orchestrator). Write values that make sense as instructions for the planner. The planner receives the goal context and scout findings alongside these instructions.
+- review_instructions: executed by a REVIEWER sub-agent (not the goal orchestrator).
+- on_completion_instructions: executed by the goal orchestrator directly (delivery is infrastructure, not artifact creation).
+
+When writing plan_creation_instructions:
+- Slash commands (e.g., "/openspec:proposal") are run by the planner in the goal worktree
+- Conditional logic is valid (e.g., "if bug fix, skip planning") — the planner evaluates conditions
+- The goal orchestrator passes these instructions as-is to the planner and handles the response
+- Do NOT write instructions that assume the goal orchestrator runs them directly
+
+When writing bead_creation_instructions:
+- These ARE read by the goal orchestrator (not a sub-agent) to guide bead decomposition from plan artifacts
+- Write conventions for how plan output maps to beads (e.g., "each task group in tasks.md becomes a bead")
+
+When writing assignment_instructions in [dispatch.goal]:
+- These ARE read by the goal orchestrator when writing engineer assignments
+- Applied universally to every dispatch, whether from a plan or direct decomposition
+
 ## Your Workflow
 
 1. Scout the project — spawn parallel scout sub-agents to investigate:
