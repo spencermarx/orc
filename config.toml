@@ -15,17 +15,36 @@ yolo_flags = ""                  # auto-accept flags per agent (--yolo); empty =
                                  # codex=--dangerously-bypass-approvals-and-sandbox, gemini=--yolo
 max_workers = 3
 
+[planning.goal]
+plan_creation_instructions = ""  # How to create the plan — given to a planner sub-agent after investigation
+                                 # Can be a slash command, natural language, or both
+                                 # e.g., "/openspec:proposal", "Create a design doc in .orc-state/goals/{goal}/plan.md"
+                                 # empty = no planning phase (goal orchestrator decomposes directly)
+bead_creation_instructions = ""  # How to create beads from plan artifacts — project-specific decomposition conventions
+                                 # e.g., "Decompose beads from tasks.md. Each bead maps to one or more task items."
+                                 # empty = goal orchestrator uses default judgment
+when_to_involve_user_in_plan = "" # When to pause for user review before decomposing into beads
+                                  # e.g., "always", "never", "when the plan involves more than 3 beads"
+                                  # empty = "always"
+
+[dispatch.goal]
+assignment_instructions = ""     # What to include in every engineer's assignment when dispatched
+                                 # Applied to ALL dispatches, whether from a plan or direct decomposition
+                                 # e.g., "Include the full proposal directory path. Quote specific tasks verbatim."
+                                 # e.g., "Always include the project's test command. Reference relevant CLAUDE.md sections."
+                                 # empty = goal orchestrator uses default judgment
+
 [approval]
-spawn = "ask"
-review = "auto"
-merge = "ask"
+ask_before_dispatching = "ask"   # "ask" = confirm before spawning workers, "auto" = proceed automatically
+ask_before_reviewing = "auto"    # "ask" = confirm before starting reviews, "auto" = proceed automatically
+ask_before_merging = "ask"       # "ask" = confirm before merging beads, "auto" = proceed automatically
 
 [review.dev]
 # Short cycle — bead-level review during development
 review_instructions = ""     # how to perform the review — a slash command, natural language guidelines, or both
                              # empty = built-in reviewer persona
                              # e.g., "/my-review-tool", "Enforce strict type safety", or "/ocr:review — focus on security"
-verify_approval = ""         # how to determine the review passed
+how_to_determine_if_review_passed = ""  # how to determine the review passed
                              # empty = parse VERDICT: approved from .worker-feedback
 max_rounds = 3
 
@@ -33,8 +52,8 @@ max_rounds = 3
 # Long cycle — goal-level review after all beads complete
 review_instructions = ""     # how to perform the goal-level review; empty = skip (go straight to delivery)
                              # e.g., "/ocr:review" (see https://github.com/spencermarx/open-code-review)
-verify_approval = ""         # how to determine the review passed
-address_feedback = ""        # how engineers should address rejection feedback
+how_to_determine_if_review_passed = ""  # how to determine the review passed
+how_to_address_review_feedback = ""     # how engineers should address rejection feedback
 max_rounds = 3
 
 [branching]
@@ -42,14 +61,24 @@ strategy = ""                # Natural language branch naming preference
                              # Default: feat/, fix/, task/ + ticket prefix if available
                              # e.g., "always use feat/ prefix" or "use JIRA ticket as prefix"
 
-[delivery]
-mode = "review"              # "review" = goal orch signals review, user inspects branch
-                             # "pr" = push goal branch + create PR via gh CLI
-target_strategy = ""         # Natural language PR target branch strategy (default: main)
-                             # e.g., "gitflow: target develop, hotfix → release branch"
+[delivery.goal]
+on_completion_instructions = ""  # What to do when a goal is complete — natural language or slash command
+                                 # e.g., "push the goal branch and create a PR targeting develop"
+                                 # e.g., "push the goal branch, create a PR targeting main, archive the openspec change"
+                                 # empty = signal review to project orchestrator (today's default behavior)
+when_to_involve_user_in_delivery = ""  # When to pause for user approval before executing delivery
+                                       # e.g., "always", "never", "when the PR targets main"
+                                       # empty = "always"
 
 [agents]
 ruflo = "off"                # "off" (default), "auto", or "require"
+
+[notifications]
+system = false               # true = send OS notifications (terminal-notifier on macOS, notify-send on Linux)
+sound = false                # true = audible alert on notification
+
+[updates]
+check_on_launch = true       # false = disable update check on orc launch
 
 [tickets]
 strategy = "Move tickets to `In Development` when goals start, and `Ready for Code Review` when goals are complete"                # Natural language ticket integration strategy (project-level concern)
