@@ -93,9 +93,10 @@ orc_start() {
         _info "Orchestrator for '$project' session ended. Relaunching."
         _launch_agent_in_window "$project" "$persona" "$project_path" "$init_prompt"
       else
-        _info "Orchestrator for '$project' running. Attaching."
+        _info "Orchestrator for '$project' running."
       fi
-      _orc_goto "$project"
+      # --background: don't switch to the window (used by root orch for multi-project delegation)
+      [[ "${ORC_BACKGROUND:-0}" != "1" ]] && _orc_goto "$project"
       return
     fi
 
@@ -105,7 +106,8 @@ orc_start() {
     _tmux_new_window "$project" "$project_path" "$after"
     _launch_agent_in_window "$project" "$persona" "$project_path" "$init_prompt"
 
-    _orc_goto "$project"
+    # --background: don't switch to the window
+    [[ "${ORC_BACKGROUND:-0}" != "1" ]] && _orc_goto "$project"
   fi
 }
 

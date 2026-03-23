@@ -63,10 +63,12 @@ if [[ -n "${TMUX:-}" ]] && [[ "${ORC_YOLO:-}" != "1" ]]; then
 fi
 
 export ORC_YOLO="${ORC_YOLO:-0}"
+export ORC_BACKGROUND="${ORC_BACKGROUND:-0}"
 args=()
 for arg in "$@"; do
   case "$arg" in
     --yolo) ORC_YOLO=1 ;;
+    --background|--bg) ORC_BACKGROUND=1 ;;
     *)      args+=("$arg") ;;
   esac
 done

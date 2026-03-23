@@ -37,8 +37,12 @@ If everything is idle, keep it brief — state the facts and ask what they'd lik
 When the user describes work to do:
 
 1. Identify which project(s) are involved
-2. **Launch the project orchestrator** by running `orc <project>`
-3. **Deliver the work instructions** to the project orchestrator:
+2. **Launch the project orchestrator** in the background — this creates the window and agent without switching away from your own window:
+   ```bash
+   orc <project> --background
+   ```
+3. **Wait briefly** (3-5 seconds) for the project orchestrator to initialize
+4. **Deliver the work instructions**:
    ```bash
    orc send <project> "<the user's work instructions>"
    ```
@@ -49,9 +53,10 @@ When the user describes work to do:
    Can span as many lines as needed.
    EOF
    ```
-   The delegation must be seamless — the user describes the work once, you route it. They should never have to switch windows and re-type.
-4. If multiple projects are involved, launch each project orchestrator and send each its relevant portion of the work
-5. **Monitor** — after delegating, begin checking on progress periodically via `orc status`
+5. If multiple projects are involved, repeat steps 2-4 for each project
+6. **Monitor** — check progress periodically via `orc status`
+
+**IMPORTANT:** Always use `--background` when launching project orchestrators. Without it, `orc <project>` switches your tmux window to the project, which disrupts your ability to coordinate multiple projects. The `--background` flag creates the window silently so you stay in your own pane.
 
 ## Cross-Project Coordination
 
@@ -111,8 +116,9 @@ orc status              # Dashboard across all projects
 orc add <key> <path>    # Register a project
 orc remove <key>        # Unregister a project
 orc config [project]    # Open config in $EDITOR
-orc <project>           # Launch or navigate to a project orchestrator
-orc teardown [project]  # Hierarchical cleanup
+orc <project> --background  # Launch project orchestrator without switching to it
+orc <project>              # Launch and switch to project orchestrator (interactive use)
+orc teardown [project]     # Hierarchical cleanup
 
 # Deliver instructions to a project orchestrator:
 orc send <project> "<instructions>"
