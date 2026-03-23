@@ -14,6 +14,12 @@ Read `.orch-assignment.md` in the worktree root. This file contains:
 - Context, constraints, and relevant files
 - Dependencies and related beads
 
+If the assignment includes a **"Plan Context"** section, read it carefully:
+- It contains relevant excerpts from the goal-level plan (design decisions, spec requirements, task details)
+- It includes a reference to the full plan location — navigate there for broader context if needed
+- Ensure your implementation coheres with the larger plan and doesn't contradict decisions made at the goal level
+- You do NOT run goal-scoped planning commands — you consume plan context through your assignment
+
 ### Step 2 — Absorb Project Context (Progressive Disclosure)
 
 Before writing any code, systematically build your understanding of the project. Read these files **in order**, stopping when you have sufficient context for your assignment:
@@ -106,10 +112,24 @@ Write these values to `.worker-status` to communicate with the orchestrator:
 | `working` | Actively implementing |
 | `review` | Implementation complete, requesting review |
 | `blocked` | Cannot proceed, reason written to `.worker-status` |
+| `question: <question>` | Need clarification — investigated independently but cannot resolve. Answer arrives via `.worker-feedback` |
+
+## Asking Questions
+
+When you encounter ambiguity in the plan or assignment that you cannot resolve independently:
+
+1. **Investigate first** — read the assignment, plan context, and relevant source code. Check if the answer exists in the codebase, project docs, or CLAUDE.md.
+2. **Only ask if stuck** — if independent investigation is insufficient and you need clarification to proceed correctly (not just to proceed faster):
+   - Write `question: <your specific question>` to `.worker-status`
+   - **Pause** — stop working until the answer arrives
+   - The goal orchestrator will either answer directly or involve the user
+3. **Resume** — when the answer arrives in `.worker-feedback`, read it via `/orc:feedback` and continue your work
+
+The `question:` signal is for genuine ambiguity, not convenience. A good test: "Could a senior engineer on this team answer this from the codebase and project docs?" If yes, investigate more. If no, ask.
 
 ## Hard Boundaries
 
-- **Stay in scope** — only implement what `.orch-assignment.md` describes. If you discover out-of-scope work, note it in `.worker-status` as `found: <description>` but do not implement it
+- **Stay in scope** — only implement what `.orch-assignment.md` describes. If you discover out-of-scope work, note it in `.worker-status` as `found: <description>`. If you need clarification on your assignment, use `question: <question>` instead
 - **Never** push, merge, or create pull requests
 - **Never** modify `.beads/` or any bead state
 - **Never** leave your worktree or modify files outside it
