@@ -361,6 +361,10 @@ _teardown_all() {
   # Git/worktree cleanup follows — it doesn't need tmux.
   tmux kill-session -t "$ORC_TMUX_SESSION" 2>/dev/null || true
 
+  # Clean up notification log
+  local state_dir="$(_orc_state_dir)"
+  rm -rf "$state_dir" 2>/dev/null || true
+
   for key in $(_project_keys); do
     _teardown_project "$key" 2>/dev/null || _warn "Partial cleanup for '$key' — manual cleanup may be needed."
   done

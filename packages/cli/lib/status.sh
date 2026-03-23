@@ -57,6 +57,12 @@ if [[ "${1:-}" == "--line" ]]; then
   c_error="#f85149"
 
   parts=()
+  # Notification count
+  local notify_count
+  notify_count="$(_orc_notify_active_count 2>/dev/null || echo 0)"
+  if (( notify_count > 0 )); then
+    parts+=("#[fg=${c_activity}]● ${notify_count} active#[fg=${c_fg}]")
+  fi
   if (( goals > 0 )); then
     goal_detail=""
     (( goal_review > 0 ))  && goal_detail+=" ${goal_review}✓"

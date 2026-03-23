@@ -7,6 +7,35 @@ set -euo pipefail
 orc_start() {
   local project="${1:-}"
 
+  # ── Update awareness pre-step ───────────────────────────────────────
+  local check_on_launch
+  check_on_launch="$(_config_get "updates.check_on_launch" "true")"
+  if [[ "$check_on_launch" == "true" ]]; then
+    # Check for version updates (non-blocking, 2s timeout)
+    local behind_count=""
+    if timeout 2 git -C "$ORC_ROOT" fetch origin main --quiet 2>/dev/null; then
+      behind_count="$(git -C "$ORC_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo "")"
+    fi
+    if [[ -n "$behind_count" && "$behind_count" -gt 0 ]]; then
+      _info "Your orc is $behind_count commit(s) behind main. Run \`git -C $ORC_ROOT pull\` to update."
+    fi
+
+    # Post-update hint: detect if HEAD changed since last launch
+    local state_dir="$(_orc_state_dir)"
+    mkdir -p "$state_dir"
+    local last_head_file="$state_dir/last-head"
+    local current_head
+    current_head="$(git -C "$ORC_ROOT" rev-parse HEAD 2>/dev/null || echo "")"
+    if [[ -f "$last_head_file" ]]; then
+      local saved_head
+      saved_head="$(cat "$last_head_file" 2>/dev/null || echo "")"
+      if [[ -n "$current_head" && "$current_head" != "$saved_head" ]]; then
+        _info "Updated to latest. Run \`orc doctor\` to check for config changes."
+      fi
+    fi
+    [[ -n "$current_head" ]] && echo "$current_head" > "$last_head_file"
+  fi
+
   _require tmux "brew install tmux"
 
   if [[ -z "$project" ]]; then

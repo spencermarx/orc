@@ -43,3 +43,4 @@ fi
 _orc_git_exclude "$path"
 
 _info "Added project '$key' → $path"
+_info "Run \`orc setup $key\` for guided config setup."
