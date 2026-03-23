@@ -1,3 +1,18 @@
+## 0.2.6 (2026-03-23)
+
+### 🩹 Fixes
+
+- **cli:** use tmux per-pane @orc_id for stable pane discovery ([99c9fd0](https://github.com/spencermarx/orc/commit/99c9fd0))
+- **cli:** stable pane discovery via @orc_id and layout hook for goal windows ([0f3bf19](https://github.com/spencermarx/orc/commit/0f3bf19))
+- **cli:** teardown all projects before killing tmux session ([c9dbab6](https://github.com/spencermarx/orc/commit/c9dbab6))
+- **personas:** clarify orc review must be a direct Bash command, not a sub-agent ([ee4409b](https://github.com/spencermarx/orc/commit/ee4409b))
+- **personas:** make teardown instructions unambiguous to prevent goal destruction ([17f7cea](https://github.com/spencermarx/orc/commit/17f7cea))
+
+### ❤️ Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.5 (2026-03-23)
 
 ### 🩹 Fixes
