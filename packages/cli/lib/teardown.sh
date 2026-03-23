@@ -191,16 +191,7 @@ _teardown_goal() {
     done
   fi
 
-  # ── 1.5. Remove goal orchestrator worktree ──
-  local goal_worktree="$project_path/.worktrees/goal-${goal}"
-  if [[ -d "$goal_worktree" ]]; then
-    _load_adapter "$project_path"
-    _adapter_post_teardown "$goal_worktree" 2>/dev/null || true
-    git -C "$project_path" worktree remove ".worktrees/goal-${goal}" --force 2>/dev/null || true
-    _info "Removed goal worktree for '${goal}'."
-  fi
-
-  # ── 2. Kill goal window and any overflow windows ──
+  # ── 2. Kill goal window FIRST (stop agents before removing their worktree) ──
 
   # Kill overflow windows first
   local overflow_win
@@ -210,9 +201,18 @@ _teardown_goal() {
     _pane_registry_clear "$overflow_win"
   done
 
-  # Kill the primary goal window (if it still exists — may already be gone if all panes were killed)
+  # Kill the primary goal window (stops the goal orchestrator agent)
   _tmux_kill_window "$goal_window"
   _pane_registry_clear "$goal_window"
+
+  # ── 2.5. Remove goal orchestrator worktree (safe now — agent is stopped) ──
+  local goal_worktree="$project_path/.worktrees/goal-${goal}"
+  if [[ -d "$goal_worktree" ]]; then
+    _load_adapter "$project_path"
+    _adapter_post_teardown "$goal_worktree" 2>/dev/null || true
+    git -C "$project_path" worktree remove ".worktrees/goal-${goal}" --force 2>/dev/null || true
+    _info "Removed goal worktree for '${goal}'."
+  fi
 
   # ── 3. Delete any remaining work/<goal>/* branches (orphaned, already merged) ──
 
