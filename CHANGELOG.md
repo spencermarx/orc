@@ -1,3 +1,20 @@
+## 0.2.2 (2026-03-23)
+
+### 🚀 Features
+
+- **cli:** add orc send command for reliable text delivery to agent panes ([a448529](https://github.com/spencermarx/orc/commit/a448529))
+- **docs:** add 30-second architecture diagram ([7b944d3](https://github.com/spencermarx/orc/commit/7b944d3))
+
+### 🩹 Fixes
+
+- **cli:** use tmux load-buffer for multi-line agent instructions ([43dc5d9](https://github.com/spencermarx/orc/commit/43dc5d9))
+- **cli:** use stdin pipe to tmux load-buffer — no temp files, no branching ([f83b5e7](https://github.com/spencermarx/orc/commit/f83b5e7))
+
+### ❤️ Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.1 (2026-03-23)
 
 This was a version bump only, there were no code changes.
