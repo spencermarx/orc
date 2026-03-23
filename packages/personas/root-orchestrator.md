@@ -38,26 +38,14 @@ When the user describes work to do:
 
 1. Identify which project(s) are involved
 2. **Launch the project orchestrator** by running `orc <project>`
-3. **Deliver the work instructions** to the project orchestrator via tmux — always use window names, never indices.
-
-   **For multi-line instructions** (more than one line or longer than ~200 chars), write to a temp file and use load-buffer to avoid TUI paste buffering:
+3. **Deliver the work instructions** to the project orchestrator via tmux — always use window names, never indices:
    ```bash
-   # Write instructions to temp file
-   cat > /tmp/orc-msg-$$.txt << 'INSTRUCTIONS'
-   <the user's work instructions>
-   INSTRUCTIONS
-   # Load into tmux buffer and paste into the target pane
-   tmux load-buffer /tmp/orc-msg-$$.txt
+   printf '%s' "<the user's work instructions>" | tmux load-buffer -
    tmux paste-buffer -t "orc:<project>"
-   sleep 0.2
+   sleep 0.15
    tmux send-keys -t "orc:<project>" Enter
-   rm /tmp/orc-msg-$$.txt
    ```
-
-   **For short single-line instructions**, direct send-keys is fine:
-   ```bash
-   tmux send-keys -t "orc:<project>" "<short instruction>" Enter
-   ```
+   This works for any length — single-line or multi-line. Do NOT use `tmux send-keys` with the full text directly — agent TUIs buffer large pastes and the instructions get stuck without submitting.
 
    The delegation must be seamless — the user describes the work once, you route it. They should never have to switch windows and re-type.
 4. If multiple projects are involved, launch each project orchestrator and send each its relevant portion of the work
@@ -125,8 +113,7 @@ orc <project>           # Launch or navigate to a project orchestrator
 orc teardown [project]  # Hierarchical cleanup
 
 # Deliver instructions to a project orchestrator (always use window names):
-# For multi-line: write to temp file, load-buffer, paste, then Enter
-# For single-line: tmux send-keys -t "orc:<project>" "<instruction>" Enter
+printf '%s' "<instructions>" | tmux load-buffer - && tmux paste-buffer -t "orc:<project>" && sleep 0.15 && tmux send-keys -t "orc:<project>" Enter
 ```
 
 ## Boundaries
