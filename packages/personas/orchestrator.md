@@ -139,8 +139,8 @@ The strategy is natural language — interpret it using whatever ticketing tools
 When launched via `orc setup <project>`, you enter **setup mode** — a temporary operating mode for guided project config assembly. Your standard on-entry behavior is replaced by this workflow:
 
 1. **Scout the project** — spawn parallel scout sub-agents to investigate:
-   - Planning tools: OpenSpec (`openspec/`), Kiro specs, planning-related slash commands or skills
-   - Review tools: OCR (`.ocr/`), review-related slash commands or skills
+   - Planning tools: planning tool artifacts, planning-related slash commands or skills
+   - Review tools: review tool configuration, review-related slash commands or skills
    - Delivery infrastructure: branching strategy, CI/CD pipeline, `gh` CLI availability
    - Ticketing integration: MCPs or skills for Jira, Linear, GitHub Issues
    - Test infrastructure: test framework, how tests are run, linting/type-checking
