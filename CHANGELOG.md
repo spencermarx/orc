@@ -1,3 +1,16 @@
+## 0.2.3 (2026-03-23)
+
+### 🩹 Fixes
+
+- **cli:** kill goal window before removing worktree in teardown ([8c56df9](https://github.com/spencermarx/orc/commit/8c56df9))
+- **cli:** auto-detect abacus in board, recreate stale windows, skip version check ([bf91762](https://github.com/spencermarx/orc/commit/bf91762))
+- **cli:** select target window before attaching tmux session from external terminal ([b844888](https://github.com/spencermarx/orc/commit/b844888))
+
+### ❤️ Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.2 (2026-03-23)
 
 ### 🚀 Features
