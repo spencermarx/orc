@@ -1,3 +1,16 @@
+## 0.2.5 (2026-03-23)
+
+### 🩹 Fixes
+
+- **personas:** add worktree recovery guide to goal orchestrator ([9992418](https://github.com/spencermarx/orc/commit/9992418))
+- **personas:** prevent Claude Code worktree isolation from conflicting with orc worktrees ([7604414](https://github.com/spencermarx/orc/commit/7604414))
+- **personas:** make sub-agent worktree rule CLI-agnostic ([e69b4ef](https://github.com/spencermarx/orc/commit/e69b4ef))
+
+### ❤️ Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.4 (2026-03-23)
 
 ### 🚀 Features
