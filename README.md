@@ -43,33 +43,11 @@ Everything else is configuration. [Deep dive &rarr;](docs/concepts.md)
 
 ## The 30-Second Version
 
-```
-  "Fix auth, add rate limiting, update docs"
-                    |
-                    v
-            +----- orc -----+                     You describe the work.
-            |      |        |
-            v      v        v
-      fix/auth  feat/rate  task/docs             Orc creates goal branches.
-            |      |        |
-            v      v        v
-          Plan > Decompose > Dispatch            (Optional) Plan with your tools,
-                                                 then decompose into beads.
-        |   |      |         |
-        v   v      v         v
-       +-+ +-+   +-+       +-+
-       |E| |E|   |E|       |E|               Engineers work in parallel,
-       +-+ +-+   +-+       +-+               each in an isolated worktree.
-        |   |      |         |
-        v   v      v         v
-       Y/N Y/N    Y/N       Y/N                 Built-in review loop.
-        |   |      |         |
-        v   v      v         v
-      fix/auth  feat/rate  task/docs             Approved beads merge
-        |          |         |                   back to goal branches.
-        v          v         v
-          Deliver (PR, tickets, etc.)            Your delivery pipeline runs.
-```
+<p align="center">
+  <img src="assets/orc-30-sec-diagram.png" alt="Orc lifecycle — one prompt fans out to parallel goals, each with its own plan, engineers, review loop, and delivery" width="800" />
+</p>
+
+You describe the work. Orc fans it out to parallel goals — each runs its own lifecycle: plan, decompose into work items, dispatch engineers in isolated worktrees, review every piece, merge, and deliver. Every phase is a configurable hook. [Deep dive into the lifecycle &rarr;](docs/concepts.md#the-lifecycle)
 
 <p align="center">
   <img src="assets/orc-in-action.png" alt="Orc in action — goal orchestrator managing beads while an engineer implements in an isolated worktree" width="900" />
