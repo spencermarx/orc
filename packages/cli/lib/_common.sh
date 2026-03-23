@@ -375,7 +375,9 @@ _orc_goto() {
     tmux select-window -t "$target" 2>/dev/null || true
     tmux switch-client -t "$target"
   else
-    exec tmux attach-session -t "$target"
+    # Select the target window BEFORE attaching so the user lands on it
+    tmux select-window -t "$target" 2>/dev/null || true
+    exec tmux attach-session -t "$ORC_TMUX_SESSION"
   fi
 }
 
