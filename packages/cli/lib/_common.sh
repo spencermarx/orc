@@ -437,7 +437,24 @@ _tmux_layout() {
 _tmux_find_pane() {
   local window="$1"
   local title_pattern="$2"
-  tmux list-panes -t "$(_tmux_target "$window")" \
+  # Try @orc_id first (stable — agent CLIs cannot override)
+  local target
+  target="$(_tmux_target "$window")"
+  local pane_idx
+  pane_idx="$(tmux list-panes -t "$target" -F '#{pane_index}' 2>/dev/null | while read idx; do
+    local orc_id
+    orc_id="$(tmux show-option -t "${target}.${idx}" -p -v @orc_id 2>/dev/null || true)"
+    if [[ "$orc_id" == "$title_pattern"* ]]; then
+      echo "$idx"
+      break
+    fi
+  done)"
+  if [[ -n "$pane_idx" ]]; then
+    echo "$pane_idx"
+    return
+  fi
+  # Fallback to title match (for backwards compatibility)
+  tmux list-panes -t "$target" \
     -F '#{pane_index}|#{pane_title}' 2>/dev/null \
     | grep "|${title_pattern}" | head -1 | cut -d'|' -f1 || true
 }
@@ -446,6 +463,15 @@ _tmux_list_panes() {
   local window="$1"
   tmux list-panes -t "$(_tmux_target "$window")" \
     -F '#{pane_index}|#{pane_title}' 2>/dev/null
+}
+
+# Set a stable pane identifier that agent CLIs cannot override.
+# Use this alongside _tmux_set_pane_title — title is for display, @orc_id is for discovery.
+_tmux_set_pane_id() {
+  local window="$1"
+  local pane="$2"
+  local orc_id="$3"
+  tmux set-option -t "$(_tmux_target "$window" "$pane")" -p @orc_id "$orc_id" 2>/dev/null || true
 }
 
 _tmux_pane_count() {
@@ -864,6 +890,7 @@ _tmux_split_with_agent() {
 
   # Set pane title
   _tmux_set_pane_title "$window" "$new_pane" "$pane_title"
+  _tmux_set_pane_id "$window" "$new_pane" "$pane_title"
 
   # Register in pane registry
   local min_w min_h

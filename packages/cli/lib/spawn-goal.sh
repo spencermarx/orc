@@ -74,6 +74,7 @@ orc_spawn_goal() {
 
   # Set pane 0 title
   _tmux_set_pane_title "$goal_window" "0" "$pane_title"
+  _tmux_set_pane_id "$goal_window" "0" "$pane_title"
 
   # Set window status indicator
   _tmux_set_window_status "$goal_window" "●"

@@ -98,6 +98,7 @@ orc_spawn() {
 
     # Set engineering pane title and window status indicator
     _tmux_set_pane_title "$window_name" "0" "$eng_label"
+    _tmux_set_pane_id "$window_name" "0" "$eng_label"
     _tmux_set_window_status "$window_name" "●"
 
     _launch_agent_in_window "$window_name" "$persona" "$project_path" "$init_prompt"
