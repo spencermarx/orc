@@ -22,7 +22,10 @@ cli/
     ├── teardown.sh      # Hierarchical cleanup
     ├── config.sh        # Open config in $EDITOR
     ├── board.sh         # Board visualization
-    └── leave.sh         # Detach from tmux
+    ├── leave.sh         # Detach from tmux
+    ├── doctor.sh        # Config validation and migration
+    ├── notify.sh        # Notification viewer and navigation
+    └── setup.sh         # Guided project config setup
 ```
 
 ## Command Routing
@@ -43,13 +46,16 @@ Flags: `--yolo` (skip approvals), `--help`/`-h`, `--version`/`-v`.
 | `_config_get "key" "default" [project_path]` | Read config with three-tier fallback |
 | `_require_project "$key"` | Resolve project path or exit with error |
 | `_find_goal_branch "$path" "$goal"` | Find goal branch by trying `feat/`, `fix/`, `task/` prefixes |
-| `_check_approval "action" [project_path]` | Enforce spawn/review/merge approval gates |
+| `_check_approval "action" [project_path]` | Enforce approval gates (ask_before_dispatching/reviewing/merging) |
 | `_tmux_ensure_session` | Create orc tmux session if not running |
 | `_tmux_window_exists "$name"` | Check if a tmux window exists |
 | `_tmux_pane_target "$window" [project_path]` | Find best window for a new pane (with overflow) |
 | `_tmux_split_with_agent "$window" "$title" "$persona" ...` | Split pane and launch agent |
-| `_delivery_mode [project_path]` | Get delivery mode (review or pr) |
-| `_deliver_pr "$project" "$branch" "$title" "$body"` | Create PR via gh CLI |
+| `_orc_notify "level" "scope" "message"` | Append to notification log, optionally trigger OS alert |
+| `_orc_resolve "scope" "message"` | Resolve (clear) an active notification |
+| `_orc_notify_active_count` | Count unresolved notifications |
+| `_orc_pane_highlight "$window" "$pane"` | Set pane border to activity color |
+| `_orc_pane_unhighlight "$window" "$pane"` | Clear pane border highlight |
 
 ## Adding a New Command
 

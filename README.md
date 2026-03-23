@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <strong>Command a horde of AI coding agents across your projects.</strong>
+  <strong>A lightweight SDLC framework for AI coding agents.</strong>
   <br />
-  <em>You give orders. They build. Nobody steps on each other's toes.</em>
+  <em>Plan, build, review, and deliver — with your tools, your workflow, your rules.</em>
 </p>
 
 <p align="center">
@@ -37,6 +37,10 @@
 - [Configuration](#configuration)
 - [YOLO Mode](#yolo-mode)
 - [Review Loop](#review-loop)
+- [Planning Lifecycle](#planning-lifecycle)
+- [Notifications](#notifications)
+- [Project Setup](#project-setup)
+- [Config Doctor](#config-doctor)
 - [Customizing Personas](#customizing-personas)
 - [tmux Layout](#tmux-layout)
 - [Project Structure](#project-structure)
@@ -49,14 +53,15 @@
 
 ## Why Orc?
 
-You have a big feature request. You could have five AI engineers working on it in parallel — but who coordinates them? Who keeps them from trampling each other's files? Who reviews their work before it hits your branch?
+AI coding agents are powerful — but they need structure. Without it, you get scattered PRs, conflicting changes, skipped reviews, and no visibility into what's happening. Orc gives your agents a complete software development lifecycle.
 
-Orc does.
+- **Plan with your tools** — plug in [OpenSpec](https://github.com/thefinalsource/openspec), Kiro, or any planning approach. Orc delegates plan creation to a dedicated planner agent, then decomposes the plan into focused work items using your project-specific conventions.
+- **Build in parallel** — every engineer gets its own git worktree. Zero conflicts, zero coordination headaches. Five agents working simultaneously on different parts of the same feature.
+- **Review before merge** — two-tier review: fast bead-level loops during development, deep goal-level review before delivery. Plug in your own review tools or use the built-in reviewer.
+- **Deliver your way** — push + PR, ticket updates, spec archival, Slack notifications — describe your delivery pipeline in natural language and orc executes it.
+- **Stay informed** — condition-based notifications auto-resolve when agents handle things. You only see what needs your attention right now.
 
-- **Automatic decomposition** — describe what you want; orc breaks it into goals and beads (focused work items), no manual ticket-writing required
-- **Isolated worktrees** — every engineer gets its own git worktree — zero conflicts, zero coordination headaches
-- **Built-in review loop** — every piece of work is reviewed before merge, so bugs don't sneak past the front lines
-- **One clean branch** — you review a single goal branch, not 10 scattered PRs from 10 scattered agents
+Every lifecycle phase is configurable with natural language — no rigid schemas, no enum switches. Run `orc setup myapp` and orc discovers your tools, asks about your workflow, and writes the config.
 
 Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), or your own. No daemon, no server, no framework.
 
@@ -76,6 +81,10 @@ Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Cl
             │      │      │
             ▼      ▼      ▼
       fix/auth  feat/rate  task/docs             Orc creates goal branches.
+            │      │      │
+            ▼      ▼      ▼
+          Plan → Decompose → Dispatch            (Optional) Plan with your tools,
+                                                 then decompose into beads.
         │   │      │         │
         ▼   ▼      ▼         ▼
        ┌─┐ ┌─┐   ┌─┐       ┌─┐
@@ -89,7 +98,7 @@ Orc runs on tmux, git, and plain markdown. It works with any agentic CLI — [Cl
       fix/auth  feat/rate  task/docs             Approved beads merge
         │          │         │                   back to goal branches.
         ▼          ▼         ▼
-          You review & merge                     You decide when to ship.
+          Deliver (PR, tickets, etc.)            Your delivery pipeline runs.
 ```
 
 ## Quick Start
@@ -210,8 +219,8 @@ max_rounds = 5
 [review.goal]
 # Goal-level review: deep review before delivery (opt-in)
 review_instructions = "/ocr:review — post the review to the GitHub PR"
-verify_approval = "The review output contains no outstanding issues requiring changes"
-address_feedback = "Run the review tool's address command with the path to the review output file"
+how_to_determine_if_review_passed = "The review output contains no outstanding issues requiring changes"
+how_to_address_review_feedback = "Run the review tool's address command with the path to the review output file"
 max_rounds = 3
 ```
 
@@ -225,20 +234,20 @@ Control how orc names branches and what happens when a goal is complete:
 # In config.local.toml (global) or {project}/.orc/config.toml (per-project)
 
 [branching]
-# Natural language — orc interprets this when creating goal branches
 strategy = "use Jira ticket prefix like PROJ-123, then kebab-case summary"
 
-[delivery]
-# Automatically push and create PRs when goals complete (instead of manual review)
-mode = "pr"
-
-# Natural language — orc interprets this when choosing the PR target branch
-target_strategy = "target develop for features, main for hotfixes"
+[delivery.goal]
+# Natural language — describe your full delivery pipeline
+on_completion_instructions = """
+  Push the goal branch and create a PR targeting develop.
+  Move the Jira ticket to In Code Review.
+"""
+when_to_involve_user_in_delivery = "always"
 ```
 
-With `mode = "pr"`, when all beads in a goal pass review, the goal orchestrator automatically pushes the goal branch and creates a PR via `gh`. You review and merge the PR like any other.
+With `on_completion_instructions` set, the goal orchestrator executes your delivery pipeline automatically. Common patterns: push + PR, push + PR + ticket update, push + PR + archive specs.
 
-With `mode = "review"` (the default), the goal branch is presented for your inspection in the tmux session. You can provide feedback, request changes, or merge manually.
+With `on_completion_instructions` empty (default), the goal branch is presented for your inspection in the tmux session. You review and provide feedback or merge manually.
 
 **Combining with YOLO mode** for a fully hands-off pipeline:
 
@@ -261,7 +270,9 @@ Just pass ticket links to the orchestrator — it handles the rest. See [`[ticke
 
 ## How It Works
 
-You describe what you want. Orc breaks it into **goals** (deliverables with dedicated branches), then into **beads** (small work items for individual engineers). Each engineer runs in an isolated worktree. When all beads pass review, you get a clean goal branch.
+Orc implements a full software development lifecycle — **plan, build, review, deliver** — adapted to your project's tools and workflow. Every phase is a configurable hook: you tell orc *what tool to use* and *when to involve you*, and orc handles the orchestration.
+
+You describe what you want. Orc breaks it into **goals** (deliverables with dedicated branches). If planning is configured, a planner sub-agent creates formal plan artifacts (design docs, specs, task lists) using your tool of choice. The goal orchestrator then decomposes into **beads** (focused work items), dispatches engineers into isolated worktrees, manages the review loop, and delivers via your configured pipeline.
 
 ```
 "Fix auth bug, add rate limiting, update API docs"
@@ -299,12 +310,41 @@ main ─────────────────────────
 
 ## Architecture
 
-Four-tier hierarchy — every level has a clear job and hard boundaries:
+### The Lifecycle
+
+Every goal follows the same configurable lifecycle. Each phase is a hook you control:
+
+```
+Investigate → Plan → Decompose → Dispatch → Build → Review → Deliver
+                │         │          │                 │         │
+          [planning.goal] │   [dispatch.goal]    [review.*]  [delivery.goal]
+                          │
+                   [planning.goal]
+                bead_creation_instructions
+```
+
+| Phase | What happens | You configure |
+|-------|-------------|---------------|
+| **Investigate** | Scouts explore the codebase | (automatic) |
+| **Plan** | Planner sub-agent creates design docs, specs, task lists | `plan_creation_instructions` — your planning tool |
+| **Decompose** | Goal orchestrator maps plan to beads | `bead_creation_instructions` — your decomposition conventions |
+| **Dispatch** | Engineers spawn in isolated worktrees | `assignment_instructions` — what every engineer is told |
+| **Build** | Engineers implement in parallel | (automatic) |
+| **Review** | Two-tier review loop | `review_instructions` — your review tool |
+| **Deliver** | Push, PR, ticket updates, etc. | `on_completion_instructions` — your delivery pipeline |
+
+Every field is natural language interpreted by the agent. Empty = sensible default. The lifecycle adapts to your project — skip planning for simple fixes, add deep review for critical features, automate delivery for trusted pipelines.
+
+### Agent Hierarchy
+
+Four tiers — every level has a clear job and hard boundaries:
 
 ```
 Root Orchestrator ─── cross-project coordination
   └─→ Project Orchestrator ─── creates goals, monitors progress
-        └─→ Goal Orchestrator ─── owns one goal, manages the worktree tier
+        └─→ Goal Orchestrator ─── owns one goal, manages the full lifecycle
+              ├─→ Planner (ephemeral) ─── creates plan artifacts
+              ├─→ Scouts (ephemeral) ─── investigate codebase
               └─→ Worktree ─── isolated git worktree per bead
                     ├── Engineer (persistent) ─── implements the bead
                     └── Reviewer (ephemeral) ─── reviews the work
@@ -314,12 +354,15 @@ Root Orchestrator ─── cross-project coordination
 |------|---------------|------------|
 | **Root Orchestrator** | Coordinates across projects, routes your requests | Write code, manage beads |
 | **Project Orchestrator** | Decomposes requests into goals, dispatches goal orchestrators, monitors progress | Write code, manage engineers directly |
-| **Goal Orchestrator** | Owns one goal: plans beads, dispatches engineers, manages the review loop, merges to goal branch | Write code, touch other goals |
-| **Worktree** | Each bead gets an isolated worktree with two agents working in a loop managed by the goal orchestrator: | |
-| ↳ **Engineer** | Implements the bead (persistent — stays until the bead is done) | Push, merge, create PRs, modify beads |
-| ↳ **Reviewer** | Evaluates the engineer's work against acceptance criteria, writes a verdict (ephemeral — spawns per review cycle) | Modify code, change bead state |
+| **Goal Orchestrator** | Owns one goal: delegates planning, decomposes into beads, dispatches engineers, manages the review loop, merges to goal branch, executes delivery | Write code, touch other goals |
+| ↳ **Planner** | Creates plan artifacts (design docs, specs, task lists) using your configured tool | Decompose into beads, dispatch engineers |
+| ↳ **Scouts** | Investigate codebase areas, return findings | Make decisions, write code |
+| ↳ **Engineer** | Implements a bead in an isolated worktree | Push, merge, create PRs |
+| ↳ **Reviewer** | Evaluates work against acceptance criteria, writes verdict | Modify code, change bead state |
 
-Reviewers are fully customizable — use the built-in persona, plug in your own review command, or add project-specific guidelines via natural language in config. See [`[review.dev]`](#reviewdev--dev-review-bead-level) and [`[review.goal]`](#reviewgoal--goal-review-goal-level) configuration.
+Plus: **Configurator** (assembles project config during `orc setup`).
+
+Reviewers and planners are fully customizable — plug in your own tools via natural language in config, or override the default persona per project.
 
 ### State Model
 
@@ -328,7 +371,7 @@ Three primitives. That's it. No database server, no Redis, no message queue.
 | Primitive | Location | What it is |
 |-----------|----------|------------|
 | **Beads** | `{project}/.beads/` | Dolt DB — the single source of truth for work items, status, and dependencies |
-| **`.worker-status`** | Per worktree | One line of text: `working`, `review`, `blocked: <reason>`, or `dead` |
+| **`.worker-status`** | Per worktree | One line of text: `working`, `review`, `blocked: <reason>`, `question: <question>`, or `dead` |
 | **`.worker-feedback`** | Per worktree | Review verdict from the reviewer agent — `VERDICT: approved` or detailed feedback |
 
 ## Supported Agent CLIs
@@ -408,6 +451,9 @@ orc <project> <bead>           # Jump to an engineer's worktree
 | `orc config [project]` | Open config in `$EDITOR` |
 | `orc board <project>` | Open the board view |
 | `orc leave` | Detach from tmux (agents keep running in the background) |
+| `orc doctor [--auto-fix\|--fix]` | Validate config and assist with migration |
+| `orc notify [--all\|--clear\|--goto N]` | View and navigate notifications |
+| `orc setup <project>` | Guided project config setup |
 
 Exit codes: `0` success, `1` usage error, `2` state error, `3` project not found.
 
@@ -454,15 +500,35 @@ Edit your overrides: `orc config` (personal) or `orc config <project>` (project-
 </details>
 
 <details open>
+<summary><h3><code>[planning.goal]</code> — Planning Lifecycle</h3></summary>
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `plan_creation_instructions` | `""` | How to create the plan — passed to a planner sub-agent. A slash command, natural language, or both. `""` = skip planning, decompose directly. |
+| `bead_creation_instructions` | `""` | How to create beads from plan artifacts. Project-specific conventions for decomposition. `""` = goal orchestrator uses default judgment. |
+| `when_to_involve_user_in_plan` | `""` | When to pause for your review before decomposing into beads. `""` = always. |
+
+</details>
+
+<details>
+<summary><h3><code>[dispatch.goal]</code> — Engineer Assignment</h3></summary>
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `assignment_instructions` | `""` | What to include in every engineer's assignment. Applied universally — planned and unplanned goals. `""` = goal orchestrator uses default judgment. |
+
+</details>
+
+<details open>
 <summary><h3><code>[approval]</code> — Human-in-the-Loop Gates</h3></summary>
 
 Three checkpoints where orc can pause for your go-ahead:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `spawn` | `"ask"` | Gate before spawning an engineer. `"ask"` = prompt you. `"auto"` = spawn immediately. |
-| `review` | `"auto"` | Gate before launching the reviewer. `"ask"` = prompt. `"auto"` = review automatically. |
-| `merge` | `"ask"` | Gate before merging an approved bead to the goal branch. `"ask"` = prompt. `"auto"` = merge immediately. |
+| `ask_before_dispatching` | `"ask"` | Gate before spawning an engineer. `"ask"` = prompt you. `"auto"` = spawn immediately. |
+| `ask_before_reviewing` | `"auto"` | Gate before launching the reviewer. `"ask"` = prompt. `"auto"` = review automatically. |
+| `ask_before_merging` | `"ask"` | Gate before merging an approved bead to the goal branch. `"ask"` = prompt. `"auto"` = merge immediately. |
 
 </details>
 
@@ -474,7 +540,7 @@ Fast, tight review loops during development. Each bead is reviewed before mergin
 | Key | Default | Description |
 |-----|---------|-------------|
 | `review_instructions` | `""` | How to perform the review — a slash command, natural language guidelines, or both. `""` = built-in reviewer persona. |
-| `verify_approval` | `""` | How to determine the review passed. `""` = parse `VERDICT: approved` from `.worker-feedback`. |
+| `how_to_determine_if_review_passed` | `""` | How to determine the review passed. `""` = parse `VERDICT: approved` from `.worker-feedback`. |
 | `max_rounds` | `3` | Max review-feedback cycles per bead before escalating to you. |
 
 </details>
@@ -489,11 +555,11 @@ Works with any review tool — e.g., [Open Code Review](https://github.com/spenc
 | Key | Default | Description |
 |-----|---------|-------------|
 | `review_instructions` | `""` | How to perform the goal-level review. `""` = skip, go straight to delivery. A slash command, natural language, or both. |
-| `verify_approval` | `""` | How to determine the review passed. Example: `"The review output contains no outstanding issues requiring changes"`. |
-| `address_feedback` | `""` | How engineers should address rejection feedback. Example: `"Run the review tool's address command with the path to the review output file"`. |
+| `how_to_determine_if_review_passed` | `""` | How to determine the review passed. Example: `"The review output contains no outstanding issues requiring changes"`. |
+| `how_to_address_review_feedback` | `""` | How engineers should address rejection feedback. Example: `"Run the review tool's address command with the path to the review output file"`. |
 | `max_rounds` | `3` | Max goal-level review cycles before escalating. If not approved, engineers address feedback and the goal-level review re-runs. |
 
-`review_instructions` is **how to review**. `verify_approval` is **how to know it passed**. `address_feedback` is **how to fix it if it didn't**.
+`review_instructions` is **how to review**. `how_to_determine_if_review_passed` is **how to know it passed**. `how_to_address_review_feedback` is **how to fix it if it didn't**.
 
 </details>
 
@@ -514,17 +580,22 @@ strategy = "gitflow: feature branches from develop"
 </details>
 
 <details>
-<summary><h3><code>[delivery]</code> — Goal Completion</h3></summary>
+<summary><h3><code>[delivery.goal]</code> — Goal Completion</h3></summary>
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `mode` | `"review"` | What happens when a goal is done. `"review"` = present the branch for inspection. `"pr"` = push and create a PR via `gh`. |
-| `target_strategy` | `""` | Natural language PR target branch logic. Only used in PR mode. Empty defaults to `main`. |
+| `on_completion_instructions` | `""` | What to do when a goal completes. Natural language describing your delivery pipeline. `""` = present the branch for manual review. |
+| `when_to_involve_user_in_delivery` | `""` | When to pause for your approval before executing delivery. `""` = always. |
 
 Examples:
 ```toml
-target_strategy = "target develop for features, main for hotfixes"
-target_strategy = "gitflow: develop for features, release branch for fixes"
+on_completion_instructions = "push the goal branch and create a PR targeting main"
+on_completion_instructions = """
+  Push the goal branch, create a PR targeting develop,
+  move the Jira ticket to In Code Review,
+  archive the openspec change.
+"""
+when_to_involve_user_in_delivery = "when the PR targets main or involves breaking changes"
 ```
 
 </details>
@@ -544,6 +615,27 @@ strategy = "Move Jira tickets to In Progress when goals start, Done when complet
 strategy = "Add a comment to Linear issues with the goal branch name and progress updates"
 strategy = "Update GitHub issues: In Progress on start, close with PR link on delivery"
 ```
+
+</details>
+
+<details>
+<summary><h3><code>[notifications]</code> — Push Notifications</h3></summary>
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `system` | `false` | Send OS-level notifications (`terminal-notifier` on macOS, `notify-send` on Linux). |
+| `sound` | `false` | Audible alert with notifications. |
+
+The tmux status bar always shows active notification count regardless of this setting.
+
+</details>
+
+<details>
+<summary><h3><code>[updates]</code> — Version Awareness</h3></summary>
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `check_on_launch` | `true` | Check for orc updates on launch. Non-blocking, 2-second timeout. |
 
 </details>
 
@@ -612,6 +704,7 @@ Orc **always** escalates to you, even in YOLO mode, when:
 - A bead exhausts `max_rounds` of review without approval
 - A merge conflict needs manual resolution
 - An engineer discovers out-of-scope work that needs your call
+- A notification needs your attention (QUESTION, ESCALATION)
 
 > Autonomous doesn't mean reckless.
 
@@ -653,6 +746,141 @@ After all beads pass dev review, if `[review.goal] review_instructions` is confi
 
 This tier is **opt-in**. When `[review.goal] review_instructions` is empty (default), the goal orchestrator skips straight to delivery after all beads pass dev review.
 
+## Planning Lifecycle
+
+Orc treats planning as a first-class lifecycle phase — not an afterthought. Plug in any planning tool and orc handles the orchestration: delegate to a planner, get your review, decompose into work items, and brief engineers with full context.
+
+**Planning is opt-in.** When unconfigured, the goal orchestrator decomposes work directly from scout findings. When configured, you get a formal planning phase that produces design docs, specs, and task lists before any code is written.
+
+### Bring Your Own Planning Tool
+
+Orc is tool-agnostic. Tell it what to run:
+
+```toml
+# In {project}/.orc/config.toml
+
+[planning.goal]
+# Any planning tool — a slash command, natural language, or both
+plan_creation_instructions = "/openspec:proposal"
+```
+
+The goal orchestrator delegates plan creation to an ephemeral **planner sub-agent** that runs your tool with full codebase context from scout findings. Examples:
+
+| Tool | Config value |
+|------|-------------|
+| [OpenSpec](https://github.com/thefinalsource/openspec) | `"/openspec:proposal"` |
+| Custom design doc | `"Create a technical design doc in .orc-state/goals/{goal}/plan.md"` |
+| Kiro specs | `"/kiro:spec — focus on API contracts"` |
+| Plain task list | `"Create a numbered task list with acceptance criteria for each item"` |
+
+### From Plan to Work Items
+
+After the plan is created, orc needs to know how to turn those artifacts into beads. This varies by planning tool — OpenSpec produces `tasks.md`, a design doc might have numbered sections, a spec might have user stories.
+
+```toml
+[planning.goal]
+# How to decompose plan artifacts into beads — your project's conventions
+bead_creation_instructions = "Decompose beads from tasks.md in the openspec change directory. Each bead maps to one or more task items."
+```
+
+When empty, the goal orchestrator reads the plan artifacts and uses its own judgment. When set, it follows your conventions for how the plan maps to work.
+
+### When You Review
+
+Control when orc pauses for your input:
+
+```toml
+[planning.goal]
+when_to_involve_user_in_plan = "when the plan involves more than 3 beads or touches core domain models"
+```
+
+Common values: `"always"` (default), `"never"` (full autonomy), or natural-language conditions.
+
+### Engineer Briefing
+
+Control what every engineer receives in their assignment — regardless of whether a plan was used:
+
+```toml
+[dispatch.goal]
+assignment_instructions = """
+  Include the full proposal directory path so engineers can reference design docs.
+  Quote specific tasks from the plan verbatim.
+  Instruct engineers to read the proposal for full context before starting.
+"""
+```
+
+This is a universal touchpoint — it applies to every dispatch, whether from an OpenSpec proposal, a design doc, or direct decomposition. Useful for project-wide conventions: "always include the test command," "always reference CLAUDE.md sections," "always state the acceptance criteria format."
+
+### Feedback Loops
+
+**Questions**: Engineers can ask clarifying questions about the plan or assignment via the `question:` status signal. The goal orchestrator answers directly when it can, or involves you when domain knowledge is needed.
+
+**Plan invalidation**: If an engineer discovers a plan assumption is wrong, they signal `found: plan-issue` — the goal orchestrator pauses affected work, re-engages the planner, and re-decomposes. The plan adapts to reality.
+
+## Notifications
+
+Orc uses a **condition-based** notification system — the status bar shows actionable conditions, not event history. When a condition clears, the notification auto-resolves. You never manually dismiss.
+
+### What You See
+
+The tmux status bar shows an active count: `● 2 active`. Window tabs highlight when they contain panes needing attention. Pane borders change color for blocked or questioning engineers.
+
+### Notification Types
+
+| Condition | When it fires | Auto-resolves when |
+|-----------|---------------|-------------------|
+| `PLAN_REVIEW` | Plan ready for your review | You review and the goal orchestrator proceeds |
+| `QUESTION` | Engineer question the goal orch can't answer | You provide the answer |
+| `BLOCKED` | Engineer stuck | Block is cleared |
+| `DELIVERY` | Goal ready for delivery approval | You approve delivery |
+| `ESCALATION` | Max review rounds hit | You intervene |
+
+### Navigating to Notifications
+
+```bash
+orc notify              # Interactive — pick a number to jump to the relevant pane
+orc notify --goto 1     # Jump directly to notification #1
+orc notify --all        # Full history (resolved and active)
+orc notify --clear      # Force-resolve all active notifications
+```
+
+### OS-Level Alerts (Optional)
+
+```toml
+[notifications]
+system = true    # Desktop notifications (terminal-notifier on macOS, notify-send on Linux)
+sound = true     # Audible alert
+```
+
+## Project Setup
+
+`orc setup` provides a guided, conversational experience for configuring a project. It scouts your project for available tools, asks about your workflow, and assembles a tailored config.
+
+```bash
+orc setup myapp
+```
+
+The project orchestrator investigates your codebase — discovers planning tools (OpenSpec, Kiro), review tools (OCR), delivery infrastructure (gh CLI, CI/CD), ticketing integrations (Jira/Linear MCPs), and test frameworks. Then it walks you through each lifecycle phase, only asking relevant questions.
+
+Run it again any time to reconfigure:
+
+```bash
+orc setup myapp         # Reconfigure — existing config used as starting point
+orc setup myapp --yolo  # Auto-configure with sensible defaults from scout findings
+```
+
+## Config Doctor
+
+After updating orc, run `orc doctor` to check your config:
+
+```bash
+orc doctor              # Fast validation — reports issues with migration guidance
+orc doctor --auto-fix   # Apply mechanical renames (field name changes) automatically
+orc doctor --fix        # Interactive migration — agent walks you through semantic changes
+```
+
+`--fix` launches the root orchestrator with your migration context. It reads `migrations/CHANGELOG.md`, understands what changed and why, reads each affected project's config, and suggests concrete migrations conversationally.
+
 ## Customizing Personas
 
 Orc ships with five default personas in [`packages/personas/`](packages/personas/):
@@ -664,6 +892,8 @@ Orc ships with five default personas in [`packages/personas/`](packages/personas
 | Goal Orchestrator | `goal-orchestrator.md` | Bead management and delivery |
 | Engineer | `engineer.md` | Isolated implementation |
 | Reviewer | `reviewer.md` | Code review verdicts |
+| Planner | `planner.md` | Plan creation (ephemeral sub-agent) |
+| Configurator | `configurator.md` | Config assembly during `orc setup` (ephemeral sub-agent) |
 
 **Override per project** — create `{project}/.orc/{role}.md`:
 
@@ -743,6 +973,8 @@ orc/
 │       ├── goal-orchestrator.md
 │       ├── engineer.md
 │       └── reviewer.md
+├── migrations/
+│   └── CHANGELOG.md                 # Migration guide (all versions)
 └── openspec/                        # Change proposals and specifications
 ```
 

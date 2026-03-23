@@ -6,19 +6,20 @@ Slash commands for agent CLIs. Pure markdown — no code, no build step.
 
 ```
 commands/
-├── claude/orc/          # Claude Code slash commands
-│   ├── index.md         # /orc — orientation
-│   ├── status.md        # /orc:status — dashboard
-│   ├── plan.md          # /orc:plan — decompose into goals or beads
-│   ├── dispatch.md      # /orc:dispatch — spawn orchestrators or engineers
-│   ├── check.md         # /orc:check — poll statuses
-│   ├── complete-goal.md # /orc:complete-goal — trigger delivery
-│   ├── view.md          # /orc:view — tmux layouts
-│   ├── done.md          # /orc:done — engineer signals review
-│   ├── blocked.md       # /orc:blocked — engineer signals blocked
-│   ├── feedback.md      # /orc:feedback — engineer addresses review
-│   └── leave.md         # /orc:leave — detach from tmux
-└── windsurf/            # Windsurf equivalent commands (orc- prefix)
+├── _canonical/              # Single-source command definitions (all CLIs)
+│   ├── index.md             # /orc — orientation
+│   ├── status.md            # /orc:status — dashboard
+│   ├── plan.md              # /orc:plan — decompose into goals or beads
+│   ├── dispatch.md          # /orc:dispatch — spawn orchestrators or engineers
+│   ├── check.md             # /orc:check — poll statuses
+│   ├── complete-goal.md     # /orc:complete-goal — trigger delivery
+│   ├── view.md              # /orc:view — tmux layouts
+│   ├── done.md              # /orc:done — engineer signals review
+│   ├── blocked.md           # /orc:blocked — engineer signals blocked
+│   ├── feedback.md          # /orc:feedback — engineer addresses review
+│   └── leave.md             # /orc:leave — detach from tmux
+├── claude/orc/              # Claude Code commands (symlinked from _canonical)
+└── windsurf/                # Windsurf commands (orc- prefix, symlinked from _canonical)
 ```
 
 ## How Commands Work
@@ -36,7 +37,7 @@ Commands are installed as symlinks by `orc init` (into the orc repo itself) and 
 
 ## Adding a New Command
 
-1. Create a `.md` file in `claude/orc/` (e.g., `mycommand.md`)
+1. Create a `.md` file in `_canonical/` (e.g., `mycommand.md`)
 2. Start with a header: `# /orc:mycommand — Short Description`
 3. Declare the role: `**Role:** Engineer` (or Orchestrator, Any, etc.)
 4. Write the step-by-step instructions

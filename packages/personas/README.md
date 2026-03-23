@@ -11,6 +11,10 @@ Default agent behavior specs — one markdown file per role. These define how ea
 | `goal-orchestrator.md` | Goal Orchestrator | Bead planning, engineer dispatch, review loop, delivery |
 | `engineer.md` | Engineer | Isolated implementation within a single bead |
 | `reviewer.md` | Reviewer | Code review, verdict writing |
+| `planner.md` | Planner | Ephemeral sub-agent: creates planning artifacts on behalf of the goal orchestrator |
+| `configurator.md` | Configurator | Ephemeral sub-agent: assembles `.orc/config.toml` during `orc setup` |
+
+**Ephemeral sub-agents** (planner, configurator) are spawned by orchestrators for specific tasks and exit when done. They follow the same persona resolution and override pattern as persistent agents.
 
 ## How Personas Work
 

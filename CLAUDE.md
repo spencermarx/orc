@@ -42,9 +42,15 @@ Keep this managed block so 'ocr init' can refresh the instructions.
 
 <!-- OCR:END -->
 
+# Migration Changelog
+
+After modifying orc's config schema (`config.toml`, `doctor.sh`), CLI commands, or persona files, update `migrations/CHANGELOG.md`. Entry format instructions are in the HTML comment at the top of that file.
+
 ## What Orc Is
 
-Orc is a lightweight orchestration layer that coordinates AI coding agents across multiple projects. It uses **tmux** for session management, **git worktrees** for isolation, **Beads** (Dolt-backed) for work tracking, and **markdown** for agent behavior. The coding work is performed by agentic CLIs (Claude Code, OpenCode, Codex, etc.) running in isolated worktrees.
+Orc is a lightweight SDLC framework for AI coding agents. It orchestrates the full software development lifecycle — **plan, build, review, deliver** — across multiple projects, adapted to each project's tools and workflow. Every lifecycle phase is a configurable hook: users specify *what tool to use* and *when to involve them*, expressed as natural language interpreted by agents.
+
+It uses **tmux** for session management, **git worktrees** for isolation, **Beads** (Dolt-backed) for work tracking, and **markdown** for agent behavior. Planning tools (OpenSpec, Kiro, design docs) plug in via `plan_creation_instructions`. Review tools plug in via `review_instructions`. Delivery pipelines are described in `on_completion_instructions`. The coding work is performed by agentic CLIs (Claude Code, OpenCode, Codex, etc.) running in isolated worktrees.
 
 Core philosophy: shell over runtime, markdown is the control plane, beads are the only state, propose don't act.
 
@@ -54,8 +60,10 @@ Four-tier agent hierarchy:
 
 1. **Root Orchestrator** — conversational session coordinating across projects. Optional; skip with `orc <project>` for single-project work.
 2. **Project Orchestrator** — receives user requests, decomposes them into goals, dispatches goal orchestrators, monitors goal-level progress. Never writes code or manages engineers directly.
-3. **Goal Orchestrator** — owns one goal (feature/bug/task). Runs as a separate agent session. Decomposes the goal into beads, dispatches engineers, manages the review loop, fast-forward merges approved beads to the goal branch, and handles delivery (review or PR).
+3. **Goal Orchestrator** — owns one goal (feature/bug/task). Runs as a separate agent session. Spawns a planner to decompose the goal into beads, dispatches engineers, manages the review loop, fast-forward merges approved beads to the goal branch, and handles delivery.
 4. **Engineers** — autonomous agent sessions in isolated git worktrees, each assigned a single bead.
+
+Ephemeral sub-agents: **Planner** (decomposes goals into beads during planning), **Configurator** (guides project config setup via `orc setup`), **Reviewer** (reviews bead output).
 
 ### Branch Topology
 
@@ -73,8 +81,8 @@ main ─────────────────────────
 ### Delivery
 
 Two modes when a goal completes:
-- **Review (default):** Goal branch is presented for user inspection. User can provide feedback via any agent plane.
-- **PR:** Goal orchestrator pushes and creates PR via `gh` to a configurable target branch.
+- **Configured delivery** (`on_completion_instructions` set): Goal orchestrator executes the delivery pipeline directly — push, PR, ticket updates, etc.
+- **Manual review** (default, `on_completion_instructions` empty): Goal branch is presented for user inspection.
 
 State model uses exactly three primitives: **Beads** (Dolt DB at `{project}/.beads/`), **`.worker-status`** (plain text signal per worktree), and **`.worker-feedback`** (review output per worktree).
 
@@ -87,11 +95,16 @@ orc/
 ├── config.toml                      # Committed defaults
 ├── config.local.toml                # User overrides (gitignored)
 ├── projects.toml                    # Project registry (gitignored)
+├── migrations/
+│   └── CHANGELOG.md                 # Migration guide (all versions)
 ├── packages/
 │   ├── cli/                         # The `orc` command (bash scripts)
 │   │   ├── bin/orc                  # Entry point (positional routing)
 │   │   └── lib/                     # Subcommand scripts + _common.sh
-│   │       └── adapters/            # Per-CLI adapters (claude.sh, codex.sh, etc.)
+│   │       ├── adapters/            # Per-CLI adapters (claude.sh, codex.sh, etc.)
+│   │       ├── doctor.sh            # Config validation and migration
+│   │       ├── notify.sh            # Notification viewer
+│   │       └── setup.sh             # Guided project config setup
 │   ├── commands/                    # Slash commands for agent CLIs
 │   │   ├── _canonical/              # Single-source command definitions (all CLIs)
 │   │   ├── claude/orc/              # Legacy Claude commands (symlinked)
@@ -101,7 +114,9 @@ orc/
 │       ├── orchestrator.md
 │       ├── goal-orchestrator.md
 │       ├── engineer.md
-│       └── reviewer.md
+│       ├── reviewer.md
+│       ├── planner.md
+│       └── configurator.md
 └── openspec/                        # Change proposals and specifications
 ```
 
@@ -160,6 +175,9 @@ orc teardown [project] [bead]  # Hierarchical cleanup (bead, project, or all)
 orc config [project]           # Open config in $EDITOR
 orc board <project>            # Open board view
 orc leave                      # Detach from tmux
+orc doctor [--auto-fix|--fix]  # Validate config, auto-fix renames, or interactive migration
+orc notify [--all|--clear|--goto N]  # View and navigate notifications
+orc setup <project>            # Guided project config setup
 ```
 
 ### Internal (still work, hidden from help)
@@ -181,7 +199,7 @@ Exit codes: `0` success, `1` usage error, `2` state error, `3` project not found
 | `/orc:plan` | Project Orch | Decompose request into goals with named branches |
 | `/orc:dispatch` | Project/Goal Orch | Spawn goal orchestrators or engineers for ready beads |
 | `/orc:check` | Project/Goal Orch | Poll status → handle review/blocked/found/dead |
-| `/orc:complete-goal` | Goal Orch | Trigger delivery (review or PR) when all beads done |
+| `/orc:complete-goal` | Goal Orch | Trigger delivery when all beads and goal-level review are complete |
 | `/orc:view` | Orchestrator | Create/adjust tmux layouts for monitoring |
 | `/orc:done` | Engineer | Self-review → signal review → STOP |
 | `/orc:blocked` | Engineer | Signal blocked with reason → STOP |
@@ -201,14 +219,32 @@ Key config sections:
 strategy = ""                  # Natural language branch naming preference
                                # Default: feat/, fix/, task/ + ticket prefix if available
 
-[delivery]
-mode = "review"                # "review" = goal orch signals review, user inspects branch
-                               # "pr" = push goal branch + create PR via gh CLI
-target_strategy = ""           # Natural language PR target branch strategy (default: main)
-                               # e.g., "gitflow: target develop, hotfix → release branch"
+[planning.goal]
+plan_creation_instructions = ""
+bead_creation_instructions = ""
+when_to_involve_user_in_plan = ""
+
+[dispatch.goal]
+assignment_instructions = ""
+
+[approval]
+ask_before_dispatching = "ask"
+ask_before_reviewing = "auto"
+ask_before_merging = "ask"
+
+[delivery.goal]
+on_completion_instructions = ""
+when_to_involve_user_in_delivery = ""
+
+[notifications]
+system = false
+sound = false
+
+[updates]
+check_on_launch = true
 ```
 
-CLI delivery helpers (`_common.sh`): `_delivery_mode`, `_delivery_target_branch`, `_deliver_pr` support both modes. The goal orchestrator uses `/orc:complete-goal` which reads these settings.
+The goal orchestrator uses `/orc:complete-goal` which reads delivery settings.
 
 Persona resolution: `{project}/.orc/{role}.md` > `{orc-repo}/packages/personas/{role}.md`
 
@@ -236,9 +272,9 @@ Review mode is configurable via `[review.dev]` (bead-level) and `[review.goal]` 
 
 ## Approval Policy
 
-Three configurable gates: `spawn`, `review`, `merge`. Each can be `"ask"` (human confirms) or `"auto"` (orchestrator proceeds). Defaults: spawn=ask, review=auto, merge=ask. Always escalates on: blocked engineers, max review rounds, merge conflicts, out-of-scope discoveries.
+Three configurable gates: `ask_before_dispatching`, `ask_before_reviewing`, `ask_before_merging`. Each can be `"ask"` (human confirms) or `"auto"` (orchestrator proceeds). Defaults: ask_before_dispatching=ask, ask_before_reviewing=auto, ask_before_merging=ask. Always escalates on: blocked engineers, max review rounds, merge conflicts, out-of-scope discoveries.
 
-Delivery is controlled separately via `[delivery] mode`: `"review"` (default, user inspects goal branch) or `"pr"` (push + create PR via `gh`). The system never merges to the project's main/default branch unless the user explicitly requests it.
+Delivery is controlled via `[delivery.goal] on_completion_instructions`. When set, the goal orchestrator executes the delivery pipeline (push, PR, etc.). When empty (default), the goal branch is presented for user inspection. The system never merges to the project's main/default branch unless the user explicitly requests it.
 
 ## tmux Layout
 
