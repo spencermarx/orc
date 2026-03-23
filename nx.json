@@ -1,4 +1,25 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
-  "defaultBase": "main"
+  "defaultBase": "main",
+  "release": {
+    "projects": ["@orc/cli", "@orc/commands", "@orc/personas"],
+    "projectsRelationship": "fixed",
+    "version": {
+      "generatorOptions": {
+        "currentVersionResolver": "git-tag",
+        "specifierSource": "prompt"
+      }
+    },
+    "changelog": {
+      "projectChangelogs": false,
+      "workspaceChangelog": {
+        "createRelease": "github"
+      }
+    },
+    "git": {
+      "commit": true,
+      "commitMessage": "chore(release): v{version}",
+      "tag": true
+    }
+  }
 }

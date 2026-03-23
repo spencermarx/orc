@@ -51,7 +51,8 @@ _resolve_orc_root() {
 ORC_ROOT="$(_resolve_orc_root)"
 readonly ORC_ROOT
 
-ORC_VERSION="0.1.0"
+# Read version from package.json (single source of truth)
+ORC_VERSION="$(grep '"version"' "$ORC_ROOT/package.json" | head -1 | sed 's/.*"version": *"//;s/".*//')"
 readonly ORC_VERSION
 
 # ─────────────────────────────────────────────────────────────────────────────
