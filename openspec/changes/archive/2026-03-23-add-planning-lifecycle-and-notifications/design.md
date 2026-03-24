@@ -27,7 +27,7 @@ Non-Goals:
 - Config field for how plan context reaches engineers — goal orchestrator uses judgment
 - Notification persistence across tmux session restarts
 - Notification routing/filtering per project (all notifications are session-global)
-- Fully automated migration without user input — `orc doctor --fix` converses with the user, never silently applies semantic changes
+- Fully automated migration without user input — `orc doctor --interactive` converses with the user, never silently applies semantic changes
 
 ## Decisions
 
@@ -164,9 +164,9 @@ Rationale: Condition-based notifications prevent notification fatigue. In event-
 
 **`orc doctor`** — fast bash validation. Reads all config files, validates against schema, reports issues. Deterministic, milliseconds, no agent.
 
-**`orc doctor --auto-fix`** — applies mechanical migrations (field renames where the value doesn't change). Leaves semantic migrations for `--fix`.
+**`orc doctor --fix`** — applies mechanical migrations (field renames where the value doesn't change). Leaves semantic migrations for `--interactive`.
 
-**`orc doctor --fix`** — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The root orchestrator:
+**`orc doctor --interactive`** — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The root orchestrator:
 1. Reads `migrations/CHANGELOG.md` for migration context and rationale
 2. Reads the validation output from the fast pass
 3. Spawns sub-agents per affected project to read full config and understand project context
@@ -201,7 +201,7 @@ ask_before_reviewing = "auto"
 ask_before_merging = "ask"
 ```
 
-Each field reads as the question it's answering: "ask before dispatching? ask." The values (`"ask"` or `"auto"`) remain unchanged. This is a mechanical rename — `orc doctor --auto-fix` handles it.
+Each field reads as the question it's answering: "ask before dispatching? ask." The values (`"ask"` or `"auto"`) remain unchanged. This is a mechanical rename — `orc doctor --fix` handles it.
 
 The `[approval]` section operates at a different layer than lifecycle hooks. Lifecycle hooks configure *what happens* at each phase (planning, review, delivery). Approval gates configure *whether the user must confirm* before the orchestrator proceeds with operational actions (dispatching, reviewing, merging). They coexist — a user might have `on_completion_instructions` describing a full delivery pipeline AND `ask_before_merging = "ask"` requiring confirmation before each bead merge.
 

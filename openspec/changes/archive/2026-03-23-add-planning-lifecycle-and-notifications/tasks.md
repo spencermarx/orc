@@ -32,9 +32,9 @@
 
 - [x] 3.1 Define config schema in a dedicated file or section of `_common.sh` — enumerate all valid sections, fields, and types as the single source of truth for validation
 - [x] 3.2 Define migration mapping in the schema: old field names → new field names, classified as mechanical or semantic, with transformation examples
-- [x] 3.3 Create `packages/cli/lib/doctor.sh` — implements `orc doctor` (fast validation), `orc doctor --auto-fix` (mechanical renames), and `orc doctor --fix` (launches root orchestrator in doctor mode)
-- [x] 3.4 Implement `--auto-fix` mode: read config files, apply mechanical renames (field name changes where value is unchanged), report what was changed, skip semantic migrations with guidance to use `--fix`
-- [x] 3.5 Implement `--fix` mode: run fast validation, then launch root orchestrator with doctor-mode briefing (validation output + migrations/CHANGELOG.md path + list of affected config files). The root orchestrator handles the rest conversationally.
+- [x] 3.3 Create `packages/cli/lib/doctor.sh` — implements `orc doctor` (fast validation), `orc doctor --fix` (mechanical renames), and `orc doctor --interactive` (launches root orchestrator in doctor mode)
+- [x] 3.4 Implement `--fix` mode: read config files, apply mechanical renames (field name changes where value is unchanged), report what was changed, skip semantic migrations with guidance to use `--interactive`
+- [x] 3.5 Implement `--interactive` mode: run fast validation, then launch root orchestrator with doctor-mode briefing (validation output + migrations/CHANGELOG.md path + list of affected config files). The root orchestrator handles the rest conversationally.
 - [x] 3.6 Route `doctor` subcommand in `packages/cli/bin/orc` and add to reserved names
 
 ## 4. Update Awareness
@@ -100,7 +100,7 @@
 
 ## 13. Root Orchestrator — Doctor Mode Awareness
 
-- [x] 13.1 Update `packages/personas/root-orchestrator.md` — add doctor mode briefing awareness: when launched via `orc doctor --fix`, the root orchestrator reads `migrations/CHANGELOG.md`, reads the validation output, spawns sub-agents to read affected project configs, converses with the user about migrations, and delegates confirmed changes to project orchestrators.
+- [x] 13.1 Update `packages/personas/root-orchestrator.md` — add doctor mode briefing awareness: when launched via `orc doctor --interactive`, the root orchestrator reads `migrations/CHANGELOG.md`, reads the validation output, spawns sub-agents to read affected project configs, converses with the user about migrations, and delegates confirmed changes to project orchestrators.
 - [x] 13.2 Add notification awareness to root orchestrator persona — the root orchestrator can see the notification count in the status bar and reference `orc notify` when helping the user navigate active conditions.
 
 ## 14. Project Orchestrator — Setup Mode, Notification Awareness, and Config Delegation
@@ -124,8 +124,8 @@
 - [x] 16.1 Manually verify: empty `plan_creation_instructions` produces today's exact behavior
 - [x] 16.2 Manually verify: empty `on_completion_instructions` produces today's review-mode behavior
 - [x] 16.3 Manually verify: `orc doctor` detects old field names and reports migration guidance
-- [x] 16.4 Manually verify: `orc doctor --auto-fix` renames mechanical fields, skips semantic ones
-- [x] 16.5 Manually verify: `orc doctor --fix` launches root orchestrator with doctor mode briefing
+- [x] 16.4 Manually verify: `orc doctor --fix` renames mechanical fields, skips semantic ones
+- [x] 16.5 Manually verify: `orc doctor --interactive` launches root orchestrator with doctor mode briefing
 - [x] 16.6 Manually verify: `orc doctor` passes cleanly with updated config
 - [x] 16.7 Manually verify: update check displays notice when behind origin/main, skips silently on network failure
 - [x] 16.8 Manually verify: `_orc_notify` appends correctly formatted lines to notification log

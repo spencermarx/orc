@@ -6,8 +6,8 @@ The system SHALL provide an `orc doctor` CLI command with three modes that valid
 
 The modes SHALL be:
 - `orc doctor` — fast bash validation. Reads all config files, validates against schema, reports issues with actionable guidance. Deterministic, no agent involvement.
-- `orc doctor --auto-fix` — applies mechanical migrations (field renames where the value is unchanged). Leaves semantic migrations that require user decisions.
-- `orc doctor --fix` — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The agent converses with the user to resolve semantic migrations that require context and decisions.
+- `orc doctor --fix` — applies mechanical migrations (field renames where the value is unchanged). Leaves semantic migrations that require user decisions.
+- `orc doctor --interactive` — launches the root orchestrator in doctor mode for interactive, agent-assisted migration. The agent converses with the user to resolve semantic migrations that require context and decisions.
 
 #### Scenario: Fast validation with no issues
 - **WHEN** the user runs `orc doctor`
@@ -18,24 +18,24 @@ The modes SHALL be:
 - **WHEN** the user runs `orc doctor`
 - **AND** config files contain old or unknown field names
 - **THEN** the command reports each issue with file path, field name, and migration guidance
-- **AND** suggests `orc doctor --auto-fix` for mechanical renames
-- **AND** suggests `orc doctor --fix` for semantic migrations
+- **AND** suggests `orc doctor --fix` for mechanical renames
+- **AND** suggests `orc doctor --interactive` for semantic migrations
 
 #### Scenario: Auto-fix applies mechanical renames
-- **WHEN** the user runs `orc doctor --auto-fix`
+- **WHEN** the user runs `orc doctor --fix`
 - **AND** a config file contains `verify_approval = "no must-fix items"`
 - **THEN** the field is renamed to `how_to_determine_if_review_passed = "no must-fix items"` (value unchanged)
 - **AND** the command reports what was changed
 
 #### Scenario: Auto-fix skips semantic migrations
-- **WHEN** the user runs `orc doctor --auto-fix`
+- **WHEN** the user runs `orc doctor --fix`
 - **AND** a config file contains `[delivery] mode = "pr"` with `target_strategy = "target develop"`
 - **THEN** the command does NOT attempt to auto-migrate (requires user decision)
-- **AND** reports: "Semantic migration needed — run `orc doctor --fix` for interactive assistance"
+- **AND** reports: "Semantic migration needed — run `orc doctor --interactive` for interactive assistance"
 
-### Requirement: Agent-Assisted Migration (`orc doctor --fix`)
+### Requirement: Agent-Assisted Migration (`orc doctor --interactive`)
 
-When the user runs `orc doctor --fix`, the system SHALL launch the root orchestrator in doctor mode — an interactive, conversational migration experience that leverages the agent hierarchy.
+When the user runs `orc doctor --interactive`, the system SHALL launch the root orchestrator in doctor mode — an interactive, conversational migration experience that leverages the agent hierarchy.
 
 The root orchestrator in doctor mode SHALL:
 1. Read `migrations/CHANGELOG.md` from the orc repo root to understand what changed, why, and the intended migration path
@@ -47,7 +47,7 @@ The root orchestrator in doctor mode SHALL:
 The root orchestrator SHALL NOT silently apply changes. Every semantic migration SHALL be presented to the user with rationale before being applied.
 
 #### Scenario: Interactive migration of delivery config
-- **WHEN** the user runs `orc doctor --fix`
+- **WHEN** the user runs `orc doctor --interactive`
 - **AND** project `myapp` has `[delivery] mode = "pr"` with `target_strategy = "target develop"`
 - **THEN** the root orchestrator presents:
   ```
@@ -89,10 +89,10 @@ Each entry SHALL include:
 - **Why** — the motivation for the change
 - **Migration path** — step-by-step guidance for updating config, including value transformation examples
 
-The breaking changelog SHALL be the source of truth that the root orchestrator reads during `orc doctor --fix` to understand migration context and provide informed suggestions.
+The breaking changelog SHALL be the source of truth that the root orchestrator reads during `orc doctor --interactive` to understand migration context and provide informed suggestions.
 
 #### Scenario: Agent reads breaking changelog during migration
-- **WHEN** the user runs `orc doctor --fix`
+- **WHEN** the user runs `orc doctor --interactive`
 - **THEN** the root orchestrator reads `migrations/CHANGELOG.md`
 - **AND** uses the migration paths and rationale to inform its suggestions to the user
 
@@ -129,15 +129,15 @@ The initial migration mapping SHALL include:
 - `[approval] merge` → `[approval] ask_before_merging`
 
 The mapping SHALL classify each migration as:
-- **Mechanical** — value unchanged, just a rename (eligible for `--auto-fix`)
-- **Semantic** — value needs transformation or user decision (requires `--fix`)
+- **Mechanical** — value unchanged, just a rename (eligible for `--fix`)
+- **Semantic** — value needs transformation or user decision (requires `--interactive`)
 
 #### Scenario: Mechanical migration detected
 - **WHEN** `orc doctor` detects `verify_approval = "no must-fix items"`
 - **THEN** it classifies this as a mechanical migration (rename, value unchanged)
-- **AND** `--auto-fix` can apply it automatically
+- **AND** `--fix` can apply it automatically
 
 #### Scenario: Semantic migration detected
 - **WHEN** `orc doctor` detects `[delivery] mode = "pr"` with `target_strategy = "target develop"`
 - **THEN** it classifies this as a semantic migration (value needs transformation)
-- **AND** `--auto-fix` skips it with a note to use `--fix`
+- **AND** `--fix` skips it with a note to use `--interactive`
