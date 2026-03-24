@@ -54,6 +54,12 @@ git commit -m "<type>(<scope>): <description>"
 
 Follow the project's commit conventions (see CLAUDE.md).
 
+**After staging, verify no orc signal files leaked in:**
+```bash
+git diff --cached --name-only | grep -E '^\.(worker-status|worker-feedback|orch-assignment\.md)$'
+```
+If any matches appear, unstage them immediately (`git reset HEAD <file>`) before committing. These files are orc orchestration internals and must never be committed.
+
 ### Step 5 — Signal for Review
 
 Write `review` to `.worker-status`:

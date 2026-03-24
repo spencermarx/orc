@@ -1260,7 +1260,10 @@ _orc_git_exclude() {
   touch "$exclude_file"
 
   # All orc runtime paths that may appear in a registered project
-  local patterns=(".beads/" ".worktrees/" ".goals/")
+  # Directory patterns cover the main working tree.
+  # Signal-file patterns cover engineer worktrees, where .worktrees/ is
+  # irrelevant (the files sit at the worktree root, not inside .worktrees/).
+  local patterns=(".beads/" ".worktrees/" ".goals/" ".worker-status" ".worker-feedback" ".orch-assignment.md")
   local pattern
   for pattern in "${patterns[@]}"; do
     if ! grep -qxF "$pattern" "$exclude_file" 2>/dev/null; then

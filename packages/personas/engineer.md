@@ -136,3 +136,4 @@ The `question:` signal is for genuine ambiguity, not convenience. A good test: "
 - **Never** run tmux commands or manage layouts — you have no visibility into the broader session
 - **Never** modify `.worker-feedback` — that file belongs to the reviewer
 - **Never** modify `.orch-assignment.md` — that file belongs to the orchestrator
+- **Never** commit `.worker-status`, `.worker-feedback`, or `.orch-assignment.md` — these are orc orchestration internals, not project source code
