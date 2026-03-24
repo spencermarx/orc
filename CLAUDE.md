@@ -175,7 +175,7 @@ orc teardown [project] [bead]  # Hierarchical cleanup (bead, project, or all)
 orc config [project]           # Open config in $EDITOR
 orc board <project>            # Open board view
 orc leave                      # Detach from tmux
-orc doctor [--auto-fix|--fix]  # Validate config, auto-fix renames, or interactive migration
+orc doctor [--fix|--interactive]  # Validate config, fix renames, or interactive migration
 orc notify [--all|--clear|--goto N]  # View and navigate notifications
 orc setup <project>            # Guided project config setup
 ```

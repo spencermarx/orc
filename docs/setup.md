@@ -77,20 +77,20 @@ orc doctor
 orc doctor myapp          # Scoped to one project
 
 # Mechanical fixes --- applies safe renames (field name changes) automatically
-orc doctor --auto-fix
-orc doctor myapp --auto-fix
-
-# Interactive migration --- launches an agent that walks you through semantic changes
 orc doctor --fix
 orc doctor myapp --fix
+
+# Interactive migration --- launches an agent that walks you through semantic changes
+orc doctor --interactive
+orc doctor myapp --interactive
 ```
 
-The `--fix` flag starts the root orchestrator with your migration context loaded. It reads `migrations/CHANGELOG.md`, understands what changed and why, inspects each affected project's config, and suggests concrete migrations conversationally.
+The `--interactive` flag runs programmatic fixes first, then starts the root orchestrator with your migration context loaded. It reads `migrations/CHANGELOG.md`, understands what changed and why, inspects each affected project's config, and suggests concrete migrations conversationally.
 
 All three modes support `--yolo` for unattended operation:
 
 ```bash
-orc doctor --fix --yolo
+orc doctor --interactive --yolo
 ```
 
 ## After Updating Orc
@@ -98,7 +98,7 @@ orc doctor --fix --yolo
 Orc checks for updates on launch. After pulling a new version:
 
 1. Run `orc doctor` to see whether your configs need attention.
-2. Review any reported issues --- most are mechanical renames that `--auto-fix` handles.
-3. For semantic changes, use `--fix` to get guided migration assistance.
+2. Review any reported issues --- most are mechanical renames that `--fix` handles.
+3. For semantic changes, use `--interactive` to get agent-assisted migration.
 
 The migration changelog at `migrations/CHANGELOG.md` documents all version-to-version config changes, so you always have a written record of what moved and why.

@@ -81,7 +81,7 @@ This is in-scope — you're the user's top-level interface to orc.
 
 ## Doctor Mode
 
-When launched via `orc doctor --fix`, you enter **doctor mode** — a temporary operating mode for interactive config migration. Your standard on-entry behavior is replaced by this workflow:
+When launched via `orc doctor --interactive`, you enter **doctor mode** — a temporary operating mode for interactive config migration. Your standard on-entry behavior is replaced by this workflow:
 
 1. **Read `migrations/CHANGELOG.md`** at the orc repo root — understand what changed, why, and the migration path for each breaking config change
 2. **Read the validation output** — `orc doctor` runs automatically before entering this mode and passes its output to you

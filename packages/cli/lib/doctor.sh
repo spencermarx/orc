@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# doctor.sh — Config validation, auto-fix, and agent-assisted migration.
+# doctor.sh — Config validation, fix, and interactive agent-assisted migration.
 
 set -euo pipefail
 
@@ -86,9 +86,9 @@ _doctor_validate_file() {
       local new_field="${migration%%|*}"
       local classification="${migration##*|}"
       if [[ "$classification" == "mechanical" ]]; then
-        printf '  ✗ %s — renamed to '\''%s'\'' [mechanical: orc doctor --auto-fix]\n' "$key" "$new_field"
+        printf '  ✗ %s — renamed to '\''%s'\'' [mechanical: orc doctor --fix]\n' "$key" "$new_field"
       else
-        printf '  ✗ %s — replaced by '\''%s'\'' [semantic: orc doctor --fix]\n' "$key" "$new_field"
+        printf '  ✗ %s — replaced by '\''%s'\'' [semantic: orc doctor --interactive]\n' "$key" "$new_field"
       fi
       ((issues++)) || true
       continue
@@ -112,9 +112,111 @@ _doctor_validate_file() {
   return "$issues"
 }
 
+_doctor_check_git_excludes() {
+  # Verify registered projects have signal-file patterns in .git/info/exclude.
+  # Projects registered before v0.2.8 only have directory patterns (.beads/,
+  # .worktrees/, .goals/) which don't protect signal files inside worktrees.
+  local issues=0
+  local signal_patterns=(".worker-status" ".worker-feedback" ".orch-assignment.md")
+
+  local keys
+  if [[ -n "${_doctor_project:-}" ]]; then
+    keys="$_doctor_project"
+  else
+    keys="$(_project_keys)"
+  fi
+
+  for key in $keys; do
+    local path
+    path="$(_project_path "$key")" 2>/dev/null || continue
+
+    local git_dir
+    git_dir="$(git -C "$path" rev-parse --git-dir 2>/dev/null || true)"
+    [[ -n "$git_dir" ]] || continue
+    [[ "$git_dir" != /* ]] && git_dir="$path/$git_dir"
+
+    local exclude_file="$git_dir/info/exclude"
+    [[ -f "$exclude_file" ]] || continue
+
+    local missing=()
+    for pat in "${signal_patterns[@]}"; do
+      if ! grep -qxF "$pat" "$exclude_file" 2>/dev/null; then
+        missing+=("$pat")
+      fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      printf '\n  %s: missing git-exclude patterns for signal files\n' "$key"
+      printf '    ✗ %s\n' "${missing[@]}"
+      ((issues++)) || true
+    fi
+  done
+
+  return "$issues"
+}
+
+_doctor_fix_git_excludes() {
+  # Apply missing signal-file patterns to all registered projects.
+  # Reports exactly which patterns were added to which projects.
+  local signal_patterns=(".worker-status" ".worker-feedback" ".orch-assignment.md")
+
+  local keys
+  if [[ -n "${_doctor_project:-}" ]]; then
+    keys="$_doctor_project"
+  else
+    keys="$(_project_keys)"
+  fi
+
+  local projects_changed=0
+  local projects_checked=0
+  for key in $keys; do
+    local path
+    path="$(_project_path "$key")" 2>/dev/null || continue
+    ((projects_checked++)) || true
+
+    local git_dir
+    git_dir="$(git -C "$path" rev-parse --git-dir 2>/dev/null || true)"
+    [[ -n "$git_dir" ]] || continue
+    [[ "$git_dir" != /* ]] && git_dir="$path/$git_dir"
+
+    local exclude_file="$git_dir/info/exclude"
+
+    # Detect which patterns are missing before applying
+    local missing=()
+    for pat in "${signal_patterns[@]}"; do
+      if ! grep -qxF "$pat" "$exclude_file" 2>/dev/null; then
+        missing+=("$pat")
+      fi
+    done
+
+    _orc_git_exclude "$path"
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      _info "  $key: added ${missing[*]}"
+      ((projects_changed++)) || true
+    fi
+  done
+
+  if [[ "$projects_changed" -gt 0 ]]; then
+    _info "Git excludes: $projects_changed of $projects_checked project(s) updated."
+  else
+    _info "Git excludes: $projects_checked project(s) already up to date."
+  fi
+}
+
 _doctor_validate() {
   local total_issues=0
   local files_checked=0
+
+  # Check git-exclude patterns for signal files
+  local exclude_issues=0
+  local exclude_output
+  exclude_output="$(_doctor_check_git_excludes 2>&1)" || exclude_issues=$?
+  if [[ "$exclude_issues" -gt 0 ]]; then
+    echo "$exclude_output"
+    printf '\n  Run orc doctor --fix to add missing patterns.\n'
+    total_issues=$((total_issues + exclude_issues))
+  fi
 
   # Check config files — scoped to a project if specified
   local files=("$ORC_ROOT/config.toml")
@@ -159,15 +261,15 @@ _doctor_validate() {
     echo ""
     _error "$files_checked file(s) checked, $total_issues issue(s) found."
     echo ""
-    _info "  orc doctor --auto-fix    Apply mechanical renames automatically"
-    _info "  orc doctor --fix         Interactive agent-assisted migration"
+    _info "  orc doctor --fix            Apply mechanical fixes automatically"
+    _info "  orc doctor --interactive    Interactive agent-assisted migration"
   fi
 
   return "$total_issues"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Auto-fix — apply mechanical renames
+# Fix — apply mechanical renames and structural fixes
 # ─────────────────────────────────────────────────────────────────────────────
 
 _doctor_auto_fix_file() {
@@ -221,6 +323,9 @@ _doctor_auto_fix_file() {
 _doctor_auto_fix() {
   local total_fixed=0
 
+  # Fix missing signal-file git-exclude patterns
+  _doctor_fix_git_excludes
+
   local files=()
   [[ -f "$ORC_ROOT/config.local.toml" ]] && files+=("$ORC_ROOT/config.local.toml")
 
@@ -247,20 +352,25 @@ _doctor_auto_fix() {
 
   # Re-validate to show remaining issues
   echo ""
-  _info "Re-validating after auto-fix..."
+  _info "Re-validating after fix..."
   _doctor_validate || true
 
   # Check for remaining semantic migrations
   _info ""
-  _info "Semantic migrations (if any) require 'orc doctor --fix' for interactive assistance."
+  _info "Semantic migrations (if any) require 'orc doctor --interactive' for agent-assisted review."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Fix mode — launch root orchestrator in doctor mode
+# Interactive mode — launch root orchestrator in doctor mode
 # ─────────────────────────────────────────────────────────────────────────────
 
-_doctor_fix() {
-  # Run fast validation to capture output (passed to the agent as context)
+_doctor_interactive() {
+  # Run programmatic fixes first, then launch agent for semantic issues
+  _info "Applying programmatic fixes before launching interactive session..."
+  _doctor_auto_fix
+  echo ""
+
+  # Re-validate to capture remaining issues (passed to the agent as context)
   local validation_output
   validation_output="$(_doctor_validate 2>&1)" || true
 
@@ -339,7 +449,7 @@ STATIC_DOCTOR_EOF
 
 ## Boundaries
 
-- Mechanical renames (field name changes) should already be handled by --auto-fix
+- Mechanical renames (field name changes) should already be handled by --fix
 - When done, this session ends
 STATIC_DOCTOR2_EOF
 
@@ -386,16 +496,16 @@ ALWAYS present every issue and proposed fix to the user. ALWAYS wait for confirm
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Parse arguments: orc doctor [project] [--auto-fix|--fix]
+# Parse arguments: orc doctor [project] [--fix|--interactive]
 _doctor_project=""
 _doctor_mode="validate"
 
 for _arg in "$@"; do
   case "$_arg" in
-    --auto-fix) _doctor_mode="auto-fix" ;;
-    --fix)      _doctor_mode="fix" ;;
-    -*)         _die "Unknown flag: $_arg. Usage: orc doctor [project] [--auto-fix|--fix]" "$EXIT_USAGE" ;;
-    *)          _doctor_project="$_arg" ;;
+    --fix)         _doctor_mode="fix" ;;
+    --interactive) _doctor_mode="interactive" ;;
+    -*)            _die "Unknown flag: $_arg. Usage: orc doctor [project] [--fix|--interactive]" "$EXIT_USAGE" ;;
+    *)             _doctor_project="$_arg" ;;
   esac
 done
 
@@ -405,11 +515,11 @@ if [[ -n "$_doctor_project" ]]; then
 fi
 
 case "$_doctor_mode" in
-  auto-fix)
+  fix)
     _doctor_auto_fix
     ;;
-  fix)
-    _doctor_fix
+  interactive)
+    _doctor_interactive
     ;;
   validate)
     _doctor_validate

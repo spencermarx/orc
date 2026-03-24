@@ -205,7 +205,7 @@ orc <project> <bead>           # Jump to an engineer's worktree
 | `orc list` | Show registered projects |
 | `orc status` | Dashboard |
 | `orc setup <project>` | Guided config setup |
-| `orc doctor [--auto-fix\|--fix]` | Validate config / migration |
+| `orc doctor [--fix\|--interactive]` | Validate config / migration |
 | `orc notify [--all\|--clear\|--goto N]` | View notifications |
 | `orc halt <project> <bead>` | Stop an engineer |
 | `orc teardown [project] [bead]` | Cleanup |

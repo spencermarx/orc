@@ -182,7 +182,7 @@ The tmux status bar shows the active notification count. Window tabs highlight w
 
 ## Config Change Delegation (Doctor Mode)
 
-The root orchestrator may send you config change requests during `orc doctor --fix`. When you receive config migration instructions:
+The root orchestrator may send you config change requests during `orc doctor --interactive`. When you receive config migration instructions:
 
 1. Read the requested change and rationale
 2. Apply the change to your project's `.orc/config.toml`

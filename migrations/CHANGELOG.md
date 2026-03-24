@@ -1,6 +1,6 @@
 # Migration Changelog
 
-Complete migration guide for orc. Each version section contains everything needed to update a user's local setup — breaking changes, new capabilities, and new commands. Used by `orc doctor --fix` for agent-assisted migration.
+Complete migration guide for orc. Each version section contains everything needed to update a user's local setup — breaking changes, new capabilities, and new commands. Used by `orc doctor --interactive` for agent-assisted migration.
 
 <!-- ENTRY FORMAT — for AI assistants editing this file:
 
@@ -11,8 +11,8 @@ Entry types (in order within each version):
 1. BREAKING CHANGES (required migration):
    ### `[old]` → `[new]` — Mechanical|Semantic Migration
    **Removed/Replacement/Why/Migration (with examples)/Classification**
-   - Mechanical = value unchanged, rename only → `orc doctor --auto-fix`
-   - Semantic = value needs transformation → `orc doctor --fix`
+   - Mechanical = value unchanged, rename only → `orc doctor --fix`
+   - Semantic = value needs transformation → `orc doctor --interactive`
 
 2. NEW CAPABILITIES (recommended setup):
    ### New: `[section]` — Brief Description
@@ -23,6 +23,24 @@ Entry types (in order within each version):
    **What it does/Usage**
 
 Always include "Why", concrete examples, default behavior, and reference `orc doctor`/`orc setup` where applicable. -->
+
+---
+
+## v0.2.8 — Signal File Git-Exclude Guard (2026-03-24)
+
+### Breaking Changes
+
+None.
+
+### New Capabilities
+
+#### Git-exclude patterns for signal files
+
+**What:** `.worker-status`, `.worker-feedback`, and `.orch-assignment.md` are now added to `.git/info/exclude` for all registered projects. Previously only directory patterns (`.beads/`, `.worktrees/`, `.goals/`) were excluded, which did not protect signal files inside engineer worktrees (where they sit at the worktree root, not inside `.worktrees/`).
+
+**Why:** Engineers running `git add .` or `git add -A` could accidentally stage and commit orc orchestration internals.
+
+**Migration:** Run `orc doctor --fix` to add the missing patterns to existing projects. New projects registered via `orc add` get them automatically.
 
 ---
 
@@ -44,7 +62,7 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
   - Conditional logic (e.g., "develop for features, main for hotfixes") → express in natural language
 - `when_to_involve_user_in_delivery` defaults to `"always"` — set to `"never"` for auto-delivery
 
-**Classification:** Semantic — requires user decision. Use `orc doctor --fix`.
+**Classification:** Semantic — requires user decision. Use `orc doctor --interactive`.
 
 ---
 
@@ -59,7 +77,7 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 - `verify_approval = "<value>"` → `how_to_determine_if_review_passed = "<value>"` (value unchanged)
 - `address_feedback = "<value>"` → `how_to_address_review_feedback = "<value>"` (value unchanged)
 
-**Classification:** Mechanical — direct rename. Use `orc doctor --auto-fix`.
+**Classification:** Mechanical — direct rename. Use `orc doctor --fix`.
 
 ---
 
@@ -75,7 +93,7 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 - `review = "<value>"` → `ask_before_reviewing = "<value>"` (value unchanged)
 - `merge = "<value>"` → `ask_before_merging = "<value>"` (value unchanged)
 
-**Classification:** Mechanical — direct rename. Use `orc doctor --auto-fix`.
+**Classification:** Mechanical — direct rename. Use `orc doctor --fix`.
 
 ---
 
@@ -83,7 +101,7 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 #### New: Self-Documenting Config Schema
 
-**What it does:** Every lifecycle hook field in `config.toml` now has structured WHO / WHEN / WHAT / BOUNDARY comments that document who executes the field, when it fires, what belongs in it, and what does NOT belong. `orc setup` and `orc doctor --fix` read these comments to correctly assemble and validate config values.
+**What it does:** Every lifecycle hook field in `config.toml` now has structured WHO / WHEN / WHAT / BOUNDARY comments that document who executes the field, when it fires, what belongs in it, and what does NOT belong. `orc setup` and `orc doctor --interactive` read these comments to correctly assemble and validate config values.
 
 **Default (unconfigured):** No action needed. The comments are in the committed defaults.
 
@@ -93,9 +111,9 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 #### New: `orc doctor` Accepts Project Argument
 
-**What it does:** `orc doctor [project] [--auto-fix|--fix]` now accepts an optional project name to scope validation and review to a specific project.
+**What it does:** `orc doctor [project] [--fix|--interactive]` now accepts an optional project name to scope validation and review to a specific project.
 
-**Usage:** `orc doctor wrkbelt --fix` reviews only wrkbelt's config.
+**Usage:** `orc doctor wrkbelt --interactive` reviews only wrkbelt's config.
 
 ---
 
@@ -208,12 +226,12 @@ check_on_launch = true
 
 ### New Commands
 
-#### `orc doctor [--auto-fix|--fix]`
+#### `orc doctor [--fix|--interactive]`
 
 **What it does:** Validates config files against the current schema. Three modes:
 - `orc doctor` — fast validation, reports issues
-- `orc doctor --auto-fix` — applies mechanical renames automatically
-- `orc doctor --fix` — interactive agent-assisted migration via root orchestrator
+- `orc doctor --fix` — applies mechanical renames automatically
+- `orc doctor --interactive` — interactive agent-assisted migration via root orchestrator
 
 ---
 

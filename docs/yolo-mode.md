@@ -25,7 +25,7 @@ The flag works with all commands that accept interactive input:
 
 ```bash
 orc setup myapp --yolo     # Auto-configure from scout findings
-orc doctor --fix --yolo    # Apply migrations without prompting
+orc doctor --interactive --yolo    # Apply migrations without prompting
 ```
 
 ## What Changes
