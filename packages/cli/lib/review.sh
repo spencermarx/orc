@@ -16,7 +16,7 @@ orc_review() {
 
   _require tmux "brew install tmux"
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
   _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
   local worktree_dir="$project_path/.worktrees/$bead"
@@ -145,43 +145,8 @@ orc_review() {
     init_prompt="Review the engineer's changes now. Read .orch-assignment.md for context, run git diff main to see changes, run tests, then write your verdict to .worker-feedback. Start immediately."
   fi
 
-  # Build agent command with persona
-  local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
-  local agent_flags
-  agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
-  if [[ "${ORC_YOLO:-0}" == "1" ]]; then
-    local yolo_flags
-    yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-    if [[ -z "$yolo_flags" ]]; then
-      case "$agent_cmd" in
-        claude) yolo_flags="--dangerously-skip-permissions" ;;
-      esac
-    fi
-    [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
-  fi
-
-  local persona_file
-  persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
-  printf '%s' "$persona" > "$persona_file"
-
-  local prompt_file
-  prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-  printf '%s' "$init_prompt" > "$prompt_file"
-
-  local cmd="$agent_cmd"
-  [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
-  cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\" \"\$(cat $prompt_file)\""
-
-  local launcher
-  launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-  cat > "$launcher" <<LAUNCH_EOF
-#!/usr/bin/env bash
-clear
-$cmd
-LAUNCH_EOF
-  chmod +x "$launcher"
-  _tmux_send_pane "$window_name" "$review_pane" "bash $launcher"
+  # Launch reviewer via adapter-aware pipeline
+  _launch_agent_in_review_pane "$window_name" "$persona" "$project_path" "$init_prompt" "$worktree_dir"
 
   # Update status indicator (displayed in status bar, not in window name)
   _tmux_set_window_status "$window_name" "✓"

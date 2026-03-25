@@ -1242,6 +1242,7 @@ _launch_agent_in_review_pane() {
   local persona="$2"
   local project_path="${3:-}"
   local initial_prompt="${4:-}"
+  local working_dir="${5:-}"
 
   _send_to_review_pane() {
     local review_pane
@@ -1250,7 +1251,7 @@ _launch_agent_in_review_pane() {
     _tmux_send_pane "$window" "$review_pane" "bash $1"
   }
 
-  _build_and_launch _send_to_review_pane "$project_path" "$persona" "$initial_prompt" "reviewer"
+  _build_and_launch _send_to_review_pane "$project_path" "$persona" "$initial_prompt" "reviewer" "$working_dir"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
