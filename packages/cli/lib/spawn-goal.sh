@@ -115,6 +115,7 @@ Branching strategy: ${branching_strategy}"
 
 Additional instructions: ${custom_prompt}"
   fi
+  init_prompt="$(_prepend_setup_instructions "$project_path" "$init_prompt")"
 
   _launch_agent_in_window "$goal_window" "$persona" "$project_path" "$init_prompt"
 

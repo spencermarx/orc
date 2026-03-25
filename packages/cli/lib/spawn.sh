@@ -68,6 +68,7 @@ orc_spawn() {
   persona="$(_resolve_persona "engineer" "$project_path")"
   local init_prompt
   init_prompt="Read your assignment in .orch-assignment.md now. Investigate the relevant code, then implement the work described. When done, run /orc:done."
+  init_prompt="$(_prepend_setup_instructions "$project_path" "$init_prompt")"
 
   if [[ -n "$goal" ]]; then
     # ── Goal-aware: spawn engineer as a pane in the goal window ──

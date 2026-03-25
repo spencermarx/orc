@@ -106,6 +106,25 @@ strategy = ""                # Natural language branch naming preference
                              # Default: feat/, fix/, task/ + ticket prefix if available
                              # e.g., "always use feat/ prefix" or "use JIRA ticket as prefix"
 
+# ─── WORKTREE ────────────────────────────────────────────────────────────────
+# Controls what happens when any new worktree is created for agent work.
+
+[worktree]
+setup_instructions = ""          # WHO: the AGENT entering the worktree (engineer, goal orch, project orch)
+                                 #   — not a sub-agent
+                                 # WHEN: FIRST action after the agent starts, BEFORE reading assignment or
+                                 #   investigating codebase
+                                 # WHAT: project-specific bootstrapping steps — dependency installation,
+                                 #   environment file copying, code generation, local DB setup, etc.
+                                 # SUPPORTS: natural language, conditional logic, {project_root} placeholder
+                                 # BOUNDARY: do NOT include assignment content, planning directives, review
+                                 #   instructions, or delivery actions — those belong in their respective
+                                 #   sections. This is ONLY for making the worktree functional.
+                                 # e.g., "Run pnpm install. Copy .env from {project_root}."
+                                 # e.g., "Run npm ci && npx prisma generate"
+                                 # e.g., "If a Python project, run poetry install. If Node, run pnpm install."
+                                 # empty = no worktree setup (agents start work immediately)
+
 # ─── DELIVERY ─────────────────────────────────────────────────────────────────
 # Controls what happens when a goal is complete and all reviews have passed.
 # The goal orchestrator executes delivery actions DIRECTLY (not a sub-agent).

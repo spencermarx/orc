@@ -29,6 +29,7 @@ review.goal.how_to_determine_if_review_passed
 review.goal.how_to_address_review_feedback
 review.goal.max_rounds
 branching.strategy
+worktree.setup_instructions
 delivery.goal.on_completion_instructions
 delivery.goal.when_to_involve_user_in_delivery
 agents.ruflo
