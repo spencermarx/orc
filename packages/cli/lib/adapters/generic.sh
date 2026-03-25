@@ -47,7 +47,7 @@ _adapter_build_launch_cmd() {
   local project_path="${4:-}"
 
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
   local agent_template
   agent_template="$(_config_get "defaults.agent_template" "" "$project_path")"
 

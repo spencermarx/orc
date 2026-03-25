@@ -20,7 +20,7 @@ orc_spawn_goal() {
   _require tmux "brew install tmux"
   _require bd "See Beads documentation"
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
   _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
   # Verify the goal branch exists

@@ -16,7 +16,7 @@ orc_review() {
 
   _require tmux "brew install tmux"
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
   _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
   local worktree_dir="$project_path/.worktrees/$bead"
@@ -146,18 +146,16 @@ orc_review() {
   fi
 
   # Build agent command with persona
+  _load_adapter "$project_path"
+
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
   local agent_flags
   agent_flags="$(_config_get "defaults.agent_flags" "" "$project_path")"
   if [[ "${ORC_YOLO:-0}" == "1" ]]; then
     local yolo_flags
     yolo_flags="$(_config_get "defaults.yolo_flags" "" "$project_path")"
-    if [[ -z "$yolo_flags" ]]; then
-      case "$agent_cmd" in
-        claude) yolo_flags="--dangerously-skip-permissions" ;;
-      esac
-    fi
+    [[ -z "$yolo_flags" ]] && yolo_flags="$(_adapter_yolo_flags "$project_path")"
     [[ -n "$yolo_flags" ]] && agent_flags="${agent_flags:+$agent_flags }$yolo_flags"
   fi
 
@@ -169,9 +167,11 @@ orc_review() {
   prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
   printf '%s' "$init_prompt" > "$prompt_file"
 
-  local cmd="$agent_cmd"
-  [[ -n "$agent_flags" ]] && cmd="$cmd $agent_flags"
-  cmd="$cmd --append-system-prompt \"\$(cat $persona_file)\" \"\$(cat $prompt_file)\""
+  _adapter_inject_persona "$persona" "$worktree_dir" "reviewer"
+  _adapter_pre_launch "$worktree_dir" "reviewer"
+
+  local cmd
+  cmd="$(_adapter_build_launch_cmd "$persona_file" "$prompt_file" "$agent_flags" "$project_path")"
 
   local launcher
   launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"

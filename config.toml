@@ -2,7 +2,7 @@
 # Override in config.local.toml (gitignored) or {project}/.orc/config.toml
 
 [defaults]
-agent_cmd = "claude"             # CLI to launch: claude, opencode, codex, gemini, or any custom CLI
+agent_cmd = "claude"             # CLI to launch: claude, opencode, codex, gemini, auto, or any custom CLI
                                  # Adapters at packages/cli/lib/adapters/{name}.sh handle CLI-specific
                                  # prompt delivery, yolo flags, and command installation.
                                  # If no adapter matches, the generic fallback uses agent_template.

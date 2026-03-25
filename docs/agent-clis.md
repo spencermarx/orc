@@ -5,7 +5,7 @@ Orc is CLI-agnostic. It does not care which AI coding agent does the work — it
 ```toml
 # config.local.toml (or {project}/.orc/config.toml)
 [defaults]
-agent_cmd = "claude"    # change this to any supported CLI
+agent_cmd = "claude"    # or "auto" to detect installed CLI
 ```
 
 Adapters handle each CLI's quirks — prompt delivery, auto-approval flags, slash command installation — so orc's orchestration layer works identically regardless of the engine underneath.
@@ -22,6 +22,8 @@ Orc ships with dedicated adapters for the following agent CLIs:
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `GEMINI.md` in worktree | `--yolo` | `.gemini/commands/orc/` (TOML) |
 
 Each adapter normalizes these differences so that orc can spawn engineers, inject personas, and install slash commands through a single interface.
+
+`agent_cmd = "auto"` is also supported. Orc will detect the first installed CLI in this order: `gemini`, `codex`, `opencode`, `claude`.
 
 ## Bring Your Own CLI
 
