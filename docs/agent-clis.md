@@ -5,7 +5,7 @@ Orc is CLI-agnostic. It does not care which AI coding agent does the work — it
 ```toml
 # config.local.toml (or {project}/.orc/config.toml)
 [defaults]
-agent_cmd = "claude"    # change this to any supported CLI
+agent_cmd = "auto"      # auto-detect, or set explicitly: claude, opencode, codex, gemini
 ```
 
 Adapters handle each CLI's quirks — prompt delivery, auto-approval flags, slash command installation — so orc's orchestration layer works identically regardless of the engine underneath.
@@ -22,6 +22,33 @@ Orc ships with dedicated adapters for the following agent CLIs:
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `GEMINI.md` in worktree | `--yolo` | `.gemini/commands/orc/` (TOML) |
 
 Each adapter normalizes these differences so that orc can spawn engineers, inject personas, and install slash commands through a single interface.
+
+## Auto-Detection
+
+Set `agent_cmd = "auto"` and orc will find the first installed CLI automatically:
+
+```
+claude → opencode → codex → gemini
+```
+
+The detection order follows adapter integration depth — Claude has the deepest integration (MCP server support, native slash commands, `--append-system-prompt`), so it is preferred when multiple CLIs are available.
+
+**How it works:**
+
+- On first use, orc scans `$PATH` for each CLI in order and selects the first match.
+- The result is cached for the duration of the process — subsequent calls within the same `orc` command return instantly.
+- If no CLI is found, orc falls back to `claude` with a warning and the normal `_require` check will prompt you to install it.
+
+**Project-level overrides still win.** If a project has `agent_cmd = "codex"` in its `.orc/config.toml`, that takes precedence over a root-level `agent_cmd = "auto"`. Auto-detection only runs when the resolved config value is literally `"auto"`.
+
+**When to use auto vs explicit:**
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Single CLI installed | `auto` — zero config, just works |
+| Multiple CLIs, one preferred | Set it explicitly: `agent_cmd = "claude"` |
+| Different CLIs per project | Set per-project in `.orc/config.toml` |
+| CI / shared environments | `auto` — adapts to what's available |
 
 ## Bring Your Own CLI
 

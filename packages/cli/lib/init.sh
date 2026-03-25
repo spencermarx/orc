@@ -47,7 +47,7 @@ if [[ ! -f "$local_config" ]]; then
 # Uncomment and edit values below to override committed defaults.
 
 # [defaults]
-# agent_cmd = "claude"
+# agent_cmd = "auto"   # auto-detect installed CLI (claude, opencode, codex, gemini)
 # agent_flags = ""
 # yolo_flags = ""
 # max_workers = 3
@@ -96,7 +96,7 @@ _require "git"   "https://git-scm.com/downloads"              && _info "  ✓ gi
 _require "tmux"  "brew install tmux"                           && _info "  ✓ tmux" || ((missing++))
 _require "bd"    "See Beads documentation"                     && _info "  ✓ bd" || ((missing++))
 
-agent_cmd="$(_config_get "defaults.agent_cmd" "claude")"
+agent_cmd="$(_resolve_agent_cmd)"
 _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)" && _info "  ✓ $agent_cmd" || ((missing++))
 
 if (( missing > 0 )); then

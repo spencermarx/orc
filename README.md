@@ -84,7 +84,7 @@ Here is what happens next:
 | [tmux](https://github.com/tmux/tmux) 3.0+ | Session management | `brew install tmux` / `apt install tmux` |
 | `git` | Worktrees and branching | Pre-installed on most systems |
 | `bash` 3.2+ | CLI runtime | Pre-installed on macOS and Linux |
-| Agent CLI | Your AI coding agents | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
+| Agent CLI | Your AI coding agents — `auto` detects what's installed | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 
 Optional: [`gh`](https://cli.github.com/) — only needed if you want orc to auto-create PRs.
 
@@ -313,7 +313,14 @@ Orc will notify you when an agent hits the worker limit — check `orc notify` f
 <details>
 <summary><strong>Agents using the wrong CLI</strong></summary>
 
-Set `agent_cmd` in your config. Globally: `orc config` then `[defaults] agent_cmd = "opencode"`. Per-project: create `{project}/.orc/config.toml`. See [Supported Agent CLIs](docs/agent-clis.md) for all options.
+Set `agent_cmd = "auto"` to let orc detect the first installed CLI, or set it explicitly: `orc config` then `[defaults] agent_cmd = "opencode"`. Per-project overrides go in `{project}/.orc/config.toml`. See [Supported Agent CLIs](docs/agent-clis.md) for all options.
+
+</details>
+
+<details>
+<summary><strong>How do I know which CLI orc picked?</strong></summary>
+
+When `agent_cmd = "auto"`, orc logs which CLI it detected on first use (e.g., `Auto-detected agent CLI: claude`). This appears once per orc command invocation. To check your resolved config at any time, look at the startup output or set the CLI explicitly to remove ambiguity.
 
 </details>
 

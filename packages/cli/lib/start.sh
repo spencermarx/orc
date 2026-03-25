@@ -41,7 +41,7 @@ orc_start() {
   if [[ -z "$project" ]]; then
     # ── Root orchestrator ──────────────────────────────────────────────
     local agent_cmd
-    agent_cmd="$(_config_get "defaults.agent_cmd" "claude")"
+    agent_cmd="$(_resolve_agent_cmd)"
     _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
     _tmux_ensure_session
@@ -77,7 +77,7 @@ orc_start() {
     project_path="$(_require_project "$project")"
 
     local agent_cmd
-    agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+    agent_cmd="$(_resolve_agent_cmd "$project_path")"
     _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
     _tmux_ensure_session

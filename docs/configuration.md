@@ -32,7 +32,7 @@ Controls which AI CLI orc launches and how many workers can run in parallel.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `agent_cmd` | `"claude"` | CLI to launch: `claude`, `opencode`, `codex`, `gemini`, or any custom CLI. Adapters at `packages/cli/lib/adapters/{name}.sh` handle CLI-specific behavior. |
+| `agent_cmd` | `"auto"` | CLI to launch. `auto` detects the first installed CLI in order: `claude`, `opencode`, `codex`, `gemini`. Or set explicitly to any of those names, or a custom CLI. See [Supported Agent CLIs](agent-clis.md#auto-detection) for details. |
 | `agent_flags` | `""` | Extra flags passed to every agent launch. |
 | `agent_template` | `""` | Custom launch template (overrides adapter). Placeholders: `{cmd}` = agent_cmd, `{prompt_file}` = persona file path, `{prompt}` = file contents. |
 | `yolo_flags` | `""` | Auto-accept flags per agent. Empty = use adapter defaults (e.g., `--dangerously-skip-permissions` for Claude). |
