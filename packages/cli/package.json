@@ -1,6 +1,6 @@
 {
   "name": "@orc/cli",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "The orc command — pure bash CLI for multi-project agent orchestration"
 }

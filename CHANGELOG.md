@@ -1,3 +1,14 @@
+## 0.2.9 (2026-03-25)
+
+### 📝 Documentation
+
+- **readme:** update all READMEs for v0.2.8 accuracy — add→setup flow, adapter docs, CLI architecture ([4b9e8a7](https://github.com/spencermarx/orc/commit/4b9e8a7))
+
+### ❤️  Thank You
+
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.8 (2026-03-25)
 
 ### 🚀 Features

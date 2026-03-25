@@ -1,6 +1,6 @@
 {
   "name": "orc",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
