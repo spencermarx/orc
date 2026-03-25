@@ -1,4 +1,4 @@
-# packages/commands
+# @orc/commands
 
 Slash commands for agent CLIs. Pure markdown — no code, no build step.
 
@@ -30,10 +30,17 @@ Commands declare their intended **role** in the header (e.g., `**Role:** Orchest
 
 ## Installation
 
-Commands are installed as symlinks by `orc init` (into the orc repo itself) and `orc add` (into registered projects):
+Commands are installed as symlinks by `orc init` (into the orc repo itself) and `orc add` (into registered projects). Each agent CLI adapter (`packages/cli/lib/adapters/`) handles installation to its CLI-specific location:
 
-- Claude Code: symlinks to `.claude/commands/orc/`
-- Windsurf: symlinks to `.windsurf/workflows/`
+| Agent CLI | Install target | Adapter |
+|-----------|---------------|---------|
+| Claude Code | `.claude/commands/orc/` | `claude.sh` |
+| Windsurf | `.windsurf/workflows/` | (via `windsurf/` directory) |
+| OpenCode | Custom config integration | `opencode.sh` |
+| Codex | Prompt-based (no symlinks) | `codex.sh` |
+| Gemini CLI | Prompt-based (no symlinks) | `gemini.sh` |
+
+CLIs that don't support file-based slash commands receive command content inline via the adapter's `_adapter_inject_persona` function.
 
 ## Adding a New Command
 

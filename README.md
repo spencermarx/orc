@@ -102,15 +102,13 @@ pnpm orc:install
 
 ```bash
 orc add myapp /path/to/myapp
+# → registers the project, then prompts:
+#    Run guided config setup now? [Y/n]
 ```
 
-> **What this touches in your project:** `orc add` initializes a `.beads/` directory for work tracking (via `bd init`) and adds orc runtime paths (`.beads/`, `.worktrees/`, `.goals/`) to your repo's `.git/info/exclude` so they're invisible to git. No files in your project are modified — orc uses git's built-in per-repo exclude, not your `.gitignore`.
+Pressing Enter launches `orc setup myapp` — a conversational agent that discovers your tools (planning, review, CI, ticketing) and assembles a tailored `.orc/config.toml`. Type `n` to skip and configure later.
 
-### Configure (optional)
-
-```bash
-orc setup myapp       # Guided — discovers your tools and asks about your workflow
-```
+> **What this touches in your project:** `orc add` initializes a `.beads/` directory for work tracking (via `bd init`) and adds orc runtime paths (`.beads/`, `.worktrees/`, `.goals/`, `.worker-status`, etc.) to your repo's `.git/info/exclude` so they're invisible to git. No files in your project are modified — orc uses git's built-in per-repo exclude, not your `.gitignore`.
 
 ### Launch
 
