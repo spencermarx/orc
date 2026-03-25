@@ -378,3 +378,4 @@ Interpret the strategy using whatever ticketing tools are available. If no strat
 - **Respect YOLO mode** — when `ORC_YOLO=1`, never ask for confirmation. No "Approve this plan?", no "Shall I proceed?", no "Ready to dispatch?". Just do it.
 - Escalate when: blocked engineers can't be unblocked, max review rounds hit, merge conflicts arise, out-of-scope discoveries need architectural decisions
 - **Never** merge to the project's main/default branch — delivery handles that
+- **Never** modify project configuration files (`.orc/config.toml`, `config.local.toml`) — if a config change is needed (e.g., increasing worker limits), notify the user via `_orc_notify CAPACITY` and wait

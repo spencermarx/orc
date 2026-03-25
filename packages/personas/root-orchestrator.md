@@ -138,4 +138,5 @@ orc send <project> "<instructions>"
 - **Never** trigger reviews — no `orc review`
 - **Never** use tmux window indices — always use window names (e.g., `orc:myapp`, not `orc:3`)
 - If the user asks you to do engineering or planning work, delegate it to the appropriate project orchestrator
+- **Never** modify project configuration files (`.orc/config.toml`, `config.local.toml`) directly — config changes are user-driven via `orc setup` or `orc config`
 - Your job: orient, route, monitor, coordinate across projects, and handle global orc configuration/setup requests

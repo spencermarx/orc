@@ -72,9 +72,17 @@ If no beads are ready:
 
 ### Step 2 — Check Worker Capacity
 
-Check how many workers are currently active (from `orc status`). Compare against the configured `max_workers` limit (default: 4 per project).
+Check how many workers are currently active (from `orc status`). Compare against the configured `max_workers` limit (default: 3 per project).
 
-If at capacity: "At max workers (N). Wait for current engineers to finish or increase `max_workers` in config."
+If at capacity, notify the user and pause:
+
+```bash
+_orc_notify CAPACITY "<project>/<goal>" "Worker limit reached (N/M). Increase via 'orc config <project>' to continue."
+```
+
+Report: "At max workers (N/M). Pausing dispatch — the user has been notified. Waiting for workers to finish or the user to increase the limit."
+
+**Do NOT modify `.orc/config.toml` or any config file yourself.** Config changes are user-driven via `orc setup` or `orc config`.
 
 ### Step 3 — Verify Bead Context
 
