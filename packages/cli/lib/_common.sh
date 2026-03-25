@@ -1276,6 +1276,42 @@ _orc_git_exclude() {
 # Worker helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+_worktree_setup_instructions() {
+  local project_path="$1"
+  local instructions
+  instructions="$(_config_get "worktree.setup_instructions" "" "$project_path")"
+  [[ -z "$instructions" ]] && return 0
+  echo "${instructions//\{project_root\}/$project_path}"
+}
+
+_prepend_setup_instructions() {
+  local project_path="$1"
+  local init_prompt="$2"
+  local setup
+  setup="$(_worktree_setup_instructions "$project_path")"
+  [[ -z "$setup" ]] && { echo "$init_prompt"; return 0; }
+  printf 'FIRST — before doing anything else, set up this worktree:\n%s\n\nAfter setup completes, proceed:\n\n%s' "$setup" "$init_prompt"
+}
+
+_ensure_project_orch_worktree() {
+  local project_path="$1"
+  local wt="$project_path/.worktrees/.project-orch"
+  if [[ ! -d "$wt" ]] || ! git -C "$wt" rev-parse --is-inside-work-tree &>/dev/null; then
+    # Remove stale/corrupt worktree if directory exists
+    if [[ -d "$wt" ]]; then
+      git -C "$project_path" worktree remove ".worktrees/.project-orch" --force 2>/dev/null || true
+    fi
+    mkdir -p "$project_path/.worktrees"
+    local branch
+    branch="$(git -C "$project_path" symbolic-ref --short HEAD 2>/dev/null || echo "HEAD")"
+    git -C "$project_path" worktree add --detach ".worktrees/.project-orch" "$branch" 2>/dev/null || {
+      git -C "$project_path" worktree remove ".worktrees/.project-orch" --force 2>/dev/null || true
+      git -C "$project_path" worktree add --detach ".worktrees/.project-orch" "$branch"
+    }
+  fi
+  echo "$wt"
+}
+
 _goal_status_dir() {
   local project_path="$1"
   local goal="$2"
@@ -1301,8 +1337,12 @@ _worker_count() {
   local count=0
   for d in "$worktrees_dir"/*/; do
     [[ -d "$d" ]] || continue
+    local name
+    name="$(basename "$d")"
     # Skip internal state directories (not worktrees)
-    [[ "$(basename "$d")" == .* ]] && continue
+    [[ "$name" == .* ]] && continue
+    # Skip goal orchestrator worktrees (not engineer workers)
+    [[ "$name" == goal-* ]] && continue
     ((count++)) || true
   done
   echo "$count"
@@ -1370,7 +1410,7 @@ _orc_notify_log() {
 # Append a notification to the log. Optionally triggers OS notification.
 # Usage: _orc_notify <level> <scope> <message>
 # Levels: PLAN_REVIEW, PLAN_INVALIDATED, QUESTION, BLOCKED, GOAL_REVIEW,
-#         DELIVERY, GOAL_COMPLETE, ESCALATION, RESOLVED
+#         DELIVERY, GOAL_COMPLETE, ESCALATION, CAPACITY, RESOLVED
 _orc_notify() {
   local level="$1"
   local scope="$2"

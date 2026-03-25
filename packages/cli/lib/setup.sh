@@ -141,6 +141,8 @@ STATIC2_EOF
   echo ""
   echo "Help the user set up the .orc/config.toml for project ${project} at ${project_path}."
   echo ""
+  echo "IMPORTANT: Write the config file to ${project_path}/.orc/config.toml (the project root, not your worktree)."
+  echo ""
   echo "${existing_config_hint}"
   echo ""
   echo "## Existing Project Config"
@@ -160,25 +162,36 @@ rm -f "$briefing_file"
 
 # ── Launch ────────────────────────────────────────────────────────────────
 
+# Create or reuse project orchestrator worktree
+# Note: setup mode does NOT prepend worktree setup instructions — it's assembling
+# config, not doing dev work. The setup agent doesn't need deps installed.
+proj_worktree="$(_ensure_project_orch_worktree "$project_path")"
+
 persona=""
 persona="$(_resolve_persona "orchestrator" "$project_path")"
 
 if _tmux_window_exists "$project"; then
   if _tmux_is_dead_window "$project"; then
-    _launch_agent_in_window "$project" "$persona" "$project_path" "$briefing"
+    # Dead — tear down the window and recreate below (ensures correct worktree CWD)
+    tmux kill-window -t "$(_tmux_target "$project")" 2>/dev/null || true
+    if _tmux_window_exists "$project"; then
+      _die "Failed to remove dead orchestrator window for '$project'." "$EXIT_STATE"
+    fi
   elif [[ "${ORC_YOLO:-0}" == "1" ]]; then
     _tmux_send "$project" "$briefing"
+    _orc_goto "$project"
+    exit "$EXIT_OK"
   else
     _info "Orchestrator for '${project}' is already running."
     _info "Send setup instructions directly or teardown first."
     _orc_goto "$project"
     exit "$EXIT_OK"
   fi
-else
-  after=""
-  after="$(_last_project_window "$project")"
-  _tmux_new_window "$project" "$project_path" "$after"
-  _launch_agent_in_window "$project" "$persona" "$project_path" "$briefing"
 fi
+
+after=""
+after="$(_last_project_window "$project")"
+_tmux_new_window "$project" "$proj_worktree" "$after"
+_launch_agent_in_window "$project" "$persona" "$project_path" "$briefing"
 
 _orc_goto "$project"

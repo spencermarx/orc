@@ -83,27 +83,47 @@ orc_start() {
     _tmux_ensure_session
     _detect_ruflo "$project_path"
 
+    # ── Create or reuse project orchestrator worktree ───────────────
+    local proj_worktree
+    proj_worktree="$(_ensure_project_orch_worktree "$project_path")"
+
     local persona
     persona="$(_resolve_persona "orchestrator" "$project_path")"
     local init_prompt
-    init_prompt="You are the orchestrator for project '${project}' at ${project_path}. Start by investigating the codebase to understand its structure and current state. Then ask what work needs to be done."
+    init_prompt="You are the orchestrator for project '${project}'.
+
+Your working directory is an isolated worktree at ${proj_worktree}, based on the project's default branch. You and your sub-agents (scouts) work here freely — the developer's main workspace at ${project_path} is untouched.
+
+IMPORTANT PATHS:
+- Working directory (your worktree): ${proj_worktree}
+- Project root (for bd commands, git branch operations, and status files): ${project_path}
+
+When running bd commands, use: cd ${project_path} && bd <command>
+When creating goal branches, use: git -C ${project_path} branch <type>/<goal-name>
+
+Start by investigating the codebase to understand its structure and current state. Then ask what work needs to be done."
+    init_prompt="$(_prepend_setup_instructions "$project_path" "$init_prompt")"
 
     if _tmux_window_exists "$project"; then
       if _tmux_is_dead_window "$project"; then
+        # Dead — tear down the window and recreate below (ensures correct worktree CWD)
         _info "Orchestrator for '$project' session ended. Relaunching."
-        _launch_agent_in_window "$project" "$persona" "$project_path" "$init_prompt"
+        tmux kill-window -t "$(_tmux_target "$project")" 2>/dev/null || true
+        if _tmux_window_exists "$project"; then
+          _die "Failed to remove dead orchestrator window for '$project'." "$EXIT_STATE"
+        fi
       else
         _info "Orchestrator for '$project' running."
+        # --background: don't switch to the window (used by root orch for multi-project delegation)
+        [[ "${ORC_BACKGROUND:-0}" != "1" ]] && _orc_goto "$project"
+        return
       fi
-      # --background: don't switch to the window (used by root orch for multi-project delegation)
-      [[ "${ORC_BACKGROUND:-0}" != "1" ]] && _orc_goto "$project"
-      return
     fi
 
     # Insert after the last window in project hierarchy (or at end)
     local after
     after="$(_last_project_window "$project")"
-    _tmux_new_window "$project" "$project_path" "$after"
+    _tmux_new_window "$project" "$proj_worktree" "$after"
     _launch_agent_in_window "$project" "$persona" "$project_path" "$init_prompt"
 
     # --background: don't switch to the window

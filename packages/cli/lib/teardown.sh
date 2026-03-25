@@ -360,13 +360,20 @@ _teardown_project() {
   _tmux_kill_window "$project"
   _pane_registry_clear "$project"
 
-  # Kill project overflow windows
+  # Kill project overflow windows (before worktree removal — scouts may be running in it)
   local overflow_win
   for overflow_win in $(_tmux_overflow_windows "$project"); do
     [[ -z "$overflow_win" ]] && continue
     _tmux_kill_window "$overflow_win"
     _pane_registry_clear "$overflow_win"
   done
+
+  # Remove project orchestrator worktree (after all windows killed)
+  if [[ -d "$project_path/.worktrees/.project-orch" ]]; then
+    _load_adapter "$project_path"
+    _adapter_post_teardown "$project_path/.worktrees/.project-orch" 2>/dev/null || true
+    git -C "$project_path" worktree remove ".worktrees/.project-orch" --force 2>/dev/null || true
+  fi
 
   # Kill board window
   _tmux_kill_window "${project}/board"
@@ -420,7 +427,7 @@ elif [[ $# -eq 1 ]]; then
   project_path="$(_require_project "$1")"
   workers="$(_worker_count "$project_path")"
   if [[ "$force" -eq 0 ]]; then
-    printf '%s' "[orc] Teardown '$1'? This will kill $workers agent(s) and remove all worktrees. [y/N] "
+    printf '%s' "[orc] Teardown '$1'? This will kill the project orchestrator, $workers worker(s), all goal orchestrators, and remove all worktrees. [y/N] "
     read -r answer
     [[ "$answer" =~ ^[Yy] ]] || { _info "Cancelled."; exit "$EXIT_OK"; }
   fi

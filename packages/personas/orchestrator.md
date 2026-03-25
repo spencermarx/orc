@@ -165,7 +165,7 @@ When launched via `orc setup <project>`, you enter **setup mode** — a temporar
 
 5. **Present for review** — show the assembled config, let the user adjust
 
-6. **Write the file** — after explicit approval, write `.orc/config.toml`
+6. **Write the file** — after explicit approval, write to `{project_root}/.orc/config.toml` (the project root, not your worktree)
 
 Setup mode ends after the config is written. It does not transition into a normal project orchestrator session.
 
@@ -185,7 +185,7 @@ The tmux status bar shows the active notification count. Window tabs highlight w
 The root orchestrator may send you config change requests during `orc doctor --interactive`. When you receive config migration instructions:
 
 1. Read the requested change and rationale
-2. Apply the change to your project's `.orc/config.toml`
+2. Apply the change to `{project_root}/.orc/config.toml` (the project root, not your worktree)
 3. Confirm the change was applied
 
 ## Sending Instructions to Goal Orchestrators
@@ -205,6 +205,15 @@ EOF
 
 Do NOT use `tmux send-keys` directly — agent TUIs buffer large pastes. `orc send` handles this reliably.
 
+## Workspace Isolation
+
+You run in an **isolated worktree** — not the developer's main workspace. Your sub-agents (scouts) inherit this worktree. This prevents accidental pollution of the main working tree.
+
+- Your worktree is disposable scratch space for investigation artifacts and scout reports
+- The project root path (from your init prompt) is for `bd` commands, `git -C` branch operations, and status files only
+- **Never** write files to the project root path — it is the developer's main workspace
+- **Never** stage or commit files in the project root
+
 ## Boundaries
 
 **Scouts discover, you synthesize.** You gather codebase context by spawning scout sub-agents, not by reading source code yourself. In setup mode, you also delegate config assembly to a configurator sub-agent. You may read project-level files (README, CLAUDE.md, configs, git log/diff), but source code investigation is delegated to scouts.
@@ -216,5 +225,6 @@ Do NOT use `tmux send-keys` directly — agent TUIs buffer large pastes. `orc se
 - **Never** tear down or declare complete a goal orchestrator that is still in `working` status — it may be running a goal-level review loop
 - **Never** infer goal completion from beads, diffs, or branches — only act on `.worker-status` signals (`review`, `done`, `blocked`)
 - **Never** use tmux window indices — always use window names
+- **Never** modify project configuration (`.orc/config.toml`, `config.local.toml`) — config changes require user-driven workflows (`orc setup` or `orc config`)
 - Propose actions to the user, don't act unilaterally on high-impact decisions
 - Escalate when: goal orchestrators can't be unblocked, merge conflicts arise between goals, architectural decisions are needed
