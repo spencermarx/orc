@@ -1,3 +1,29 @@
+## 0.2.8 (2026-03-25)
+
+### 🚀 Features
+
+- **cli:** add auto agent CLI detection with `_resolve_agent_cmd` ([9dcb667](https://github.com/spencermarx/orc/commit/9dcb667))
+- **cli:** isolate project orchestrator in dedicated worktree ([2baad42](https://github.com/spencermarx/orc/commit/2baad42))
+- **cli:** add `[worktree] setup_instructions` config field ([0b308e4](https://github.com/spencermarx/orc/commit/0b308e4))
+- **cli:** prompt to launch guided config setup after `orc add` ([4a7015a](https://github.com/spencermarx/orc/commit/4a7015a))
+
+### 🩹 Fixes
+
+- **cli:** guard signal files from being committed in engineer worktrees ([53b4c0b](https://github.com/spencermarx/orc/commit/53b4c0b))
+- **cli:** guard config files from agent modification ([e5bd082](https://github.com/spencermarx/orc/commit/e5bd082))
+- **cli:** guard Ruflo MCP registration for non-Claude CLIs ([d3fb475](https://github.com/spencermarx/orc/commit/d3fb475))
+
+### 🔧 Refactors
+
+- **cli:** rename doctor flags `--auto-fix`/`--fix` to `--fix`/`--interactive` ([4ae8c08](https://github.com/spencermarx/orc/commit/4ae8c08))
+- **cli:** make review launch adapter-aware via `_launch_agent_in_review_pane` ([261c1fd](https://github.com/spencermarx/orc/commit/261c1fd))
+
+### ❤️  Thank You
+
+- Alexandra Imereli
+- Claude Opus 4.6 (1M context)
+- Spencer Marx
+
 ## 0.2.7 (2026-03-23)
 
 This was a version bump only, there were no code changes.

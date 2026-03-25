@@ -26,7 +26,7 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
-## v0.2.10 — Add Prompts for Guided Config Setup (2026-03-25)
+## v0.2.8 — Isolation, Config Guard, Worktree Setup Hook & Add-Setup Flow (2026-03-25)
 
 ### Breaking Changes
 
@@ -44,15 +44,23 @@ None.
 
 **Migration:** No action needed. `orc setup <project>` continues to work independently for reconfiguration.
 
----
+#### `orc doctor` flag renames: `--auto-fix`/`--fix` → `--fix`/`--interactive`
 
-## v0.2.9 — Project Orchestrator Isolation, Config Guard & Worktree Setup Hook (2026-03-25)
+**What:** `orc doctor --auto-fix` is now `orc doctor --fix`. `orc doctor --fix` (the old interactive mode) is now `orc doctor --interactive`.
 
-### Breaking Changes
+**Why:** Clearer semantics — `--fix` applies mechanical renames, `--interactive` launches agent-assisted migration.
 
-None.
+**Migration:** Update any scripts or muscle memory. Old flags are removed.
 
 ### New Capabilities
+
+#### Git-exclude patterns for signal files
+
+**What:** `.worker-status`, `.worker-feedback`, and `.orch-assignment.md` are now added to `.git/info/exclude` for all registered projects. Previously only directory patterns (`.beads/`, `.worktrees/`, `.goals/`) were excluded, which did not protect signal files inside engineer worktrees (where they sit at the worktree root, not inside `.worktrees/`).
+
+**Why:** Engineers running `git add .` or `git add -A` could accidentally stage and commit orc orchestration internals.
+
+**Migration:** Run `orc doctor --fix` to add the missing patterns to existing projects. New projects registered via `orc add` get them automatically.
 
 #### Project orchestrator worktree isolation
 
@@ -91,23 +99,13 @@ Run npx prisma generate.
 
 **Placeholder:** `{project_root}` is replaced with the absolute path to the registered project root at launch time. Use this to reference files that should be copied from the main project directory.
 
----
+#### Auto agent CLI detection
 
-## v0.2.8 — Signal File Git-Exclude Guard (2026-03-24)
+**What:** `agent_cmd = "auto"` (new default) detects installed agent CLIs in priority order: `claude` → `opencode` → `codex` → `gemini`. Removes the need to manually set the agent command.
 
-### Breaking Changes
+**Why:** Users installing orc for the first time shouldn't have to know which config field to set for their CLI.
 
-None.
-
-### New Capabilities
-
-#### Git-exclude patterns for signal files
-
-**What:** `.worker-status`, `.worker-feedback`, and `.orch-assignment.md` are now added to `.git/info/exclude` for all registered projects. Previously only directory patterns (`.beads/`, `.worktrees/`, `.goals/`) were excluded, which did not protect signal files inside engineer worktrees (where they sit at the worktree root, not inside `.worktrees/`).
-
-**Why:** Engineers running `git add .` or `git add -A` could accidentally stage and commit orc orchestration internals.
-
-**Migration:** Run `orc doctor --fix` to add the missing patterns to existing projects. New projects registered via `orc add` get them automatically.
+**Migration:** No action needed. Existing `agent_cmd` values continue to work. `"auto"` is the new default for unconfigured projects.
 
 ---
 
