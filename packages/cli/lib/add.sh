@@ -43,4 +43,26 @@ fi
 _orc_git_exclude "$path"
 
 _info "Added project '$key' → $path"
-_info "Run \`orc setup $key\` for guided config setup."
+
+# Prompt to launch guided config setup (default: yes, yolo: auto-accept)
+if [[ "${ORC_YOLO:-0}" == "1" ]]; then
+  _info "Launching guided config setup..."
+  exec orc setup "$key"
+else
+  while true; do
+    printf '%s' "[orc] Run guided config setup now? [Y/n] "
+    read -r answer
+    case "$answer" in
+      [Yy]|"")
+        exec orc setup "$key"
+        ;;
+      [Nn])
+        _info "Skipped. Run \`orc setup $key\` later for guided config setup."
+        break
+        ;;
+      *)
+        echo "[orc] Please enter Y or N."
+        ;;
+    esac
+  done
+fi
