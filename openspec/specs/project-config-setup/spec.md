@@ -25,9 +25,23 @@ The command SHALL:
 - **THEN** the project orchestrator launches in setup mode with the existing config as a starting point
 - **AND** presents the current config, asks what the user wants to change, and produces an updated config
 
-#### Scenario: Setup suggested after project registration
+#### Scenario: Setup prompted after project registration (accept)
 - **WHEN** the user runs `orc add myapp /path/to/myapp`
-- **THEN** the CLI suggests: "Project registered. Run `orc setup myapp` for guided config setup."
+- **THEN** the CLI registers the project
+- **AND** prompts: `"Run guided config setup now? [Y/n]"`
+- **AND** on accept (or Enter with no input), launches `orc setup myapp`
+
+#### Scenario: Setup prompted after project registration (decline)
+- **WHEN** the user runs `orc add myapp /path/to/myapp`
+- **THEN** the CLI registers the project
+- **AND** prompts: `"Run guided config setup now? [Y/n]"`
+- **AND** on decline (`n` or `N`), prints a note that setup can be run later with `orc setup myapp`
+- **AND** does NOT launch the setup agent session
+
+#### Scenario: Setup auto-launches in yolo mode
+- **WHEN** the user runs `orc add myapp /path/to/myapp` with `--yolo` or `ORC_YOLO=1`
+- **THEN** the CLI registers the project
+- **AND** skips the prompt and launches `orc setup myapp` automatically
 
 ### Requirement: Project Investigation for Setup
 
