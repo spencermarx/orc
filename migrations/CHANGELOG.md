@@ -26,6 +26,26 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.10 — Add Prompts for Guided Config Setup (2026-03-25)
+
+### Breaking Changes
+
+None.
+
+### Behavioral Changes
+
+#### `orc add` now prompts to launch guided config setup
+
+**What:** After registering a project, `orc add` now prompts `"Run guided config setup now? [Y/n]"` instead of printing a suggestion to run `orc setup` manually. Pressing Enter (or Y) launches `orc setup <project>` immediately. Typing N skips setup with a reminder message.
+
+**Why:** The previous two-command flow (`orc add` then `orc setup`) was unnecessary friction — users frequently forgot to run setup, leading to unconfigured projects.
+
+**`--yolo` behavior:** In yolo mode, the prompt is skipped and setup launches automatically — consistent with yolo semantics throughout orc.
+
+**Migration:** No action needed. `orc setup <project>` continues to work independently for reconfiguration.
+
+---
+
 ## v0.2.9 — Project Orchestrator Isolation, Config Guard & Worktree Setup Hook (2026-03-25)
 
 ### Breaking Changes
