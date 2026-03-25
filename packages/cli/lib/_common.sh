@@ -1174,7 +1174,7 @@ _build_and_launch() {
   fi
 
   # Ruflo: ensure MCP server registered, append persona block
-  _ensure_ruflo_mcp
+  _ensure_ruflo_mcp "$project_path"
   local ruflo_block
   ruflo_block="$(_ruflo_persona_block)"
   [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
@@ -1666,11 +1666,22 @@ _detect_ruflo() {
 # Ensure the Ruflo MCP server is registered with the agent CLI.
 # Called once per session before the first agent spawn.
 _ensure_ruflo_mcp() {
+  local project_path="${1:-}"
+
   # Skip when Ruflo is not available
   [[ "${ORC_RUFLO_AVAILABLE:-0}" == "1" ]] || return 0
 
   # Already ensured this session — skip
   [[ -n "${ORC_RUFLO_MCP_READY+x}" ]] && return 0
+
+  # MCP auto-registration currently requires Claude CLI
+  local agent_cmd
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
+  if [[ "$agent_cmd" != "claude" ]]; then
+    _warn "Ruflo MCP auto-registration currently supports Claude CLI only; skipping for '$agent_cmd'."
+    export ORC_RUFLO_MCP_READY=1
+    return 0
+  fi
 
   # Check if ruflo MCP server is already registered
   if claude mcp list 2>/dev/null | grep -q "ruflo"; then
