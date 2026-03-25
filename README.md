@@ -37,7 +37,7 @@ Four ideas are all you need to understand orc:
 | **Goal** | A deliverable with its own git branch. "Add rate limiting" is a goal. | A ticket on your board |
 | **Bead** | A focused work item within a goal. One engineer, one worktree, one bead. | A subtask — small enough to complete and review in one pass |
 | **Orchestrator** | An AI agent that coordinates work but never writes code. Three tiers: root (cross-project), project (manages goals), goal (manages beads). | A tech lead who delegates but never opens an IDE |
-| **Worktree** | An isolated git checkout. Each engineer works in its own copy of the repo. No conflicts during development. | Each engineer gets their own sandbox |
+| **Worktree** | An isolated git checkout. Every agent — engineers, goal orchestrators, and project orchestrators — works in its own copy of the repo. No conflicts, no pollution of your main workspace. | Each agent gets their own sandbox |
 
 Everything else is configuration. [Deep dive &rarr;](docs/concepts.md)
 
@@ -69,9 +69,10 @@ Here is what happens next:
 3. **The goal orchestrator plans** — if configured, a planner sub-agent creates design docs or specs using your tool (OpenSpec, Kiro, or plain markdown). You review if you want to.
 4. **It decomposes into beads** — the plan becomes focused work items: "rate-limiter-middleware", "config-endpoint", "rate-limit-tests".
 5. **Engineers dispatch** — each bead spawns an engineer in an isolated worktree. Three agents working in parallel, zero conflicts.
-6. **Review runs automatically** — each bead is reviewed before merging to the goal branch. Not approved? The engineer gets feedback and fixes it.
-7. **Delivery executes** — your configured pipeline runs: push the branch, create a PR, update the Jira ticket, archive the spec.
-8. **You come back to a clean goal branch** ready to merge — or an open PR ready to review.
+6. **Worktrees bootstrap** — if configured, each worktree runs your setup instructions first: install deps, copy `.env` files, run codegen. Every agent starts with a working environment.
+7. **Review runs automatically** — each bead is reviewed before merging to the goal branch. Not approved? The engineer gets feedback and fixes it.
+8. **Delivery executes** — your configured pipeline runs: push the branch, create a PR, update the Jira ticket, archive the spec.
+9. **You come back to a clean goal branch** ready to merge — or an open PR ready to review.
 
 ## Quick Start
 
@@ -155,7 +156,7 @@ Give context, take over, or just watch. You're never locked out.
 Every goal follows the same configurable lifecycle:
 
 ```
-Investigate -> Plan -> Decompose -> Dispatch -> Build -> Review -> Deliver
+Investigate -> Plan -> Decompose -> Dispatch -> Setup -> Build -> Review -> Deliver
 ```
 
 | Phase | What happens | You configure |
@@ -164,6 +165,7 @@ Investigate -> Plan -> Decompose -> Dispatch -> Build -> Review -> Deliver
 | **Plan** | Planner creates design docs, specs, task lists | `plan_creation_instructions` |
 | **Decompose** | Goal orchestrator maps plan to beads | `bead_creation_instructions` |
 | **Dispatch** | Engineers spawn in isolated worktrees | `assignment_instructions` |
+| **Setup** | Worktree bootstrapping (deps, env, codegen) | `setup_instructions` |
 | **Build** | Engineers implement in parallel | (automatic) |
 | **Review** | Two-tier review loop | `review_instructions` |
 | **Deliver** | Push, PR, ticket updates | `on_completion_instructions` |
@@ -174,7 +176,7 @@ Every field is natural language. Empty = sensible default. [Full lifecycle deep 
 
 ```
 Root Orchestrator --- cross-project coordination
-  +-> Project Orchestrator --- creates goals, monitors progress
+  +-> Project Orchestrator --- creates goals, monitors progress (isolated worktree)
         +-> Goal Orchestrator --- owns one goal, manages the full lifecycle
               +-> Planner (ephemeral) --- creates plan artifacts
               +-> Scouts (ephemeral) --- investigate codebase
@@ -259,6 +261,10 @@ when_to_involve_user_in_delivery = "always"
 [review.goal]
 review_instructions = "/ocr:review"
 how_to_determine_if_review_passed = "No must-fix items in the review output"
+
+# Worktree — project-specific bootstrapping for every new workspace
+[worktree]
+setup_instructions = "Run pnpm install. Copy .env from {project_root} to this directory."
 ```
 
 [Full configuration reference &rarr;](docs/configuration.md)
@@ -299,6 +305,8 @@ Orc escalates merge conflicts to you — it never force-pushes or auto-resolves.
 <summary><strong>Too many workers / spawn blocked</strong></summary>
 
 Increase the limit: `orc config` then set `max_workers = 5` under `[defaults]`.
+
+Orc will notify you when an agent hits the worker limit — check `orc notify` for pending capacity alerts.
 
 </details>
 

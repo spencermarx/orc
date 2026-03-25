@@ -26,6 +26,53 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.9 — Project Orchestrator Isolation, Config Guard & Worktree Setup Hook (2026-03-25)
+
+### Breaking Changes
+
+None.
+
+### New Capabilities
+
+#### Project orchestrator worktree isolation
+
+**What:** The project orchestrator now runs in an isolated worktree (`.worktrees/.project-orch`) instead of the developer's main workspace. Sub-agents (scouts) inherit this isolation, preventing accidental file creation, staging, or modification in the main working tree. Goal orchestrators already had this isolation; this brings the project orchestrator to parity.
+
+**Why:** During live runs, project orchestrator sub-agents were creating files (openspec proposals, application code) and even staging changes in the main worktree. Behavioral boundaries ("never write code") were insufficient without structural enforcement.
+
+**Migration:** No action needed. The worktree is created automatically on next `orc <project>` launch and cleaned up by `orc teardown <project>`.
+
+#### Config modification guard
+
+**What:** Orchestrators and goal orchestrators are now explicitly prohibited from modifying `.orc/config.toml` or other configuration files. The `/orc:dispatch` command no longer suggests increasing `max_workers` directly — it emits a `CAPACITY` notification instead, prompting the user to adjust config via `orc config` or `orc setup`.
+
+**Why:** A goal orchestrator followed dispatch command instructions to "increase `max_workers` in config" and directly edited `.orc/config.toml` without user approval.
+
+**Migration:** No action needed. Behavioral change only — personas and commands updated.
+
+#### New: `[worktree]` — Worktree Setup Hook
+
+**Fields:** `setup_instructions`
+
+**What it does:** Defines project-specific bootstrapping that runs as the FIRST action when any new worktree is created — for engineers, goal orchestrators, and project orchestrators. The agent entering the worktree executes these instructions before reading its assignment or investigating the codebase.
+
+**Default (unconfigured):** No worktree setup. Agents start work immediately (today's behavior).
+
+**Setup:** `orc setup <project>` or add manually:
+
+```toml
+[worktree]
+setup_instructions = """
+Run pnpm install.
+Copy .env and .env.local from {project_root} to this worktree.
+Run npx prisma generate.
+"""
+```
+
+**Placeholder:** `{project_root}` is replaced with the absolute path to the registered project root at launch time. Use this to reference files that should be copied from the main project directory.
+
+---
+
 ## v0.2.8 — Signal File Git-Exclude Guard (2026-03-24)
 
 ### Breaking Changes

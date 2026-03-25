@@ -56,7 +56,11 @@ Every engineer works in an isolated git worktree — a separate checkout of the 
 
 Goal orchestrators also run in isolated worktrees, checked out to their goal branch. This ensures the developer's main workspace stays clean — you can have five goals running concurrently without any of them touching the project root. Planners and scouts spawned by the goal orchestrator inherit its worktree.
 
+Project orchestrators also run in isolated worktrees (`.project-orch`), checked out to the project's default branch. This keeps the developer's main workspace completely clean — no accidental file creation or staged changes during orchestration.
+
 Worktrees live at `{project}/.worktrees/` (gitignored). Goal orchestrator worktrees are created by `orc spawn-goal` (named `goal-<name>`). Engineer worktrees are created by `orc spawn` (named by bead ID). Both are torn down automatically.
+
+If your project needs bootstrapping in every new worktree — installing dependencies, copying `.env` files, running code generation — configure `[worktree] setup_instructions` in your project config. Every agent entering a new worktree executes these as its first action. See [Configuration Reference](configuration.md).
 
 ---
 
@@ -65,7 +69,7 @@ Worktrees live at `{project}/.worktrees/` (gitignored). Goal orchestrator worktr
 Every goal follows the same configurable lifecycle:
 
 ```
-Investigate --> Plan --> Decompose --> Dispatch --> Build --> Review --> Deliver
+Investigate --> Plan --> Decompose --> Dispatch --> Setup --> Build --> Review --> Deliver
 ```
 
 | Phase | What happens | You configure |
@@ -74,6 +78,7 @@ Investigate --> Plan --> Decompose --> Dispatch --> Build --> Review --> Deliver
 | **Plan** | A planner sub-agent creates design docs, specs, or task lists | `[planning.goal]` — your planning tool |
 | **Decompose** | The goal orchestrator maps plan artifacts to beads | `[planning.goal]` — bead creation conventions |
 | **Dispatch** | Engineers spawn in isolated worktrees | `[dispatch.goal]` — assignment instructions |
+| **Setup** | Project-specific worktree bootstrapping (deps, env files, codegen) | `[worktree]` — setup instructions |
 | **Build** | Engineers implement in parallel | (automatic) |
 | **Review** | Two-tier review loop (bead-level, then goal-level) | `[review.dev]`, `[review.goal]` — review tools |
 | **Deliver** | Push, PR, ticket updates, or signal for user review | `[delivery.goal]` — delivery pipeline |

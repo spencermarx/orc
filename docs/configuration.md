@@ -159,6 +159,30 @@ strategy = "Use JIRA ticket as prefix, e.g., PROJ-123/fix-auth-bug"
 
 ---
 
+### `[worktree]` — Worktree Setup
+
+Controls project-specific bootstrapping that runs automatically when any new worktree is created.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `setup_instructions` | `""` | **WHO:** executed by the **agent entering the worktree** (engineer, goal orchestrator, or project orchestrator — not a sub-agent). **WHEN:** FIRST action after the agent starts, BEFORE reading its assignment or investigating the codebase. Describes project-specific bootstrapping steps — dependency installation, environment file copying, code generation, local database setup, etc. Supports `{project_root}` placeholder, which resolves to the absolute path of the registered project root. **BOUNDARY:** setup only — do not include assignment content, planning directives, review instructions, or delivery actions. Those belong in their respective sections. Empty = no worktree setup (agents start work immediately). |
+
+**Example — monorepo with Prisma:**
+
+```toml
+[worktree]
+setup_instructions = "Run pnpm install. Copy .env and .env.local from {project_root}. Run npx prisma generate."
+```
+
+**Example — conditional setup:**
+
+```toml
+[worktree]
+setup_instructions = "If package.json exists, run npm ci. If requirements.txt exists, run pip install -r requirements.txt."
+```
+
+---
+
 ### `[delivery.goal]` — Delivery Pipeline
 
 Controls what happens when a goal is complete. See [Core Concepts: The Lifecycle](concepts.md#the-lifecycle).
@@ -302,6 +326,19 @@ when_to_involve_user_in_plan = "always"
 
 [delivery.goal]
 when_to_involve_user_in_delivery = "always"
+```
+
+### Worktree With Environment Files
+
+Copy environment files and install dependencies so every engineer starts with a working environment.
+
+```toml
+[worktree]
+setup_instructions = """
+Copy .env and .env.local from {project_root} to this directory.
+Run pnpm install.
+Run npx prisma generate.
+"""
 ```
 
 ### Custom Review Tool

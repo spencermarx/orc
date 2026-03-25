@@ -219,6 +219,10 @@ Key config sections:
 strategy = ""                  # Natural language branch naming preference
                                # Default: feat/, fix/, task/ + ticket prefix if available
 
+[worktree]
+setup_instructions = ""        # Project-specific bootstrapping for new worktrees
+                               # e.g., "Run pnpm install. Copy .env from {project_root}."
+
 [planning.goal]
 plan_creation_instructions = ""
 bead_creation_instructions = ""

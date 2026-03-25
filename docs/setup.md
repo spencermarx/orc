@@ -62,6 +62,7 @@ When you register a project with `orc add`, orc creates:
 
 - **`.beads/`** --- the Dolt database used for work tracking.
 - **Runtime paths in `.git/info/exclude`** --- keeps orc artifacts out of your git status without modifying `.gitignore`.
+- **`.worktrees/`** --- git worktrees for isolated agent work (engineers, goal orchestrators, project orchestrators). Gitignored via `.git/info/exclude`.
 
 No files in your working tree are modified. The `.orc/` directory is yours to create when you want project-level config overrides or custom persona files.
 

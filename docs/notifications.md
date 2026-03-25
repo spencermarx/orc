@@ -24,6 +24,7 @@ Together, these three levels let you monitor from the macro (how many things nee
 | `DELIVERY` | A goal is ready for delivery approval | Goal orchestrator | You approve delivery |
 | `GOAL_COMPLETE` | A goal has been delivered | Goal orchestrator | You acknowledge completion |
 | `ESCALATION` | Max review rounds exhausted or an unrecoverable issue | Goal orchestrator | You intervene and resolve the issue |
+| `CAPACITY` | Worker limit reached during dispatch | Goal orchestrator | Workers finish or you increase `max_workers` via `orc config` |
 
 ## Navigating to Notifications
 
