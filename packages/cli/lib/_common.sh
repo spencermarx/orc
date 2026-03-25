@@ -106,7 +106,7 @@ _require_tools() {
   _require "tmux" "brew install tmux" || ((failed++))
   _require "bd" "See Beads documentation for install instructions" || ((failed++))
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude")"
+  agent_cmd="$(_resolve_agent_cmd)"
   _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)" || ((failed++))
   return "$failed"
 }
@@ -175,6 +175,53 @@ _config_get() {
   fi
 
   echo "$default"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Agent CLI resolution
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Detect the first available agent CLI on PATH.
+# Order follows adapter integration depth: claude (deepest) → gemini (newest).
+# Returns the CLI name or exits 1 if none found.
+_auto_detect_agent_cmd() {
+  local candidate
+  for candidate in claude opencode codex gemini; do
+    if command -v "$candidate" &>/dev/null; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Resolve the effective agent CLI for this session.
+# Reads defaults.agent_cmd from config; if "auto", runs _auto_detect_agent_cmd.
+# Detection result is logged once per parent process (flag file keyed by $$).
+_resolve_agent_cmd() {
+  local project_path="${1:-}"
+  local configured
+  configured="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+
+  if [[ "$configured" == "auto" ]]; then
+    local result
+    if result="$(_auto_detect_agent_cmd)"; then
+      # Log once per parent process — $$ is stable across $() subshells.
+      # Redirect to stderr so $() captures only the CLI name on stdout.
+      local flag="${TMPDIR:-/tmp}/.orc-auto-detected-$$"
+      if [[ ! -f "$flag" ]]; then
+        _info "Auto-detected agent CLI: $result" >&2
+        : > "$flag"
+      fi
+      echo "$result"
+      return 0
+    fi
+    _warn "Auto-detection found no installed agent CLI; falling back to 'claude'."
+    echo "claude"
+    return 0
+  fi
+
+  echo "$configured"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1068,7 +1115,7 @@ _load_adapter() {
 
   local project_path="${1:-}"
   local agent_cmd
-  agent_cmd="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  agent_cmd="$(_resolve_agent_cmd "$project_path")"
 
   local adapter_dir="$ORC_ROOT/packages/cli/lib/adapters"
   local adapter_file="$adapter_dir/${agent_cmd}.sh"
