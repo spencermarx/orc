@@ -171,6 +171,38 @@ strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrator
                              # e.g., "Move Jira tickets to In Development when goals start"
                              # empty = do not touch tickets
 
+# ─── TUI NAVIGATION LAYER ────────────────────────────────────────────────────
+# Controls the navigation overlay on top of tmux: breadcrumbs, context menus,
+# command palette, and help hints. All features are additive — they enhance
+# tmux without replacing it. Set enabled = false for raw tmux.
+
+[tui]
+enabled = true                   # Master toggle — false disables all TUI enhancements
+breadcrumbs = true               # Hierarchy breadcrumb in status bar (⚔ orc ▸ myapp ▸ fix-auth)
+show_help_hint = true            # Subtle "^b ? help" hint in status bar for new users
+
+[tui.palette]
+enabled = true                   # Command palette (Prefix+Space) — fuzzy search windows/panes
+show_preview = true              # Live pane content preview when browsing palette
+
+[tui.menu]
+enabled = true                   # Context menu (Prefix+m / right-click) — role-aware actions
+
+# ─── KEYBINDINGS ─────────────────────────────────────────────────────────────
+# Prefix-free Alt+ shortcuts for fast navigation. Disabled by default to avoid
+# conflicts with terminal emulators. Enable and remap individual keys below.
+# Uses tmux key notation (M- = Alt, C- = Ctrl). Set a key to "" to disable it.
+
+[keybindings]
+enabled = false                  # Opt-in — set true to register Alt+ shortcuts
+project = "M-0"                  # Jump to project orchestrator
+dashboard = "M-s"                # Jump to status dashboard
+prev = "M-["                    # Previous window
+next = "M-]"                    # Next window
+palette = "M-p"                 # Open command palette
+menu = "M-m"                    # Open context menu
+help = "M-?"                    # Help overlay
+
 # ─── LAYOUT & THEME ──────────────────────────────────────────────────────────
 
 [layout]
