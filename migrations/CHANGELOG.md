@@ -26,6 +26,59 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.11 — TUI Navigation Layer (2026-03-26)
+
+### New Capabilities
+
+#### New: `[tui]` — Navigation overlay for tmux
+
+**Fields:**
+- `tui.enabled` (boolean, default `true`) — master toggle for all TUI enhancements
+- `tui.breadcrumbs` (boolean, default `true`) — hierarchy breadcrumb in status-left: `⚔ orc ▸ myapp ▸ fix-auth ▸ bd-a1b2`
+- `tui.show_help_hint` (boolean, default `true`) — subtle help hint in status-right for new users
+- `tui.palette.enabled` (boolean, default `true`) — command palette via `Prefix+Space`
+- `tui.palette.show_preview` (boolean, default `true`) — live pane preview when browsing palette
+- `tui.menu.enabled` (boolean, default `true`) — context menu via `Prefix+m` / right-click
+
+**What it does:** Adds a navigation overlay on top of tmux with four layers: breadcrumb status bar, context menus, command palette (fuzzy search), and optional keybindings. All features are additive and individually toggleable. Set `tui.enabled = false` for raw tmux.
+
+**Always-on when TUI enabled:** Prefix mode indicator (visual flash when Ctrl+b pressed) and enriched window tabs (engineer count in goal windows). These have no individual toggles.
+
+**Default (unconfigured):** All features active. Palette uses fzf if available, falls back to tmux `choose-tree` without it.
+
+**Setup:** No setup required — works out of the box. Run `orc doctor` for fzf recommendation.
+
+#### New: `[keybindings]` — Prefix-free Alt+ shortcuts
+
+**Fields:**
+- `keybindings.enabled` (boolean, default `false`) — opt-in master toggle
+- `keybindings.project` (string, default `"M-0"`) — jump to project orchestrator
+- `keybindings.dashboard` (string, default `"M-s"`) — jump to status dashboard
+- `keybindings.prev` (string, default `"M-["`) — previous window
+- `keybindings.next` (string, default `"M-]"`) — next window
+- `keybindings.palette` (string, default `"M-p"`) — open command palette
+- `keybindings.menu` (string, default `"M-m"`) — open context menu
+- `keybindings.help` (string, default `"M-?"`) — help overlay
+
+**What it does:** Registers prefix-free Alt+ shortcuts for fast navigation. Disabled by default to avoid conflicts with terminal emulators. Each key is individually overridable or disableable (set to `""`).
+
+**Default (unconfigured):** Disabled. Only prefix-based bindings are active (`Prefix+Space`, `Prefix+m`, `Prefix+?`).
+
+**Setup:** Set `keybindings.enabled = true` in config. iTerm2 users: set "Option key sends +Esc" in Preferences > Profiles > Keys. `orc doctor` warns about this.
+
+### New Scripts
+
+- `packages/cli/lib/palette.sh` — command palette (fzf + choose-tree fallback)
+- `packages/cli/lib/menu.sh` — role-aware context menu (tmux display-menu)
+- `packages/cli/lib/menu-action.sh` — menu action callback with safety validation
+- `packages/cli/lib/help.sh` — help overlay (tmux display-popup)
+
+### Dependencies
+
+- **fzf** (optional) — enables fuzzy search in command palette. Without fzf, palette falls back to tmux `choose-tree`. Install: `brew install fzf`
+
+---
+
 ## v0.2.8 — Isolation, Config Guard, Worktree Setup Hook & Add-Setup Flow (2026-03-25)
 
 ### Breaking Changes
