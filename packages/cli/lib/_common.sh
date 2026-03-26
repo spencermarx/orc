@@ -304,6 +304,10 @@ _tmux_ensure_session() {
   local theme_enabled
   theme_enabled="$(_config_get "theme.enabled" "true")"
 
+  # ── TUI navigation layer config ──
+  local tui_enabled
+  tui_enabled="$(_config_get "tui.enabled" "true")"
+
   if [[ "$theme_enabled" == "true" ]]; then
     local accent bg fg border muted activity
     accent="$(_config_get "theme.accent" "#00ff88")"
@@ -318,14 +322,52 @@ _tmux_ensure_session() {
     # Status bar
     tmux set-option -t "$ORC_TMUX_SESSION" status-style "bg=${bg},fg=${fg}"
     tmux set-option -t "$ORC_TMUX_SESSION" status-position bottom
-    tmux set-option -t "$ORC_TMUX_SESSION" status-left "#[bg=${accent},fg=${bg},bold] ⚔ orc #[fg=${accent},bg=${bg}]▸ "
-    tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 80
 
-    # Window tabs — show @orc_status indicator after name
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format "#[fg=${muted}] #W #{?@orc_status,#{@orc_status} ,}"
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format "#[bg=${tab_bg},fg=${accent},bold] #W #{?@orc_status,#{@orc_status} ,}#[bg=${bg}]"
+    # ── Status-left: breadcrumbs + prefix indicator ──
+    local status_left
+    if [[ "$tui_enabled" == "true" ]]; then
+      local use_breadcrumbs
+      use_breadcrumbs="$(_config_get "tui.breadcrumbs" "true")"
+
+      # Prefix indicator (always on when TUI enabled): reversed styling when
+      # prefix key is active. We avoid commas inside #[] by splitting into
+      # individual style tags — #{?} uses commas as delimiters, so
+      # #[bg=X,fg=Y] inside #{?...,...,...} would break parsing.
+      # Powerline orc segment with prefix indicator
+      local orc_normal="#[bg=${accent}]#[fg=${bg}]#[bold] ⚔ orc #[nobold]#[fg=${accent}]#[bg=${bg}]"
+      local orc_prefix="#[bg=white]#[fg=black]#[bold] ⚔ ORC #[nobold]#[fg=white]#[bg=${bg}]"
+      local orc_segment="#{?client_prefix,${orc_prefix},${orc_normal}}"
+
+      if [[ "$use_breadcrumbs" == "true" ]]; then
+        status_left="${orc_segment}#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --breadcrumb 2>/dev/null) "
+        tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 60
+      else
+        status_left="${orc_segment} "
+        tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
+      fi
+    else
+      # TUI disabled — original static status-left
+      status_left="#[bg=${accent},fg=${bg},bold] ⚔ orc #[fg=${accent},bg=${bg}]▸ "
+      tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
+    fi
+    tmux set-option -t "$ORC_TMUX_SESSION" status-left "$status_left"
+
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 100
+
+    # ── Window tabs ──
+    if [[ "$tui_enabled" == "true" ]]; then
+      # Inactive: plain text, no background — clean and light
+      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format \
+        "#[fg=${muted}] #W #{?@orc_status,#{@orc_status},}"
+
+      # Active: bold accent text
+      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format \
+        "#[fg=${accent},bold] #W #{?@orc_status, #{@orc_status},}#[default]"
+    else
+      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format "#[fg=${muted}] #W #{?@orc_status,#{@orc_status} ,}"
+      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format "#[fg=${accent},bold] #W #{?@orc_status,#{@orc_status} ,}#[default]"
+    fi
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-separator "#[fg=${border}]│"
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-activity-style "fg=${activity}"
 
@@ -347,6 +389,71 @@ _tmux_ensure_session() {
     mouse_enabled="$(_config_get "theme.mouse" "true")"
     if [[ "$mouse_enabled" == "true" ]]; then
       tmux set-option -t "$ORC_TMUX_SESSION" mouse on
+    fi
+
+    # ── TUI bindings (palette, context menu, help, keybindings) ──
+    # Always unbind first so disabling a feature actually removes its binding
+    tmux unbind-key -T prefix Space 2>/dev/null || true
+    tmux unbind-key -T prefix m 2>/dev/null || true
+    tmux unbind-key -T prefix '?' 2>/dev/null || true
+    tmux unbind-key -n MouseDown3Pane 2>/dev/null || true
+    tmux unbind-key -n MouseUp1StatusLeft 2>/dev/null || true
+    tmux unbind-key -n MouseUp1StatusRight 2>/dev/null || true
+
+    if [[ "$tui_enabled" == "true" ]]; then
+      # Palette: Prefix+Space (when palette enabled)
+      local palette_enabled
+      palette_enabled="$(_config_get "tui.palette.enabled" "true")"
+      if [[ "$palette_enabled" == "true" ]]; then
+        tmux bind-key -T prefix Space run-shell "${ORC_ROOT}/packages/cli/lib/palette.sh"
+      fi
+
+      # Context menu: Prefix+m (when menu enabled)
+      local menu_enabled
+      menu_enabled="$(_config_get "tui.menu.enabled" "true")"
+      if [[ "$menu_enabled" == "true" ]]; then
+        tmux bind-key -T prefix m run-shell "${ORC_ROOT}/packages/cli/lib/menu.sh '#{pane_id}'"
+        if [[ "$mouse_enabled" == "true" ]]; then
+          # Right-click on pane opens context menu
+          tmux bind-key -n MouseDown3Pane run-shell "${ORC_ROOT}/packages/cli/lib/menu.sh '#{pane_id}'"
+          # Click the ⚔ orc logo in status-left opens context menu
+          tmux bind-key -n MouseUp1StatusLeft run-shell "${ORC_ROOT}/packages/cli/lib/menu.sh '#{pane_id}'"
+        fi
+      fi
+
+      # Help overlay: Prefix+? (always when TUI enabled)
+      tmux bind-key -T prefix '?' display-popup -E -w 60% -h 75% -T ' ⚔ Orc Help ' "${ORC_ROOT}/packages/cli/lib/help.sh"
+      # Click the help hint in status-right opens help
+      if [[ "$mouse_enabled" == "true" ]]; then
+        tmux bind-key -n MouseUp1StatusRight display-popup -E -w 60% -h 75% -T ' ⚔ Orc Help ' "${ORC_ROOT}/packages/cli/lib/help.sh"
+      fi
+
+      # Keybindings: Alt+ shortcuts (opt-in)
+      # Unbind defaults first (in case user changed keys or disabled)
+      for _def_key in "M-[" "M-]" "M-0" "M-s" "M-p" "M-m" "M-?"; do
+        tmux unbind-key -n "$_def_key" 2>/dev/null || true
+      done
+
+      local kb_enabled
+      kb_enabled="$(_config_get "keybindings.enabled" "false")"
+      if [[ "$kb_enabled" == "true" ]]; then
+        local kb_prev kb_next kb_project kb_dashboard kb_palette kb_menu kb_help
+        kb_prev="$(_config_get "keybindings.prev" "M-[")"
+        kb_next="$(_config_get "keybindings.next" "M-]")"
+        kb_project="$(_config_get "keybindings.project" "M-0")"
+        kb_dashboard="$(_config_get "keybindings.dashboard" "M-s")"
+        kb_palette="$(_config_get "keybindings.palette" "M-p")"
+        kb_menu="$(_config_get "keybindings.menu" "M-m")"
+        kb_help="$(_config_get "keybindings.help" "M-?")"
+
+        [[ -n "$kb_prev" ]]      && tmux bind-key -n "$kb_prev" select-window -t :-
+        [[ -n "$kb_next" ]]      && tmux bind-key -n "$kb_next" select-window -t :+
+        [[ -n "$kb_project" ]]   && tmux bind-key -n "$kb_project" run-shell "${ORC_ROOT}/packages/cli/lib/menu-action.sh nav-project"
+        [[ -n "$kb_dashboard" ]] && tmux bind-key -n "$kb_dashboard" select-window -t "${ORC_TMUX_SESSION}:status"
+        [[ -n "$kb_palette" ]]   && tmux bind-key -n "$kb_palette" run-shell "${ORC_ROOT}/packages/cli/lib/palette.sh"
+        [[ -n "$kb_menu" ]]      && tmux bind-key -n "$kb_menu" run-shell "${ORC_ROOT}/packages/cli/lib/menu.sh '#{pane_id}'"
+        [[ -n "$kb_help" ]]      && tmux bind-key -n "$kb_help" display-popup -E -w 60% -h 75% -T "' ⚔ Orc Help '" "${ORC_ROOT}/packages/cli/lib/help.sh"
+      fi
     fi
   else
     # No theming — just functional status-right for health visibility
@@ -537,6 +644,38 @@ _tmux_send_pane() {
   tmux paste-buffer -t "$target"
   sleep 0.15
   tmux send-keys -t "$target" Enter
+}
+
+# Pre-send validation gate for menu/palette actions that type into agent panes.
+# Re-resolves pane by @orc_id and checks copy mode.
+# Returns 0 and prints pane index if safe, 1+ with display-message on failure.
+# Usage: _tmux_safe_to_send <window> <orc_id_pattern>
+_tmux_safe_to_send() {
+  local window="$1"
+  local orc_id_pattern="$2"
+
+  # 1. Re-resolve pane by @orc_id (not cached index)
+  local pane_idx
+  pane_idx="$(_tmux_find_pane "$window" "$orc_id_pattern")"
+  if [[ -z "$pane_idx" ]]; then
+    tmux display-message "Pane not found — no action taken"
+    return 1
+  fi
+
+  local target
+  target="$(_tmux_target "$window" "$pane_idx")"
+
+  # 2. Check if pane is in copy mode
+  local in_mode
+  in_mode="$(tmux display-message -t "$target" -p '#{pane_in_mode}' 2>/dev/null || echo "0")"
+  if [[ "$in_mode" != "0" ]]; then
+    tmux display-message "Exit copy mode first"
+    return 2
+  fi
+
+  # Safe — caller can proceed with _tmux_send_pane
+  echo "$pane_idx"
+  return 0
 }
 
 _tmux_kill_pane() {

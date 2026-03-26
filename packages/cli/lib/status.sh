@@ -9,6 +9,60 @@ fi
 
 set -euo pipefail
 
+# ── Breadcrumb mode (for tmux status-left) ────────────────────────────────
+
+if [[ "${1:-}" == "--breadcrumb" ]]; then
+  # Derive breadcrumb from active window name + pane title
+  local_session="${ORC_TMUX_SESSION:-orc}"
+  win_name="$(tmux display-message -t "${local_session}" -p '#{window_name}' 2>/dev/null || echo "")"
+  pane_title="$(tmux display-message -t "${local_session}" -p '#{pane_title}' 2>/dev/null || echo "")"
+
+  accent="$(_config_get "theme.accent" "#00ff88")"
+  bg="$(_config_get "theme.bg" "#0d1117")"
+  fg="$(_config_get "theme.fg" "#8b949e")"
+
+  # Build segments from window name (format: project/goal or just project)
+  segments=()
+  if [[ "$win_name" == *"/"* ]]; then
+    project="${win_name%%/*}"
+    goal="${win_name#*/}"
+    segments+=("$project" "$goal")
+    # If focused pane is an engineer, extract bead from title
+    if [[ "$pane_title" == eng:* ]]; then
+      bead="${pane_title#eng: }"
+      bead="${bead%% *}"  # trim anything after first space
+      segments+=("$bead")
+    fi
+  elif [[ "$win_name" == "status" ]]; then
+    segments+=("status")
+  elif [[ -n "$win_name" && "$win_name" != "orc" ]]; then
+    # Project orchestrator window (just the project name)
+    segments+=("$win_name")
+  fi
+
+  # Build breadcrumb string — only the path segments AFTER "⚔ orc"
+  # (the "⚔ orc" / "⚔ ORC" prefix is rendered by the status-left format
+  # with the prefix indicator conditional, not by this script)
+  crumb=""
+  if (( ${#segments[@]} > 0 )); then
+    for seg in "${segments[@]}"; do
+      crumb+=" #[fg=${fg}]▸ #[fg=${accent}]${seg}"
+    done
+  fi
+  crumb+=" #[fg=${fg}]▸"
+
+  # Truncate from left if too long (preserve rightmost segments)
+  max_len=50  # leave room for "⚔ orc" prefix + padding
+  stripped="$(echo "$crumb" | sed 's/#\[[^]]*\]//g')"  # strip tmux color codes for length check
+  n=${#segments[@]}
+  if (( ${#stripped} > max_len && n >= 2 )); then
+    crumb=" #[fg=${fg}]…▸ #[fg=${accent}]${segments[n-2]} #[fg=${fg}]▸ #[fg=${accent}]${segments[n-1]} #[fg=${fg}]▸"
+  fi
+
+  printf '%s' "$crumb"
+  exit 0
+fi
+
 # ── Status line mode (for tmux status-right) ──────────────────────────────
 
 if [[ "${1:-}" == "--line" ]]; then
@@ -58,7 +112,6 @@ if [[ "${1:-}" == "--line" ]]; then
 
   parts=()
   # Notification count
-  local notify_count
   notify_count="$(_orc_notify_active_count 2>/dev/null || echo 0)"
   if (( notify_count > 0 )); then
     parts+=("#[fg=${c_activity}]● ${notify_count} active#[fg=${c_fg}]")
@@ -78,11 +131,25 @@ if [[ "${1:-}" == "--line" ]]; then
   (( review > 0 ))  && parts+=("#[fg=${c_activity}]${review} ✓ review#[fg=${c_fg}]")
   (( blocked > 0 )) && parts+=("#[fg=${c_error}]${blocked} ✗ blocked#[fg=${c_fg}]")
   (( dead > 0 ))    && parts+=("#[fg=${c_error}]${dead} ✗ dead#[fg=${c_fg}]")
+  line_out=""
   if (( ${#parts[@]} > 0 )); then
-    printf '%s' "${parts[*]}"
+    line_out="${parts[*]}"
   else
-    printf '%s' "idle"
+    line_out="idle"
   fi
+
+  # Help hint (tui.show_help_hint)
+  show_hint="$(_config_get "tui.show_help_hint" "true")"
+  tui_enabled="$(_config_get "tui.enabled" "true")"
+  if [[ "$show_hint" == "true" && "$tui_enabled" == "true" ]]; then
+    c_muted="$(_config_get "theme.muted" "#6e7681")"
+    kb_enabled="$(_config_get "keybindings.enabled" "false")"
+    hint_key="^b ?"
+    [[ "$kb_enabled" == "true" ]] && hint_key="Alt+?"
+    line_out+=" #[fg=${c_muted}]│ ${hint_key} help"
+  fi
+
+  printf '%s' "$line_out"
   exit 0
 fi
 

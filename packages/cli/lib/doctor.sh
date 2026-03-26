@@ -40,6 +40,20 @@ updates.check_on_launch
 layout.min_pane_width
 layout.min_pane_height
 board.command
+tui.enabled
+tui.breadcrumbs
+tui.show_help_hint
+tui.palette.enabled
+tui.palette.show_preview
+tui.menu.enabled
+keybindings.enabled
+keybindings.project
+keybindings.dashboard
+keybindings.prev
+keybindings.next
+keybindings.palette
+keybindings.menu
+keybindings.help
 theme.enabled
 theme.mouse
 theme.accent
@@ -264,6 +278,38 @@ _doctor_validate() {
     echo ""
     _info "  orc doctor --fix            Apply mechanical fixes automatically"
     _info "  orc doctor --interactive    Interactive agent-assisted migration"
+  fi
+
+  # ── TUI recommendations (non-blocking) ──────────────────────────────
+  local tui_enabled
+  tui_enabled="$(_config_get "tui.enabled" "true")"
+
+  if [[ "$tui_enabled" == "true" ]]; then
+    local has_recommendations=0
+
+    # fzf recommendation for command palette
+    if ! command -v fzf &>/dev/null; then
+      if [[ "$has_recommendations" -eq 0 ]]; then
+        echo ""
+        _info "TUI recommendations:"
+        has_recommendations=1
+      fi
+      _info "  ? fzf not found — command palette will use tmux choose-tree fallback"
+      _info "    Install: brew install fzf (or see https://github.com/junegunn/fzf)"
+    fi
+
+    # iTerm2 Alt key warning when keybindings enabled
+    local kb_enabled
+    kb_enabled="$(_config_get "keybindings.enabled" "false")"
+    if [[ "$kb_enabled" == "true" && "${TERM_PROGRAM:-}" == "iTerm.app" ]]; then
+      if [[ "$has_recommendations" -eq 0 ]]; then
+        echo ""
+        _info "TUI recommendations:"
+        has_recommendations=1
+      fi
+      _info "  ? iTerm2 detected with Alt keybindings enabled"
+      _info "    Set 'Option key sends +Esc' in Preferences > Profiles > Keys"
+    fi
   fi
 
   return "$total_issues"

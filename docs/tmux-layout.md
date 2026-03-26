@@ -97,3 +97,60 @@ min_pane_height = 10   # Minimum rows before creating overflow windows
 ```
 
 Theme settings (status bar colors, indicator symbols, pane border styles) live in the `[theme]` config section. See [configuration](../README.md) for the full reference.
+
+## TUI Navigation Layer
+
+Orc provides a navigation overlay on top of tmux that makes it easy to move between windows, panes, and actions without memorizing tmux keybindings.
+
+### Command Palette (`Prefix+Space`)
+
+Fuzzy-search any window or pane by name, role, or state. Requires `fzf` for full experience — falls back to tmux `choose-tree` without it.
+
+- Shows all orchestrators, engineers, and reviewers with role icons and status
+- Live pane preview (see what an agent is doing before switching)
+- Quick actions: jump to dashboard, board, or help
+- Navigation only — never sends input to agent panes
+
+### Context Menu (`Prefix+m` or right-click)
+
+Role-aware action menu that adapts to the current pane:
+
+- **Engineer pane:** Mark done, Signal blocked, Read feedback, navigate to goal/project orch
+- **Goal orchestrator:** Check engineers, Dispatch beads, Complete goal (requires confirmation)
+- **Project orchestrator:** Check workers, Dispatch ready work, navigate to status/board
+
+Actions are grouped by safety tier:
+- Unmarked = navigation (always safe)
+- `▸` = orchestration (validated before sending)
+- `!` = confirmed (requires y/n)
+
+### Help Overlay (`Prefix+?`)
+
+Shows all available keybindings and commands. Always available when TUI is enabled.
+
+### Keybindings (opt-in)
+
+Set `keybindings.enabled = true` in config for prefix-free Alt+ shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `Alt+[` / `Alt+]` | Previous / Next window |
+| `Alt+0` | Project orchestrator |
+| `Alt+s` | Dashboard |
+| `Alt+p` | Command palette |
+| `Alt+m` | Context menu |
+| `Alt+?` | Help overlay |
+
+Every key is individually remappable in `[keybindings]` config. Set to `""` to disable.
+
+### Status Bar
+
+When TUI is enabled, the status bar shows:
+- **Breadcrumb** (left): `⚔ orc ▸ myapp ▸ fix-auth ▸ bd-a1b2` — updates as you navigate
+- **Prefix indicator**: `⚔ orc` flashes when prefix key is active
+- **Enriched tabs**: goal windows show engineer count (e.g., `fix-auth 2▸ ●`)
+- **Help hint** (right): `^b ? help` for new users (disable with `tui.show_help_hint = false`)
+
+### Disabling
+
+Set `tui.enabled = false` in `config.toml` to disable all TUI enhancements and revert to raw tmux.
