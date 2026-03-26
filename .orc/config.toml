@@ -1,0 +1,41 @@
+# Orc — project config for orc (self-referential)
+
+# ─── PLANNING ─────────────────────────────────────────────────────────────────
+
+[planning.goal]
+plan_creation_instructions = "/openspec:proposal"  # Use OpenSpec for formal proposals
+bead_creation_instructions = "Decompose beads from the proposal's tasks.md. Each bead = one or more related tasks. Preserve task IDs for traceability."
+when_to_involve_user_in_plan = "when the plan involves more than 3 beads or introduces breaking changes"
+
+# ─── DISPATCH ─────────────────────────────────────────────────────────────────
+
+[dispatch.goal]
+assignment_instructions = "Include the proposal directory path (openspec/changes/<name>/). Quote acceptance criteria from the proposal. Reference CLAUDE.md conventions (shell over runtime, conventional commits, cross-OS compatibility)."
+
+# ─── APPROVAL GATES ───────────────────────────────────────────────────────────
+
+[approval]
+ask_before_dispatching = "auto"   # Trust the plan — dispatch immediately
+ask_before_reviewing = "auto"     # Reviews run automatically
+ask_before_merging = "auto"       # Beads merge to goal branch automatically
+
+# ─── REVIEW ───────────────────────────────────────────────────────────────────
+
+[review.dev]
+review_instructions = ""  # Built-in reviewer (no OCR)
+max_rounds = 3
+
+[review.goal]
+review_instructions = ""  # Built-in reviewer (no OCR)
+max_rounds = 3
+
+# ─── WORKTREE ─────────────────────────────────────────────────────────────────
+
+[worktree]
+setup_instructions = "Run pnpm install."
+
+# ─── DELIVERY ─────────────────────────────────────────────────────────────────
+
+[delivery.goal]
+on_completion_instructions = "Fast-forward merge the goal branch into poc/rearch-orc-to-new-tech-stack. Do NOT push to GitHub or create a PR."
+when_to_involve_user_in_delivery = "never"  # Delivery runs automatically
