@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "bun build ./src/index.tsx --outdir ./dist --target node --format esm",
-    "start": "bun run ./src/index.tsx",
+    "start": "bun ./src/index.tsx",
     "test": "vitest run",
     "test:watch": "vitest"
   },

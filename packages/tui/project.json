@@ -6,10 +6,6 @@
       "executor": "nx:run-commands",
       "options": { "command": "bun build ./src/index.tsx --outdir ./dist --target node --format esm", "cwd": "packages/tui" }
     },
-    "start": {
-      "executor": "nx:run-commands",
-      "options": { "command": "bun run ./src/index.tsx", "cwd": "packages/tui" }
-    },
     "test": {
       "executor": "nx:run-commands",
       "options": { "command": "vitest run", "cwd": "packages/tui" }

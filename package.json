@@ -9,7 +9,7 @@
     "test": "vitest run --workspace vitest.workspace.ts",
     "test:watch": "vitest --workspace vitest.workspace.ts",
     "test:e2e": "playwright test",
-    "start:tui": "nx start @orc/tui"
+    "start:tui": "pnpm --filter @orc/tui start"
   },
   "devDependencies": {
     "@nx/js": "^22.6.1",
