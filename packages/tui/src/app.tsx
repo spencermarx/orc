@@ -105,14 +105,18 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Clear screen before tmux attaches
+    // Enter alternate screen — preserves Ink's output in main buffer.
+    // tmux renders in the alternate screen. When it detaches, we exit
+    // the alternate screen and Ink's dashboard is already there.
+    stdout.write("\x1b[?1049h");
     stdout.write("\x1b[2J\x1b[H");
 
     // Attach to tmux — blocks until user detaches (Ctrl+\)
     tmux.attach();
 
-    // User detached — clear screen and restore Ink
-    stdout.write("\x1b[2J\x1b[H");
+    // Exit alternate screen — Ink's main buffer is preserved underneath
+    stdout.write("\x1b[?1049l");
+
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       try { process.stdin.setRawMode(true); } catch {}
     }
@@ -168,9 +172,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(false); } catch {}
       }
+      stdout.write("\x1b[?1049h");
       stdout.write("\x1b[2J\x1b[H");
       tmux.attach();
-      stdout.write("\x1b[2J\x1b[H");
+      stdout.write("\x1b[?1049l");
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(true); } catch {}
       }
