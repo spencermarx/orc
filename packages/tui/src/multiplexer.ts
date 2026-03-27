@@ -157,20 +157,30 @@ export class SessionMultiplexer extends EventEmitter {
       alive: true,
     };
 
-    // Pipe PTY output directly to stdout for native rendering.
-    // Skip the first data event — it contains terminal capability
-    // handshake responses (DA1, DCS) that render as visible garbage.
-    let firstEvent = true;
+    // Agent CLIs (especially Ink-based like Claude Code) emit terminal
+    // mode-setting sequences on startup (events 1-4, typically <50 bytes each).
+    // These contain focus reporting enables, DA queries, and mode responses
+    // that render as ^[[I^[P>|xterm.js... garbage when piped to stdout.
+    //
+    // The actual content (Claude header, ASCII art) arrives in larger chunks
+    // (100+ bytes). We skip small initial events and start piping when we
+    // see the first substantial content frame.
+    let contentStarted = false;
+    let skippedBytes = 0;
+    const MAX_SKIP_BYTES = 200; // don't skip more than this total
 
     p.onData((data: string) => {
-      if (firstEvent) {
-        firstEvent = false;
-        // Don't display the first chunk (capability handshake).
-        // Don't buffer it either — it's noise, not content.
-        return;
-      }
-
       const buf = Buffer.from(data);
+
+      if (!contentStarted) {
+        // Skip small mode-setting bursts at startup
+        if (data.length < 50 && skippedBytes < MAX_SKIP_BYTES) {
+          skippedBytes += data.length;
+          return;
+        }
+        // First large event = actual content rendering
+        contentStarted = true;
+      }
 
       // Accumulate scrollback for session switching
       session.scrollbackRaw.push(buf);
