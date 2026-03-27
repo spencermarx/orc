@@ -146,6 +146,16 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
 
       if (key.ctrl && input === "c") exit();
       if (input === ":") { setInputMode("command"); return; }
+
+      // Tab: instant resume if tmux session has running agents
+      if (key.tab) {
+        const tmux = tmuxRef.current;
+        if (tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
+          handleCommand("__resume__");
+          return;
+        }
+      }
+
       if (input === "q") {
         if (view !== "dashboard") { setView("dashboard"); setSelectedProject(null); }
         else exit();
@@ -165,9 +175,9 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     if (cmd === "clear" || cmd === "help") return;
     if (cmd.startsWith("status") || cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // If tmux session has windows, re-attach (don't spawn new agent)
+    // Resume existing session (from Tab key or any : command when sessions exist)
     const tmux = tmuxRef.current;
-    if (tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
+    if (cmd === "__resume__" || (tmux && tmux.isRunning() && tmux.getWindowCount() > 0)) {
       setAgentStatus("running");
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(false); } catch {}
@@ -226,7 +236,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         ) : interactive ? (
           <Text dimColor>
             {sessionCount > 0
-              ? `: resume (${sessionCount} session${sessionCount > 1 ? "s" : ""})  j/k nav  ? help  q quit`
+              ? `Tab resume  : command  j/k nav  ? help  q quit`
               : ": command  j/k nav  enter open  ? help  q quit"}
           </Text>
         ) : (
@@ -305,7 +315,7 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
         {sessionCount > 0 ? (
           <>
             <Text><Text color="green">*</Text> <Text bold>{sessionCount} session{sessionCount > 1 ? "s" : ""} running</Text></Text>
-            <Text dimColor>Press <Text bold color="#00ff88">:</Text> to resume</Text>
+            <Text dimColor>Press <Text bold color="#00ff88">Tab</Text> to resume</Text>
           </>
         ) : (
           <>

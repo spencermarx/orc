@@ -41,6 +41,9 @@ const stdinStream = interactive
   ? process.stdin
   : new Readable({ read() {} });
 
+// Clear the screen to hide pnpm/npm script runner output
+process.stdout.write("\x1b[2J\x1b[H");
+
 const { waitUntilExit } = render(
   <App
     interactive={interactive}
