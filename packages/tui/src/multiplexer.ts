@@ -360,12 +360,21 @@ export class SessionMultiplexer extends EventEmitter {
     }
 
     // Forward to active PTY.
-    // Use toString("utf-8") for the write — node-pty internally handles
-    // strings more reliably than Buffers for single-byte inputs.
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        session.pty.write(data.toString("utf-8"));
+        const str = data.toString("utf-8");
+        session.pty.write(str);
+
+        // For standalone Esc: the PTY terminal discipline may buffer it
+        // waiting for escape sequence continuation. Send a second Esc
+        // after a brief delay to flush the first one through immediately.
+        // This ensures Claude Code's Ink interrupt handler receives it.
+        if (data.length === 1 && byte === 0x1b) {
+          setTimeout(() => {
+            if (session.alive) session.pty.write("\x1b");
+          }, 10);
+        }
       }
     }
   }
