@@ -1,11 +1,11 @@
-// Session multiplexer — manage multiple PTY agent sessions with tab-style navigation
-// Pipes raw bytes from the active PTY to stdout for native terminal rendering.
-// Status bar pinned at bottom row via scroll regions.
+// Session manager — multiple agent processes with stdio: "inherit" switching.
+// Only one agent is active (owns the terminal) at a time.
+// Switching suspends the active process and resumes the next.
+// No node-pty — agents get the real terminal directly.
 
 import { EventEmitter } from "node:events";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import * as pty from "node-pty";
-import type { IPty } from "node-pty";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -13,9 +13,7 @@ export type AgentSession = {
   id: string;
   label: string;
   role: string;
-  pty: IPty;
-  scrollbackRaw: Buffer[];
-  scrollbackSize: number;
+  process: ChildProcess;
   alive: boolean;
 };
 
@@ -28,35 +26,22 @@ export type AddSessionOptions = {
   env?: Record<string, string>;
 };
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const MAX_SCROLLBACK_BYTES = 2_000_000; // 2MB per session
-// Ctrl+\ (0x1c) = return to dashboard. Single keystroke, no timing issues.
-
-// ANSI
+// ANSI constants
 const ESC = "\x1b";
-const CTRL_CLOSE_BRACKET = "\x1d"; // Ctrl+]
-const CTRL_N = "\x0e";
-const CTRL_P = "\x10";
+const GREEN_BG = `${ESC}[48;2;0;255;136m`;
+const DARK_FG = `${ESC}[38;2;13;17;23m`;
+const BOLD = `${ESC}[1m`;
+const DIM = `${ESC}[2m`;
+const RESET = `${ESC}[0m`;
 
-// Colors (orc theme)
-const GREEN_BG = "\x1b[48;2;0;255;136m";
-const DARK_FG = "\x1b[38;2;13;17;23m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const RESET = "\x1b[0m";
-const GREEN_FG = "\x1b[38;2;0;255;136m";
-
-// ─── Multiplexer ────────────────────────────────────────────────────────────
+// ─── Session Manager ────────────────────────────────────────────────────────
 
 export class SessionMultiplexer extends EventEmitter {
   private sessions = new Map<string, AgentSession>();
   private sessionOrder: string[] = [];
   private activeId: string | null = null;
-  private stdinListener: ((data: Buffer) => void) | null = null;
-  private resizeListener: (() => void) | null = null;
   private stdout: NodeJS.WriteStream;
-  private _active = false;
+  private _entered = false;
 
   constructor(stdout: NodeJS.WriteStream) {
     super();
@@ -66,67 +51,42 @@ export class SessionMultiplexer extends EventEmitter {
   // ─── Lifecycle ──────────────────────────────────────────────────────────
 
   enter(): void {
-    if (this._active) return;
-    this._active = true;
+    if (this._entered) return;
+    this._entered = true;
 
-    // Release Ink's raw mode
+    // Release Ink's raw mode — the agent will set its own
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Enter alternate screen, clear, set scroll region.
-    // The scroll region MUST be set before any PTY output arrives.
-    // The PTY is spawned with (rows-1) so the agent's Ink sees the
-    // correct height from birth — no mismatch.
-    const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[?1049h`);          // alternate screen
-    this.stdout.write(`${ESC}[2J${ESC}[H`);      // clear
-    this.stdout.write(`${ESC}[1;${rows - 1}r`);  // scroll region: rows 1 to N-1
-    this.stdout.write(`${ESC}[1;1H`);             // cursor to top of region
-
-    this.drawStatusBar();
-
-    // Take raw mode for multiplexer input
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-      try { process.stdin.setRawMode(true); } catch {}
-    }
-
-    // Listen to stdin
-    this.stdinListener = (data: Buffer) => this.handleInput(data);
-    process.stdin.on("data", this.stdinListener);
-
-    // Listen to resize
-    this.resizeListener = () => this.handleResize();
-    this.stdout.on("resize", this.resizeListener);
-
-    // Connect active PTY
+    // Resume the active agent (it was suspended or just spawned)
     if (this.activeId) {
-      this.stdout.write(`${ESC}[1;1H`); // cursor to top of scroll region
-      this.replayScrollback(this.activeId);
+      const session = this.sessions.get(this.activeId);
+      if (session?.alive) {
+        session.process.kill("SIGCONT");
+      }
     }
   }
 
   leave(): void {
-    if (!this._active) return;
-    this._active = false;
+    if (!this._entered) return;
+    this._entered = false;
 
-    // Disconnect stdin
-    if (this.stdinListener) {
-      process.stdin.off("data", this.stdinListener);
-      this.stdinListener = null;
+    // Suspend the active agent
+    if (this.activeId) {
+      const session = this.sessions.get(this.activeId);
+      if (session?.alive) {
+        session.process.kill("SIGTSTP");
+      }
     }
 
-    // Disconnect resize
-    if (this.resizeListener) {
-      this.stdout.off("resize", this.resizeListener);
-      this.resizeListener = null;
-    }
+    // Clear screen for Ink to resume
+    this.stdout.write(`${ESC}[2J${ESC}[H`);
 
-    // Reset scroll region, leave alternate screen, clear main buffer
-    const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[1;${rows}r`);   // reset scroll region to full
-    this.stdout.write(`${ESC}[?1049l`);        // leave alternate screen
-    this.stdout.write(`${ESC}[2J${ESC}[H`);   // clear main buffer
+    // Restore Ink's raw mode
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(true); } catch {}
+    }
 
     this.emit("leave");
   }
@@ -135,166 +95,104 @@ export class SessionMultiplexer extends EventEmitter {
 
   addSession(opts: AddSessionOptions): string {
     const id = randomUUID().slice(0, 8);
-    const rows = this.stdout.rows || 24;
-    const cols = this.stdout.columns || 80;
 
-    const p = pty.spawn(opts.command, opts.args, {
-      name: "xterm-256color",
-      cols,
-      rows: rows - 1, // agent gets rows-1; last row reserved for status bar
+    // If there's already an active session, suspend it first
+    if (this.activeId) {
+      const current = this.sessions.get(this.activeId);
+      if (current?.alive) {
+        current.process.kill("SIGTSTP");
+      }
+    }
+
+    // Clear screen for the new agent
+    this.stdout.write(`${ESC}[2J${ESC}[H`);
+
+    // Spawn with inherited stdio — agent gets the REAL terminal
+    const child = spawn(opts.command, opts.args, {
       cwd: opts.cwd,
-      env: { ...process.env, ...opts.env } as Record<string, string>,
+      stdio: "inherit",
+      env: { ...process.env, ...opts.env },
     });
 
     const session: AgentSession = {
       id,
       label: opts.label,
       role: opts.role,
-      pty: p,
-      scrollbackRaw: [],
-      scrollbackSize: 0,
+      process: child,
       alive: true,
     };
 
-    // Filter and pipe PTY output.
-    //
-    // Agent CLIs (especially Ink-based like Claude Code) periodically send
-    // terminal capability queries whose responses render as visible garbage:
-    //   - DCS responses: \x1bP>|xterm.js(6.1.0-beta.109)\x1b\\
-    //   - DA1 responses: \x1b[?1;2c
-    //   - Focus events: \x1b[I, \x1b[O
-    //   - DA queries echoed: \x1b[>0q, \x1b[c
-    //
-    // We also skip small startup events (<50 bytes) that are pure mode-setting.
-    let contentStarted = false;
-    let skippedBytes = 0;
-
-    p.onData((data: string) => {
-      // Skip small startup mode-setting bursts
-      if (!contentStarted) {
-        if (data.length < 50 && skippedBytes < 200) {
-          skippedBytes += data.length;
-          return;
-        }
-        contentStarted = true;
-      }
-
-      // Intercept terminal capability QUERIES and RESPONSES from PTY output.
-      //
-      // The root cause of stdin garbage: the agent sends queries like \x1b[c
-      // (DA1) through the PTY output. We pipe that to stdout. The OUTER
-      // terminal sees the query and responds with \x1b[?1;2c on stdin.
-      // Our stdin handler forwards it to the PTY as "user input" = garbage.
-      //
-      // The robust fix: strip BOTH queries AND responses from the output
-      // so the outer terminal never sees them and never responds.
-      let cleaned = data;
-      // Queries (sent by agent, would trigger outer terminal response)
-      cleaned = cleaned.replace(/\x1b\[c/g, "");                                  // DA1 query
-      cleaned = cleaned.replace(/\x1b\[>[0-9]*q/g, "");                           // XTVERSION query
-      cleaned = cleaned.replace(/\x1b\[=[0-9]*c/g, "");                           // DA3 query
-      cleaned = cleaned.replace(/\x1b\[>[0-9]*c/g, "");                           // DA2 query
-      // Responses (in case they still arrive)
-      cleaned = cleaned.replace(/\x1bP>?\|[^\x1b\x07]*(?:\x1b\\|\x07)/g, "");    // DCS strings
-      cleaned = cleaned.replace(/\x1b\[\?[0-9;]*c/g, "");                         // DA1 response
-      cleaned = cleaned.replace(/\x1b\[[IO]/g, "");                               // Focus in/out
-      cleaned = cleaned.replace(/\x1b\[>[0-9;]*[a-z]/g, "");                      // DA2/DA3 response
-
-      if (cleaned.length === 0) return;
-
-      const buf = Buffer.from(cleaned);
-
-      // Accumulate scrollback for session switching
-      session.scrollbackRaw.push(buf);
-      session.scrollbackSize += buf.length;
-      while (session.scrollbackSize > MAX_SCROLLBACK_BYTES && session.scrollbackRaw.length > 0) {
-        const removed = session.scrollbackRaw.shift()!;
-        session.scrollbackSize -= removed.length;
-      }
-
-      // Pipe to stdout if this is the active, visible session
-      if (this._active && this.activeId === id) {
-        this.stdout.write(buf);
-      }
+    child.on("exit", () => {
+      session.alive = false;
+      this.handleSessionExit(id);
     });
 
-    p.onExit(() => {
+    child.on("error", () => {
       session.alive = false;
-      this.emit("session-exit", id, session.label);
-
-      if (this._active) {
-        if (this.activeId === id) {
-          this.removeSession(id);
-          // Switch to next session or leave if none
-          if (this.sessionOrder.length > 0) {
-            this.switchTo(this.sessionOrder[0]);
-          } else {
-            this.leave();
-          }
-        } else {
-          this.removeSession(id);
-          this.drawStatusBar();
-        }
-      } else {
-        this.removeSession(id);
-      }
+      this.handleSessionExit(id);
     });
 
     this.sessions.set(id, session);
     this.sessionOrder.push(id);
-
-    // If no active session, make this one active
-    if (!this.activeId) {
-      this.activeId = id;
-    }
-
-    // Redraw status bar if multiplexer is active
-    if (this._active) {
-      this.drawStatusBar();
-    }
+    this.activeId = id;
 
     return id;
+  }
+
+  private handleSessionExit(id: string): void {
+    this.sessions.delete(id);
+    this.sessionOrder = this.sessionOrder.filter((sid) => sid !== id);
+    this.emit("session-exit", id);
+
+    if (this.activeId === id) {
+      if (this.sessionOrder.length > 0) {
+        // Switch to next session
+        this.activeId = this.sessionOrder[0];
+        const next = this.sessions.get(this.activeId);
+        if (next?.alive && this._entered) {
+          this.stdout.write(`${ESC}[2J${ESC}[H`);
+          next.process.kill("SIGCONT");
+        }
+      } else {
+        // No more sessions — return to dashboard
+        this.activeId = null;
+        if (this._entered) {
+          this.leave();
+        }
+      }
+    }
   }
 
   removeSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
-
     if (session.alive) {
-      try { session.pty.kill(); } catch {}
-    }
-
-    this.sessions.delete(id);
-    this.sessionOrder = this.sessionOrder.filter((sid) => sid !== id);
-
-    if (this.activeId === id) {
-      this.activeId = this.sessionOrder[0] ?? null;
+      try { session.process.kill("SIGTERM"); } catch {}
     }
   }
 
   // ─── Navigation ─────────────────────────────────────────────────────────
+  // Note: switching requires suspending the current agent and resuming the next.
+  // Since both use stdio: "inherit", only one can be active at a time.
+  // The terminal clears between switches.
 
   switchTo(id: string): void {
-    if (!this.sessions.has(id) || id === this.activeId) return;
+    if (!this.sessions.has(id) || id === this.activeId || !this._entered) return;
 
+    // Suspend current
+    if (this.activeId) {
+      const current = this.sessions.get(this.activeId);
+      if (current?.alive) {
+        current.process.kill("SIGTSTP");
+      }
+    }
+
+    // Clear and resume next
+    this.stdout.write(`${ESC}[2J${ESC}[H`);
     this.activeId = id;
-
-    if (this._active) {
-      // Clear scroll region content
-      const rows = this.stdout.rows || 24;
-      this.stdout.write(`${ESC}[1;1H`); // cursor to top
-      this.stdout.write(`${ESC}[1;${rows - 1}r`); // ensure scroll region
-      this.stdout.write(`${ESC}[2J`); // clear within region
-      this.stdout.write(`${ESC}[1;1H`); // cursor to top
-
-      // Replay the new session's scrollback
-      this.replayScrollback(id);
-
-      // Resize PTY to match terminal
-      const session = this.sessions.get(id)!;
-      try { session.pty.resize(this.stdout.columns || 80, rows - 1); } catch {}
-
-      this.drawStatusBar();
+    const next = this.sessions.get(id);
+    if (next?.alive) {
+      next.process.kill("SIGCONT");
     }
   }
 
@@ -312,148 +210,6 @@ export class SessionMultiplexer extends EventEmitter {
     this.switchTo(this.sessionOrder[prevIdx]);
   }
 
-  // ─── Input Handling ─────────────────────────────────────────────────────
-
-  private handleInput(data: Buffer): void {
-    if (data.length === 0) return;
-
-    const byte = data[0];
-
-    // Ctrl+\ (0x1c) — return to dashboard
-    // Single keystroke, never used by agent CLIs, always detectable.
-    if (byte === 0x1c) {
-      this.leave();
-      return;
-    }
-
-    // Ctrl+] — next session
-    if (byte === 0x1d) {
-      this.nextSession();
-      return;
-    }
-
-    // Ctrl+N — next session
-    if (byte === 0x0e) {
-      this.nextSession();
-      return;
-    }
-
-    // Ctrl+P — previous session
-    if (byte === 0x10) {
-      this.prevSession();
-      return;
-    }
-
-    // Filter terminal response sequences from stdin.
-    // Check first bytes: ESC[? or ESC[> or ESC P = terminal response, not user input.
-    if (data.length > 1 && byte === 0x1b) {
-      const second = data[1];
-      if (second === 0x5b) { // ESC[
-        const third = data.length > 2 ? data[2] : 0;
-        // ESC[? or ESC[> = terminal response (DA1/DA2)
-        if (third === 0x3f || third === 0x3e) return;
-        // ESC[I or ESC[O = focus events
-        if (third === 0x49 || third === 0x4f) return;
-      }
-      // ESC P = DCS response
-      if (second === 0x50) return;
-    }
-
-    // Forward to active PTY.
-    if (this.activeId) {
-      const session = this.sessions.get(this.activeId);
-      if (session?.alive) {
-        const str = data.toString("utf-8");
-        session.pty.write(str);
-
-        // For standalone Esc: the PTY terminal discipline may buffer it
-        // waiting for escape sequence continuation. Send a second Esc
-        // after a brief delay to flush the first one through immediately.
-        // This ensures Claude Code's Ink interrupt handler receives it.
-        if (data.length === 1 && byte === 0x1b) {
-          setTimeout(() => {
-            if (session.alive) session.pty.write("\x1b");
-          }, 10);
-        }
-      }
-    }
-  }
-
-  // ─── Scrollback ─────────────────────────────────────────────────────────
-
-  private replayScrollback(id: string): void {
-    const session = this.sessions.get(id);
-    if (!session) return;
-
-    for (const chunk of session.scrollbackRaw) {
-      this.stdout.write(chunk);
-    }
-  }
-
-  // ─── Status Bar ─────────────────────────────────────────────────────────
-
-  drawStatusBar(): void {
-    if (!this._active) return;
-
-    const rows = this.stdout.rows || 24;
-    const cols = this.stdout.columns || 80;
-
-    // Build tab list
-    const tabs = this.sessionOrder.map((id, i) => {
-      const s = this.sessions.get(id)!;
-      const num = i + 1;
-      const isActive = id === this.activeId;
-      if (isActive) {
-        return `${GREEN_BG}${DARK_FG}${BOLD} ${num}:${s.label} ${RESET}`;
-      }
-      return `${DIM} ${num}:${s.label} ${RESET}`;
-    }).join("");
-
-    const hints = `${DIM} Ctrl+] next  Ctrl+\\ dash ${RESET}`;
-
-    // Calculate visible width (strip ANSI for measurement)
-    const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-    const tabsWidth = stripAnsi(tabs).length;
-    const hintsWidth = stripAnsi(hints).length;
-    const padding = Math.max(0, cols - tabsWidth - hintsWidth);
-
-    const bar = tabs + " ".repeat(padding) + hints;
-
-    // Draw: save cursor → move to last row → clear line → write bar → restore cursor
-    // Use DECSC/DECRC (ESC 7/8) which are more reliable than CSI s/u
-    this.stdout.write(`${ESC}7`);         // save cursor + attributes
-    this.stdout.write(`${ESC}[${rows};1H`); // move to last row
-    this.stdout.write(`${ESC}[2K`);         // clear entire line
-    this.stdout.write(bar);
-    this.stdout.write(`${ESC}8`);         // restore cursor + attributes
-  }
-
-  private setupScrollRegion(): void {
-    const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[1;${rows - 1}r`);
-  }
-
-  // ─── Resize ─────────────────────────────────────────────────────────────
-
-  private handleResize(): void {
-    if (!this._active) return;
-
-    const rows = this.stdout.rows || 24;
-    const cols = this.stdout.columns || 80;
-
-    // Update scroll region and resize PTY
-    this.stdout.write(`${ESC}[1;${rows - 1}r`);
-    if (this.activeId) {
-      const session = this.sessions.get(this.activeId);
-      if (session?.alive) {
-        try { session.pty.resize(cols, rows - 1); } catch {}
-      }
-    }
-
-    // Redraw status bar
-    this.drawStatusBar();
-  }
-
   // ─── Queries ────────────────────────────────────────────────────────────
 
   getSessions(): AgentSession[] {
@@ -465,7 +221,7 @@ export class SessionMultiplexer extends EventEmitter {
   }
 
   isActive(): boolean {
-    return this._active;
+    return this._entered;
   }
 
   getSessionCount(): number {
@@ -475,10 +231,10 @@ export class SessionMultiplexer extends EventEmitter {
   // ─── Cleanup ────────────────────────────────────────────────────────────
 
   destroy(): void {
-    if (this._active) this.leave();
+    if (this._entered) this.leave();
     for (const session of this.sessions.values()) {
       if (session.alive) {
-        try { session.pty.kill(); } catch {}
+        try { session.process.kill("SIGTERM"); } catch {}
       }
     }
     this.sessions.clear();
