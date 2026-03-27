@@ -2,7 +2,17 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
   "release": {
-    "projects": ["@orc/cli", "@orc/commands", "@orc/personas", "@orc/core", "@orc/ui", "@orc/tui", "@orc/web", "@orc/api", "@orc/plugins"],
+    "projects": [
+      "@orc/cli",
+      "@orc/commands",
+      "@orc/personas",
+      "@orc/core",
+      "@orc/ui",
+      "@orc/tui",
+      "@orc/web",
+      "@orc/api",
+      "@orc/plugins"
+    ],
     "projectsRelationship": "fixed",
     "version": {
       "generatorOptions": {
@@ -21,5 +31,6 @@
       "commitMessage": "chore(release): v{version}",
       "tag": true
     }
-  }
+  },
+  "analytics": false
 }

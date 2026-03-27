@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { Box, Text, useInput, useApp, useStdin } from "ink";
+import React, { useState } from "react";
+import { Box, Text, useInput, useApp } from "ink";
 
 type View = "dashboard" | "help";
 
-export function App(): React.ReactElement {
+type AppProps = {
+  interactive?: boolean;
+};
+
+export function App({ interactive = false }: AppProps): React.ReactElement {
   const { exit } = useApp();
-  const { isRawModeSupported } = useStdin();
   const [view, setView] = useState<View>("dashboard");
 
-  // Fallback: always handle SIGINT so Ctrl+C works even without raw mode
-  useEffect(() => {
-    const handler = () => exit();
-    process.on("SIGINT", handler);
-    return () => { process.off("SIGINT", handler); };
-  }, [exit]);
-
-  // Only register useInput when raw mode is actually available
   useInput(
     (input, key) => {
       if (input === "q" || (key.ctrl && input === "c")) {
@@ -25,7 +20,7 @@ export function App(): React.ReactElement {
         setView((v) => (v === "help" ? "dashboard" : "help"));
       }
     },
-    { isActive: isRawModeSupported },
+    { isActive: interactive },
   );
 
   return (
@@ -39,7 +34,7 @@ export function App(): React.ReactElement {
       {view === "help" && <HelpScreen />}
 
       <Box marginTop={1}>
-        {isRawModeSupported ? (
+        {interactive ? (
           <>
             <Text dimColor>Press </Text>
             <Text bold>?</Text>
