@@ -126,21 +126,14 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
     return <SplashScreen projectCount={snapshots.length} beadCount={totalBeads} />;
   }
 
-  // Fixed-width mode label: always 10 chars so re-renders don't shift layout
-  const modeStr = inputMode === "command" ? "[COMMAND] " : "          ";
   const viewLabel = view === "dashboard" ? "dashboard"
     : view === "project" && selectedProject ? selectedProject
     : "help";
 
   return (
-    <Box flexDirection="column">
-      {/* Status bar: fixed structure, no dynamic width changes */}
-      <Text>
-        <Text color="#00ff88" bold>orc</Text>
-        <Text color="#30363d">{" > "}</Text>
-        <Text color="#8b949e">{viewLabel}</Text>
-        <Text color="#00ff88">{" "}{modeStr}</Text>
-      </Text>
+    <Box flexDirection="column" paddingRight={1}>
+      {/* Status bar: NEVER changes content — mode shown in footer only */}
+      <Text color="#00ff88" bold>orc <Text color="#30363d">&gt;</Text> <Text color="#8b949e">{viewLabel}</Text></Text>
 
       {view === "dashboard" && (
         <DashboardView
@@ -154,24 +147,16 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
       )}
       {view === "help" && <HelpView />}
 
-      {/* Footer: command input or hints */}
-      {interactive ? (
-        inputMode === "command" ? (
-          <Text>
-            <Text color="#00ff88" bold>{"> "}</Text>
-            <Text>{commandBuffer}</Text>
-            <Text color="#00ff88">_</Text>
-          </Text>
+      {/* Footer: always same structure. Command buffer shown inline. */}
+      <Box>
+        {interactive && inputMode === "command" ? (
+          <Text><Text color="#00ff88" bold>{"> "}</Text>{commandBuffer}<Text color="#00ff88">_</Text></Text>
+        ) : interactive ? (
+          <Text dimColor>: command  j/k nav  enter open  ? help  q quit</Text>
         ) : (
-          <Text dimColor>
-            {view === "dashboard" ? ": command  j/k navigate  enter open  ? help  q quit"
-              : view === "project" ? ": command  q back  ? help"
-              : ": command  ? close  q quit"}
-          </Text>
-        )
-      ) : (
-        <Text dimColor>ctrl+c quit</Text>
-      )}
+          <Text dimColor>ctrl+c quit</Text>
+        )}
+      </Box>
     </Box>
   );
 }
