@@ -159,7 +159,20 @@ export class SessionMultiplexer extends EventEmitter {
 
     // Capture PTY output — always buffer, pipe to stdout if active
     p.onData((data: string) => {
-      const buf = Buffer.from(data);
+      // Filter terminal capability query responses that leak as visible text.
+      // These are sent by agent CLIs (like Claude Code/Ink) on startup:
+      // - DA1 responses: \x1b[?1;2c etc
+      // - DCS strings: \x1bP>|xterm.js(...)...\x1b\\
+      // - Focus events: \x1b[I, \x1b[O
+      const filtered = data
+        .replace(/\x1b\[\?[0-9;]*c/g, "")           // DA1 response
+        .replace(/\x1bP>[^\x1b]*\x1b\\/g, "")        // DCS response (xterm version)
+        .replace(/\x1bP>[^\x07]*\x07/g, "")           // DCS response (BEL terminated)
+        .replace(/\x1b\[[IO]/g, "");                   // Focus in/out events
+
+      if (filtered.length === 0) return;
+
+      const buf = Buffer.from(filtered);
       session.scrollbackRaw.push(buf);
       session.scrollbackSize += buf.length;
 
@@ -372,11 +385,12 @@ export class SessionMultiplexer extends EventEmitter {
     const bar = tabs + " ".repeat(padding) + hints;
 
     // Draw: save cursor → move to last row → clear line → write bar → restore cursor
-    this.stdout.write("\x1b7");
-    this.stdout.write(`${ESC}[${rows};1H`);
-    this.stdout.write(`${ESC}[2K`);
+    // Use DECSC/DECRC (ESC 7/8) which are more reliable than CSI s/u
+    this.stdout.write(`${ESC}7`);         // save cursor + attributes
+    this.stdout.write(`${ESC}[${rows};1H`); // move to last row
+    this.stdout.write(`${ESC}[2K`);         // clear entire line
     this.stdout.write(bar);
-    this.stdout.write("\x1b8");
+    this.stdout.write(`${ESC}8`);         // restore cursor + attributes
   }
 
   private setupScrollRegion(): void {
