@@ -3,6 +3,10 @@
 // The user sees the orc TUI; tmux is the invisible infrastructure.
 
 import { execSync, spawnSync } from "node:child_process";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import type { OrcConfig } from "@orc/core/config/schema.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -98,18 +102,33 @@ export class TmuxSession {
     this.ensureSession();
     const name = opts.label.replace(/[^a-zA-Z0-9_-]/g, "-");
 
-    // Build env string for tmux
-    const envPairs = Object.entries(opts.env ?? {})
-      .map(([k, v]) => `${k}=${v}`)
-      .join(" ");
-    const envPrefix = envPairs ? `${envPairs} ` : "";
+    // Write any large arguments (like persona content) to temp files.
+    // This prevents the full text from scrolling through the terminal.
+    const processedArgs = opts.args.map((arg) => {
+      if (arg.length > 500) {
+        // Large arg (likely a persona) — write to temp file, use $(cat file)
+        const tmpFile = join(tmpdir(), `orc-${randomUUID().slice(0, 8)}.txt`);
+        writeFileSync(tmpFile, arg);
+        return `"$(cat '${tmpFile}')"`;
+      }
+      return this.shellQuote(arg);
+    });
 
-    // Create new window
-    tmux(`new-window -t ${this.sessionName} -n ${name} -c "${opts.cwd}"`);
+    // Build the full command as a shell script so it runs cleanly
+    const launcherScript = join(tmpdir(), `orc-launch-${randomUUID().slice(0, 8)}.sh`);
+    const envLines = Object.entries(opts.env ?? {})
+      .map(([k, v]) => `export ${k}=${this.shellQuote(v)}`)
+      .join("\n");
+    const script = [
+      "#!/usr/bin/env bash",
+      envLines,
+      `exec ${opts.command} ${processedArgs.join(" ")}`,
+    ].filter(Boolean).join("\n");
+    writeFileSync(launcherScript, script, { mode: 0o755 });
 
-    // Send the agent launch command
-    const cmdStr = `${envPrefix}${opts.command} ${opts.args.map((a) => this.shellQuote(a)).join(" ")}`;
-    tmux(`send-keys -t ${this.sessionName}:${name} ${this.shellQuote(cmdStr)} Enter`);
+    // Create window and run the launcher script directly.
+    // Using the shell command in new-window means it doesn't echo.
+    tmux(`new-window -t ${this.sessionName} -n ${name} -c "${opts.cwd}" "bash ${launcherScript}"`);
 
     // Kill the placeholder init window if it still exists
     try {
