@@ -139,7 +139,17 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       }
 
       if (key.ctrl && input === "c") exit();
-      if (input === ":") { setInputMode("command"); return; }
+
+      // : key — if root orch is running, resume it directly. Otherwise enter command mode.
+      if (input === ":") {
+        const tmux = tmuxRef.current;
+        if (tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
+          attachToTmux(tmux);
+          return;
+        }
+        setInputMode("command");
+        return;
+      }
 
       // Tab: instant resume if tmux session has running agents
       if (key.tab) {
@@ -169,14 +179,14 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     if (cmd === "clear" || cmd === "help") return;
     if (cmd.startsWith("status") || cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // Resume existing session (Tab key only)
+    // If root orch already running, just resume it — don't spawn a second one
     const tmux = tmuxRef.current;
-    if (cmd === "__resume__" && tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
+    if (tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
       attachToTmux(tmux);
       return;
     }
 
-    // Launch new agent
+    // No agent running — launch the root orchestrator
     launchAgent(cmd);
   }
 
@@ -218,7 +228,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         ) : interactive ? (
           <Text dimColor>
             {sessionCount > 0
-              ? `Tab resume  : command  j/k nav  ? help  q quit`
+              ? `Tab or : resume orchestrator  j/k nav  ? help  q quit`
               : ": command  j/k nav  enter open  ? help  q quit"}
           </Text>
         ) : (
