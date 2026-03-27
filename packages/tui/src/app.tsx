@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
-import { Box, Text, useInput, useApp } from "ink";
+import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import type { StoreApi } from "zustand/vanilla";
@@ -65,6 +65,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
   const [inputMode, setInputMode] = useState<InputMode>("navigate");
   const [commandBuffer, setCommandBuffer] = useState("");
   const [agentStatus, setAgentStatus] = useState<"idle" | "launching" | "running">("idle");
+  const { stdout } = useStdout();
 
   const agentProcess = useRef<ChildProcess | null>(null);
   const projectKeys = snapshots.map((s) => s.key);
@@ -108,11 +109,13 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Clear screen and show branded transition
-    process.stdout.write("\x1b[2J\x1b[H"); // clear screen, cursor to top
-    process.stdout.write("\x1b[38;2;0;255;136m"); // green
-    process.stdout.write("orc > root orchestrator\x1b[0m\n");
-    process.stdout.write("\x1b[2m" + "─".repeat(Math.min(process.stdout.columns || 80, 80)) + "\x1b[0m\n\n");
+    // Use alternate screen buffer — this preserves the dashboard underneath
+    // and gives the agent a clean full screen. When the agent exits,
+    // we restore the main buffer and the dashboard reappears.
+    stdout.write("\x1b[?1049h"); // enter alternate screen
+    stdout.write("\x1b[2J\x1b[H"); // clear alternate screen
+    stdout.write("\x1b[38;2;0;255;136morc > root orchestrator\x1b[0m\n");
+    stdout.write("\x1b[2m" + "─".repeat(Math.min(stdout.columns || 80, 80)) + "\x1b[0m\n\n");
 
     const child = spawn(command, args, {
       cwd: orcRoot,
@@ -123,25 +126,19 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     agentProcess.current = child;
     setAgentStatus("running");
 
-    child.on("exit", () => {
+    const restoreScreen = () => {
       agentProcess.current = null;
-      // Clear screen before restoring dashboard
-      process.stdout.write("\x1b[2J\x1b[H");
+      // Leave alternate screen — dashboard is preserved in main buffer
+      stdout.write("\x1b[?1049l");
       // Restore raw mode for Ink
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(true); } catch {}
       }
       setAgentStatus("idle");
-    });
+    };
 
-    child.on("error", () => {
-      agentProcess.current = null;
-      process.stdout.write("\x1b[2J\x1b[H");
-      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-        try { process.stdin.setRawMode(true); } catch {}
-      }
-      setAgentStatus("idle");
-    });
+    child.on("exit", restoreScreen);
+    child.on("error", restoreScreen);
   }, [config, orcRoot]);
 
   useInput(
