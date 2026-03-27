@@ -73,13 +73,13 @@ export class TmuxSession {
     if (!this.isRunning()) return;
 
     // Block until the user detaches (Ctrl+\ or prefix d).
-    // tmux gets the real terminal via stdio: "inherit".
-    // This is the same pattern that gave perfect agent rendering.
+    // The "; clear" after detach clears the "[detached ...]" message
+    // before control returns to our caller.
     try {
-      execSync(`tmux attach-session -t ${this.sessionName}`, {
-        stdio: "inherit",
-        timeout: 0, // no timeout — runs until detach
-      });
+      execSync(
+        `tmux attach-session -t ${this.sessionName}; printf '\\033[2J\\033[H'`,
+        { stdio: "inherit", timeout: 0 },
+      );
     } catch {
       // execSync throws on non-zero exit (normal for detach)
     }
