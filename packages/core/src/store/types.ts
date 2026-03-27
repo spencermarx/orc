@@ -5,7 +5,8 @@ export type GoalStatus =
   | "active"
   | "reviewing"
   | "delivering"
-  | "done";
+  | "done"
+  | "failed";
 
 export type BeadStatus =
   | "ready"
@@ -53,12 +54,22 @@ export type BeadEntry = {
   updatedAt: number;
 };
 
+export type WorkerRole =
+  | "engineer"
+  | "reviewer"
+  | "goal-orchestrator"
+  | "project-orchestrator"
+  | "root-orchestrator";
+
 export type WorkerEntry = {
   id: string;
   beadId: string;
+  goalId: string;
+  projectKey: string;
   paneId: string;
   pid: number | null;
   status: WorkerStatus;
+  role: WorkerRole;
   lastActivity: number;
 };
 

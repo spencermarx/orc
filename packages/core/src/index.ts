@@ -51,3 +51,9 @@ export { generateSuggestions } from "./ai/suggestions.js";
 export { CollaborationRelay } from "./collaboration/relay.js";
 export { checkPermission } from "./collaboration/permissions.js";
 export { generateToken, validateToken } from "./collaboration/auth.js";
+
+// Orchestrator
+export { Orchestrator } from "./orchestrator/orchestrator.js";
+export type { OrchestratorOptions, SpawnEngineerOptions, SpawnGoalOrchOptions, WorkerSignal } from "./orchestrator/orchestrator.js";
+export { loadPersona, buildEngineerPrompt, buildGoalOrchPrompt, buildReviewerPrompt } from "./orchestrator/persona.js";
+export { createBeadWorktree, createGoalWorktree, findGoalBranch, mergeBead, writeStatus, readStatus, readFeedback } from "./orchestrator/worktree.js";
