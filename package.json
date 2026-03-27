@@ -4,10 +4,17 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "orc:install": "bash packages/cli/lib/init.sh"
+    "orc:install": "bash packages/cli/lib/init.sh",
+    "build": "nx run-many -t build",
+    "test": "vitest run --workspace vitest.workspace.ts",
+    "test:watch": "vitest --workspace vitest.workspace.ts",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@nx/js": "^22.6.1",
-    "nx": "22.6.1"
+    "@playwright/test": "^1.49.0",
+    "nx": "22.6.1",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }

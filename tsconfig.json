@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022"],
+    "paths": {
+      "@orc/core": ["./packages/core/src/index.ts"],
+      "@orc/core/*": ["./packages/core/src/*"],
+      "@orc/ui": ["./packages/ui/src/index.ts"],
+      "@orc/ui/*": ["./packages/ui/src/*"],
+      "@orc/tui": ["./packages/tui/src/index.tsx"],
+      "@orc/tui/*": ["./packages/tui/src/*"],
+      "@orc/web": ["./packages/web/src/index.ts"],
+      "@orc/web/*": ["./packages/web/src/*"],
+      "@orc/api": ["./packages/api/src/index.ts"],
+      "@orc/api/*": ["./packages/api/src/*"],
+      "@orc/plugins": ["./packages/plugins/src/index.ts"],
+      "@orc/plugins/*": ["./packages/plugins/src/*"]
+    }
+  },
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/ui" },
+    { "path": "./packages/tui" },
+    { "path": "./packages/web" },
+    { "path": "./packages/api" },
+    { "path": "./packages/plugins" }
+  ],
+  "exclude": ["node_modules", "dist"]
+}

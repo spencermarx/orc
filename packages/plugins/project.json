@@ -1,0 +1,14 @@
+{
+  "name": "@orc/plugins",
+  "sourceRoot": "packages/plugins/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bun build ./src/index.ts --outdir ./dist --target node --format esm", "cwd": "packages/plugins" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "vitest run", "cwd": "packages/plugins" }
+    }
+  }
+}
