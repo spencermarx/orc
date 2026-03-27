@@ -157,12 +157,22 @@ export class SessionMultiplexer extends EventEmitter {
       alive: true,
     };
 
-    // Pipe PTY output directly — no buffering, no filtering.
-    // Raw bytes go straight to stdout for native rendering.
+    // Pipe PTY output directly to stdout for native rendering.
+    // Skip the first data event — it contains terminal capability
+    // handshake responses (DA1, DCS) that render as visible garbage.
+    let firstEvent = true;
+
     p.onData((data: string) => {
+      if (firstEvent) {
+        firstEvent = false;
+        // Don't display the first chunk (capability handshake).
+        // Don't buffer it either — it's noise, not content.
+        return;
+      }
+
       const buf = Buffer.from(data);
 
-      // Always accumulate scrollback (for session switching later)
+      // Accumulate scrollback for session switching
       session.scrollbackRaw.push(buf);
       session.scrollbackSize += buf.length;
       while (session.scrollbackSize > MAX_SCROLLBACK_BYTES && session.scrollbackRaw.length > 0) {
