@@ -16,18 +16,42 @@ type AppProps = {
   orcRoot?: string;
 };
 
-// ─── ASCII Art ──────────────────────────────────────────────────────────────
+// ─── ASCII Art (from assets/ascii-art.txt, trimmed) ─────────────────────────
 
-const ORC_MARK = [
-  "      ▄▅▆▇▇▆▅▄",
-  "    ▃▇███████████▇▃",
-  "   ▅██████████████████▅",
-  "  ▆████████████████████▆",
-  "  ▇██████████████████████▇",
-  "  ▆████████████████████▆",
-  "   ▅██████████████████▅",
-  "    ▃▇███████████▇▃",
-  "      ▁▂▃▃▃▂▁",
+const ORC_FACE = [
+  "           ██████           ",
+  "      ███           ██      ",
+  "    ██                ██    ",
+  "█████     ██          ██     █████",
+  " ██  ███ ██            ██ ███  ██ ",
+  "  ████   ██            ██   ████  ",
+  "  █  ██ █████      █████  █   █   ",
+  "   █ ████ ███ ████████ ███████ █  ",
+  "    █ ████  ███      ██   ████ █  ",
+  "     █  ███    █    █   ███   █   ",
+  "       ████ ██  ██████ ██ ████    ",
+  "        ██ █  ██      ██  █ ██    ",
+  "        ██ █  ██████████  █ ██    ",
+  "        ██ ██  █ ████ █  ██  █    ",
+  "        ██████████  ██████████    ",
+  "         ███            ███       ",
+  "           █████    █████         ",
+  "            ███      ███          ",
+  "               ████████           ",
+  "                 ████             ",
+];
+
+// Color gradient: face features in accent, structure in muted, outline in dim
+const FACE_COLORS: Array<"accent" | "muted" | "dim"> = [
+  "dim", "dim", "dim",       // top crown
+  "muted", "muted", "muted", // horns
+  "accent", "accent",        // eyes
+  "accent", "accent",        // brow
+  "muted", "muted",          // nose bridge
+  "accent", "accent",        // eyes inner
+  "muted",                   // jaw
+  "dim", "dim", "dim",       // tusks
+  "dim", "dim",              // chin
 ];
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -184,25 +208,37 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
 
 // ─── Splash ─────────────────────────────────────────────────────────────────
 
+const COLOR_MAP = {
+  accent: "#00ff88",
+  muted: "#4a5568",
+  dim: "#2d3748",
+} as const;
+
 function SplashScreen({ projectCount, beadCount }: { projectCount: number; beadCount: number }): React.ReactElement {
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={2}>
+    <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={1}>
+      {/* Orc face */}
       <Box flexDirection="column" alignItems="center">
-        {ORC_MARK.map((line, i) => (
-          <Text key={i} color="#30363d">{line}</Text>
+        {ORC_FACE.map((line, i) => (
+          <Text key={i} color={COLOR_MAP[FACE_COLORS[i] ?? "dim"]}>{line}</Text>
         ))}
       </Box>
+
+      {/* Wordmark + tagline */}
       <Box marginTop={1} flexDirection="column" alignItems="center">
-        <Text bold color="#00ff88">{"  o r c  "}</Text>
-        <Text dimColor>orchestrator platform</Text>
+        <Text bold color="#00ff88">{"o r c"}</Text>
       </Box>
-      <Box marginTop={1} flexDirection="column" alignItems="center">
-        <Text dimColor>
-          {projectCount} project{projectCount !== 1 ? "s" : ""} · {beadCount} bead{beadCount !== 1 ? "s" : ""}
-        </Text>
+
+      {/* Stats bar */}
+      <Box marginTop={1} gap={2}>
+        <Text dimColor>{projectCount} project{projectCount !== 1 ? "s" : ""}</Text>
+        <Text color="#30363d">·</Text>
+        <Text dimColor>{beadCount} bead{beadCount !== 1 ? "s" : ""}</Text>
       </Box>
+
+      {/* Prompt */}
       <Box marginTop={1}>
-        <Text dimColor italic>press any key</Text>
+        <Text color="#6e7681" italic>press any key</Text>
       </Box>
     </Box>
   );
