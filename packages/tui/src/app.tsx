@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import { Box, Text, useInput, useApp, useStdout } from "ink";
-import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 import type { StoreApi } from "zustand/vanilla";
 import type { OrcState } from "@orc/core/store/types.js";
 import type { OrcConfig } from "@orc/core/config/schema.js";
 import type { Orchestrator } from "@orc/core/orchestrator/orchestrator.js";
 import type { ProjectSnapshot } from "@orc/core/bridge/projects-toml.js";
 import { getAdapter } from "@orc/core/process/adapter.js";
-import { loadPersona, buildRootOrchPrompt } from "@orc/core/orchestrator/persona.js";
+import { loadPersona } from "@orc/core/orchestrator/persona.js";
+import { SessionMultiplexer } from "./multiplexer.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,28 +45,20 @@ const ORC_FACE = [
   "                    ██████████                     ",
 ];
 
-// ─── Hook ───────────────────────────────────────────────────────────────────
-
-function useStore(store?: StoreApi<OrcState>): OrcState | null {
-  return useSyncExternalStore(
-    (cb) => store?.subscribe(cb) ?? (() => {}),
-    () => store?.getState() ?? null,
-  );
-}
-
 // ─── App ────────────────────────────────────────────────────────────────────
 
 export function App({ interactive = false, store, snapshots = [], orcRoot = "", orchestrator, config }: AppProps): React.ReactElement {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const [view, setView] = useState<View>("splash");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("navigate");
   const [commandBuffer, setCommandBuffer] = useState("");
-  const [agentStatus, setAgentStatus] = useState<"idle" | "launching" | "running">("idle");
-  const { stdout } = useStdout();
+  const [agentStatus, setAgentStatus] = useState<"idle" | "running">("idle");
+  const [sessionCount, setSessionCount] = useState(0);
 
-  const agentProcess = useRef<ChildProcess | null>(null);
+  const multiplexerRef = useRef<SessionMultiplexer | null>(null);
   const projectKeys = snapshots.map((s) => s.key);
   const agentCmd = config?.defaults.agent_cmd ?? "auto";
 
@@ -78,23 +69,31 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     }
   }, [view]);
 
-  // Launch the agent CLI as a child process with inherited stdio.
-  // This gives the agent FULL control of the terminal — colors, spinners,
-  // cursor movement all work natively. When the agent exits, Ink resumes.
+  // Initialize multiplexer once
+  const getMultiplexer = useCallback(() => {
+    if (!multiplexerRef.current) {
+      multiplexerRef.current = new SessionMultiplexer(stdout);
+      multiplexerRef.current.on("leave", () => {
+        // Multiplexer already handled raw mode and screen restoration
+        setAgentStatus("idle");
+        setSessionCount(multiplexerRef.current?.getSessionCount() ?? 0);
+      });
+      multiplexerRef.current.on("session-exit", () => {
+        setSessionCount(multiplexerRef.current?.getSessionCount() ?? 0);
+      });
+    }
+    return multiplexerRef.current;
+  }, [stdout]);
+
   const launchAgent = useCallback((initialPrompt: string) => {
     if (!config || !orcRoot) return;
 
-    // Resolve which CLI to use
     const resolvedCmd = config.defaults.agent_cmd === "auto" ? "claude" : config.defaults.agent_cmd;
     const adapter = getAdapter(resolvedCmd);
 
-    // Load persona
     let personaContent = "";
-    try {
-      personaContent = loadPersona("root-orchestrator", orcRoot);
-    } catch {}
+    try { personaContent = loadPersona("root-orchestrator", orcRoot); } catch {}
 
-    // Build launch command
     const { command, args } = adapter.buildLaunchCommand({
       cwd: orcRoot,
       prompt: initialPrompt,
@@ -102,89 +101,27 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       yolo: false,
     });
 
-    setAgentStatus("launching");
+    const mux = getMultiplexer();
 
-    // Release Ink's raw mode so the agent can take over
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-      try { process.stdin.setRawMode(false); } catch {}
-    }
-
-    const rows = stdout.rows || 24;
-    const cols = stdout.columns || 80;
-
-    // Enter alternate screen buffer — preserves dashboard underneath
-    stdout.write("\x1b[?1049h");
-    stdout.write("\x1b[2J\x1b[H");
-
-    // Set scroll region: rows 1 to (rows-1), reserving bottom row for status bar
-    stdout.write(`\x1b[1;${rows - 1}r`);
-
-    // Draw the pinned status bar on the last row
-    const drawStatusBar = () => {
-      const currentCols = stdout.columns || 80;
-      const left = " orc > root orchestrator ";
-      const right = " /exit to return ";
-      const padding = Math.max(0, currentCols - left.length - right.length);
-      const bar = left + " ".repeat(padding) + right;
-
-      // Save cursor, move to last row, draw bar, restore cursor
-      stdout.write("\x1b7"); // save cursor
-      stdout.write(`\x1b[${stdout.rows || rows};1H`); // move to last row
-      stdout.write(`\x1b[48;2;0;255;136m\x1b[38;2;13;17;23m\x1b[1m${bar}\x1b[0m`); // green bg, dark text
-      stdout.write("\x1b8"); // restore cursor
-    };
-
-    drawStatusBar();
-
-    // Redraw status bar on terminal resize
-    const onResize = () => {
-      const newRows = stdout.rows || 24;
-      stdout.write(`\x1b[1;${newRows - 1}r`); // update scroll region
-      drawStatusBar();
-    };
-    stdout.on("resize", onResize);
-
-    // Position cursor in the scroll region for the agent
-    stdout.write("\x1b[1;1H");
-
-    const child = spawn(command, args, {
+    mux.addSession({
+      label: "root-orch",
+      role: "root-orchestrator",
+      command,
+      args,
       cwd: orcRoot,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        // Tell the agent CLI it has 1 fewer row (status bar occupies the last)
-        LINES: String((stdout.rows || rows) - 1),
-      },
     });
 
-    agentProcess.current = child;
+    if (!mux.isActive()) {
+      mux.enter();
+    }
+
     setAgentStatus("running");
-
-    const restoreScreen = () => {
-      agentProcess.current = null;
-      stdout.off("resize", onResize);
-      // Reset scroll region to full screen
-      stdout.write(`\x1b[1;${stdout.rows || rows}r`);
-      // Leave alternate screen
-      stdout.write("\x1b[?1049l");
-      // Clear the main screen buffer so Ink doesn't render below stale output
-      stdout.write("\x1b[2J\x1b[H");
-      // Restore raw mode for Ink
-      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-        try { process.stdin.setRawMode(true); } catch {}
-      }
-      setAgentStatus("idle");
-    };
-
-    child.on("exit", restoreScreen);
-    child.on("error", restoreScreen);
-  }, [config, orcRoot]);
+    setSessionCount(mux.getSessionCount());
+  }, [config, orcRoot, getMultiplexer]);
 
   useInput(
     (input, key) => {
       if (view === "splash") { setView("dashboard"); return; }
-
-      // Don't capture input when agent is running — it owns the terminal
       if (agentStatus === "running") return;
 
       if (inputMode === "command") {
@@ -220,10 +157,27 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
 
   function handleCommand(cmd: string) {
     if (cmd === "clear" || cmd === "help") return;
-    if (cmd.startsWith("status")) return;
-    if (cmd.startsWith("projects") || cmd.startsWith("list")) return;
+    if (cmd.startsWith("status") || cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // Launch agent with the user's message as initial prompt
+    // If multiplexer has sessions, re-enter it (don't spawn new agent)
+    const mux = multiplexerRef.current;
+    if (mux && mux.getSessionCount() > 0) {
+      mux.enter();
+      setAgentStatus("running");
+      // Send the new message to the active agent
+      const activeId = mux.getActiveId();
+      if (activeId) {
+        const sessions = mux.getSessions();
+        const active = sessions.find((s) => s.id === activeId);
+        if (active?.alive) {
+          // Brief delay for screen setup, then send
+          setTimeout(() => active.pty.write(cmd + "\n"), 100);
+        }
+      }
+      return;
+    }
+
+    // Launch new agent
     launchAgent(cmd);
   }
 
@@ -235,9 +189,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     return <SplashScreen projectCount={snapshots.length} beadCount={totalBeads} />;
   }
 
-  // When agent is running, render nothing — agent owns the screen.
-  // Ink pauses rendering; the branded header is drawn via raw ANSI above the agent.
-  if (agentStatus === "running" || agentStatus === "launching") {
+  if (agentStatus === "running") {
     return <Box />;
   }
 
@@ -253,7 +205,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         <DashboardView
           snapshots={snapshots} selectedIdx={interactive ? selectedIdx : -1}
           totalBeads={totalBeads} openBeads={openBeads} closedBeads={closedBeads}
-          agentCmd={agentCmd} agentStatus={agentStatus}
+          agentCmd={agentCmd} sessionCount={sessionCount}
         />
       )}
       {view === "project" && selectedProject && (
@@ -265,7 +217,11 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         {interactive && inputMode === "command" ? (
           <Text><Text color="#00ff88" bold>{"> "}</Text>{commandBuffer}<Text color="#00ff88">_</Text></Text>
         ) : interactive ? (
-          <Text dimColor>: command  j/k nav  enter open  ? help  q quit</Text>
+          <Text dimColor>
+            {sessionCount > 0
+              ? `: resume (${sessionCount} session${sessionCount > 1 ? "s" : ""})  j/k nav  ? help  q quit`
+              : ": command  j/k nav  enter open  ? help  q quit"}
+          </Text>
         ) : (
           <Text dimColor>ctrl+c quit</Text>
         )}
@@ -301,9 +257,9 @@ function SplashScreen({ projectCount, beadCount }: { projectCount: number; beadC
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
-function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, agentCmd, agentStatus }: {
+function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, agentCmd, sessionCount }: {
   snapshots: ProjectSnapshot[]; selectedIdx: number; totalBeads: number; openBeads: number; closedBeads: number;
-  agentCmd: string; agentStatus: string;
+  agentCmd: string; sessionCount: number;
 }): React.ReactElement {
   return (
     <Box flexDirection="column">
@@ -339,8 +295,17 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" paddingX={1} marginTop={1}>
         <Text color="#00ff88" bold>Root Orchestrator <Text dimColor>({agentCmd})</Text></Text>
         <Text>{" "}</Text>
-        <Text dimColor>Press <Text bold color="#00ff88">:</Text> then type a message to launch the orchestrator</Text>
-        <Text dimColor>The agent CLI will take over the terminal. Exit the agent to return here.</Text>
+        {sessionCount > 0 ? (
+          <>
+            <Text><Text color="green">*</Text> <Text bold>{sessionCount} session{sessionCount > 1 ? "s" : ""} running</Text></Text>
+            <Text dimColor>Press <Text bold color="#00ff88">:</Text> to resume</Text>
+          </>
+        ) : (
+          <>
+            <Text dimColor>Press <Text bold color="#00ff88">:</Text> then type a message to launch the orchestrator</Text>
+            <Text dimColor>Navigate between agents with Ctrl+] and return with Esc Esc</Text>
+          </>
+        )}
       </Box>
     </Box>
   );
@@ -429,24 +394,23 @@ function HelpView(): React.ReactElement {
   return (
     <Box flexDirection="row">
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={1} paddingX={1} marginRight={1}>
-        <Text color="#00ff88" bold>Keys</Text>
+        <Text color="#00ff88" bold>Dashboard</Text>
         <Text>{" "}</Text>
-        <KeyHint k=":" desc="talk to root orchestrator" />
-        <KeyHint k="j / k" desc="navigate up/down" />
-        <KeyHint k="enter" desc="open project" />
+        <KeyHint k=":" desc="talk to orchestrator / resume" />
+        <KeyHint k="j / k" desc="navigate projects" />
+        <KeyHint k="enter" desc="open project detail" />
         <KeyHint k="q" desc="back / quit" />
         <KeyHint k="?" desc="toggle help" />
-        <KeyHint k="esc" desc="cancel" />
-        <KeyHint k="ctrl+c" desc="force quit" />
       </Box>
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={1} paddingX={1}>
-        <Text color="#00ff88" bold>Config</Text>
+        <Text color="#00ff88" bold>Agent Sessions</Text>
         <Text>{" "}</Text>
-        <Text><Text bold>config.toml</Text><Text dimColor>       all projects</Text></Text>
-        <Text><Text bold>config.local.toml</Text><Text dimColor> your overrides</Text></Text>
-        <Text><Text bold>.orc/config.toml</Text><Text dimColor>  project (wins)</Text></Text>
+        <KeyHint k="Ctrl+]" desc="next agent session" />
+        <KeyHint k="Ctrl+N" desc="next (alternative)" />
+        <KeyHint k="Ctrl+P" desc="previous session" />
+        <KeyHint k="Esc Esc" desc="return to dashboard" />
         <Text>{" "}</Text>
-        <Text dimColor>Most specific value wins via deep merge.</Text>
+        <Text dimColor>All other keys go to the agent.</Text>
       </Box>
     </Box>
   );
