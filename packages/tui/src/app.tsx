@@ -17,7 +17,6 @@ type AppProps = {
 };
 
 // ─── ASCII Art (from assets/ascii-art.txt) ──────────────────────────────────
-// Verbatim lines — DO NOT manually edit spacing
 
 const ORC_FACE = [
   "                    ██████████                    ",
@@ -61,7 +60,6 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
 
   const projectKeys = snapshots.map((s) => s.key);
 
-  // Auto-transition from splash after 2s
   useEffect(() => {
     if (view === "splash") {
       const timer = setTimeout(() => setView("dashboard"), 2000);
@@ -71,19 +69,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
 
   useInput(
     (input, key) => {
-      // Splash: any key skips to dashboard
-      if (view === "splash") {
-        setView("dashboard");
-        return;
-      }
+      if (view === "splash") { setView("dashboard"); return; }
 
-      // Command mode: capture text input
       if (inputMode === "command") {
-        if (key.escape) {
-          setInputMode("navigate");
-          setCommandBuffer("");
-          return;
-        }
+        if (key.escape) { setInputMode("navigate"); setCommandBuffer(""); return; }
         if (key.return && commandBuffer.trim()) {
           const cmd = commandBuffer.trim();
           setCommandHistory((h) => [...h, { role: "user", text: cmd }]);
@@ -91,18 +80,11 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
           setCommandBuffer("");
           return;
         }
-        if (key.backspace || key.delete) {
-          setCommandBuffer((b) => b.slice(0, -1));
-          return;
-        }
-        if (input && !key.ctrl && !key.meta) {
-          setCommandBuffer((b) => b + input);
-          return;
-        }
+        if (key.backspace || key.delete) { setCommandBuffer((b) => b.slice(0, -1)); return; }
+        if (input && !key.ctrl && !key.meta) { setCommandBuffer((b) => b + input); return; }
         return;
       }
 
-      // Navigate mode
       if (key.ctrl && input === "c") exit();
       if (input === ":") { setInputMode("command"); return; }
       if (input === "q") {
@@ -121,19 +103,18 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
   );
 
   function handleCommand(cmd: string) {
-    // Simple command routing — this is where the root orchestrator responds
     if (cmd.startsWith("status")) {
       const open = snapshots.reduce((s, p) => s + p.beads.filter((b) => b.status === "open").length, 0);
-      setCommandHistory((h) => [...h, { role: "orc", text: `${snapshots.length} projects, ${open} open beads across all projects.` }]);
+      setCommandHistory((h) => [...h, { role: "orc", text: `${snapshots.length} projects, ${open} open beads.` }]);
     } else if (cmd.startsWith("help")) {
-      setCommandHistory((h) => [...h, { role: "orc", text: "Commands: status, projects, help, clear. Or describe what you want to do." }]);
+      setCommandHistory((h) => [...h, { role: "orc", text: "Commands: status, projects, help, clear." }]);
     } else if (cmd.startsWith("projects") || cmd.startsWith("list")) {
       const list = snapshots.map((s) => `  ${s.key} (${s.beads.length} beads)`).join("\n");
       setCommandHistory((h) => [...h, { role: "orc", text: list || "No projects registered." }]);
     } else if (cmd === "clear") {
       setCommandHistory([]);
     } else {
-      setCommandHistory((h) => [...h, { role: "orc", text: `Acknowledged: "${cmd}". Full orchestration engine integration coming soon.` }]);
+      setCommandHistory((h) => [...h, { role: "orc", text: `Acknowledged: "${cmd}". Engine integration pending.` }]);
     }
   }
 
@@ -145,18 +126,25 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
     return <SplashScreen projectCount={snapshots.length} beadCount={totalBeads} />;
   }
 
+  const viewLabel = view === "dashboard" ? "dashboard"
+    : view === "project" && selectedProject ? selectedProject
+    : "help";
+
   return (
     <Box flexDirection="column">
-      {/* Status bar */}
-      <StatusBar view={view} selectedProject={selectedProject} inputMode={inputMode} />
+      {/* Status bar — plain text, no backgroundColor to avoid ghost renders */}
+      <Box>
+        <Text color="#00ff88" bold>{"⚔ orc"}</Text>
+        <Text color="#30363d">{" > "}</Text>
+        <Text color="#8b949e">{viewLabel}</Text>
+        {inputMode === "command" && <Text color="#00ff88">{" [COMMAND]"}</Text>}
+      </Box>
+      <Text color="#30363d">{"─".repeat(70)}</Text>
 
       {view === "dashboard" && (
         <DashboardView
-          snapshots={snapshots}
-          selectedIdx={interactive ? selectedIdx : -1}
-          totalBeads={totalBeads}
-          openBeads={openBeads}
-          closedBeads={closedBeads}
+          snapshots={snapshots} selectedIdx={interactive ? selectedIdx : -1}
+          totalBeads={totalBeads} openBeads={openBeads} closedBeads={closedBeads}
           commandHistory={commandHistory}
         />
       )}
@@ -165,27 +153,24 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
       )}
       {view === "help" && <HelpView />}
 
-      {/* Command input */}
-      {interactive && (
-        <Box borderStyle="round" borderColor={inputMode === "command" ? "#00ff88" : "#30363d"} paddingX={1}>
-          {inputMode === "command" ? (
-            <Box>
-              <Text color="#00ff88" bold>{"⚔ "}</Text>
-              <Text>{commandBuffer}</Text>
-              <Text color="#00ff88">{"█"}</Text>
-            </Box>
-          ) : (
-            <Text dimColor>
-              {view === "dashboard" ? " : command  j/k navigate  enter open  ? help  q quit" :
-               view === "project" ? " : command  q back  ? help" : " : command  ? close  q quit"}
-            </Text>
-          )}
-        </Box>
-      )}
-      {!interactive && (
-        <Box borderStyle="single" borderColor="#30363d" borderTop borderBottom={false} borderLeft={false} borderRight={false}>
-          <Text dimColor> ctrl+c quit</Text>
-        </Box>
+      {/* Command input / footer */}
+      <Text color="#30363d">{"─".repeat(70)}</Text>
+      {interactive ? (
+        inputMode === "command" ? (
+          <Box>
+            <Text color="#00ff88" bold>{"⚔ "}</Text>
+            <Text>{commandBuffer}</Text>
+            <Text color="#00ff88">{"█"}</Text>
+          </Box>
+        ) : (
+          <Text dimColor>
+            {view === "dashboard" ? ": command  j/k navigate  enter open  ? help  q quit"
+              : view === "project" ? ": command  q back  ? help"
+              : ": command  ? close  q quit"}
+          </Text>
+        )
+      ) : (
+        <Text dimColor>ctrl+c quit</Text>
       )}
     </Box>
   );
@@ -201,36 +186,17 @@ function SplashScreen({ projectCount, beadCount }: { projectCount: number; beadC
           <Text key={i} color="#00ff88">{line}</Text>
         ))}
       </Box>
-
       <Box marginTop={1} flexDirection="column" alignItems="center">
         <Text bold color="#00ff88">{"o r c"}</Text>
       </Box>
-
       <Box marginTop={1} gap={2}>
         <Text dimColor>{projectCount} project{projectCount !== 1 ? "s" : ""}</Text>
         <Text color="#30363d">·</Text>
         <Text dimColor>{beadCount} bead{beadCount !== 1 ? "s" : ""}</Text>
       </Box>
-
       <Box marginTop={1}>
         <Text color="#6e7681" italic>press any key</Text>
       </Box>
-    </Box>
-  );
-}
-
-// ─── Status Bar ─────────────────────────────────────────────────────────────
-
-function StatusBar({ view, selectedProject, inputMode }: { view: View; selectedProject: string | null; inputMode: InputMode }): React.ReactElement {
-  return (
-    <Box>
-      <Text backgroundColor="#00ff88" color="#0d1117" bold>{" ⚔ orc "}</Text>
-      <Text backgroundColor="#30363d" color="#8b949e">
-        {view === "dashboard" ? " dashboard " : view === "project" && selectedProject ? ` ${selectedProject} ` : " help "}
-      </Text>
-      <Text backgroundColor="#0d1117">{" ".repeat(30)}</Text>
-      {inputMode === "command" && <Text backgroundColor="#0d1117" color="#00ff88"> COMMAND </Text>}
-      <Text backgroundColor="#0d1117" color="#6e7681"> v1.0.0 </Text>
     </Box>
   );
 }
@@ -242,16 +208,14 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
   commandHistory: Array<{ role: "user" | "orc"; text: string }>;
 }): React.ReactElement {
   return (
-    <Box flexDirection="column" gap={1} paddingTop={1}>
-      <Box flexDirection="row" gap={1}>
-        {/* Left panel: Projects */}
-        <Box flexDirection="column" borderStyle="round" borderColor="#30363d" width="60%" paddingX={1}>
-          <Box marginTop={-1}>
-            <Text color="#00ff88" bold>{" Projects "}</Text>
-          </Box>
+    <Box flexDirection="column">
+      <Box flexDirection="row">
+        {/* Left: Projects — uses flexGrow instead of percentage */}
+        <Box flexDirection="column" borderStyle="round" borderColor="#30363d" flexGrow={3} paddingX={1} marginRight={1}>
+          <Box marginTop={-1}><Text color="#00ff88" bold>{" Projects "}</Text></Box>
           <Box flexDirection="column" paddingTop={1}>
             {snapshots.length === 0 ? (
-              <Text dimColor>No projects. Run orc add to get started.</Text>
+              <Text dimColor>No projects. Run orc add.</Text>
             ) : (
               snapshots.map((snap, i) => (
                 <ProjectRow key={snap.key} snapshot={snap} selected={i === selectedIdx} />
@@ -260,12 +224,10 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
           </Box>
         </Box>
 
-        {/* Right column */}
-        <Box flexDirection="column" width="40%" gap={1}>
+        {/* Right: Status + Workers */}
+        <Box flexDirection="column" flexGrow={2}>
           <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1}>
-            <Box marginTop={-1}>
-              <Text color="#00ff88" bold>{" Status "}</Text>
-            </Box>
+            <Box marginTop={-1}><Text color="#00ff88" bold>{" Status "}</Text></Box>
             <Box flexDirection="column" paddingTop={1}>
               <StatRow label="projects" value={String(snapshots.length)} />
               <StatRow label="beads" value={String(totalBeads)} />
@@ -273,11 +235,8 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
               <StatRow label="done" value={String(closedBeads)} color="green" />
             </Box>
           </Box>
-
-          <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1}>
-            <Box marginTop={-1}>
-              <Text color="#00ff88" bold>{" Workers "}</Text>
-            </Box>
+          <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1} marginTop={1}>
+            <Box marginTop={-1}><Text color="#00ff88" bold>{" Workers "}</Text></Box>
             <Box flexDirection="column" paddingTop={1}>
               <Text dimColor>No active sessions</Text>
             </Box>
@@ -285,11 +244,9 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
         </Box>
       </Box>
 
-      {/* Root orchestrator conversation */}
-      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1} height={commandHistory.length > 0 ? undefined : 4}>
-        <Box marginTop={-1}>
-          <Text color="#00ff88" bold>{" Root Orchestrator "}</Text>
-        </Box>
+      {/* Root orchestrator */}
+      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1} marginTop={1}>
+        <Box marginTop={-1}><Text color="#00ff88" bold>{" Root Orchestrator "}</Text></Box>
         <Box flexDirection="column" paddingTop={1}>
           {commandHistory.length === 0 ? (
             <Text dimColor>Press <Text bold color="#00ff88">:</Text> to talk to the orchestrator</Text>
@@ -327,16 +284,16 @@ function ProjectRow({ snapshot, selected }: { snapshot: ProjectSnapshot; selecte
   return (
     <Box>
       <Text color="#00ff88">{selected ? "▸ " : "  "}</Text>
-      <Box width={14}>
-        <Text bold color={selected ? "#00ff88" : undefined}>{snapshot.key}</Text>
-      </Box>
+      <Box width={14}><Text bold color={selected ? "#00ff88" : undefined}>{snapshot.key}</Text></Box>
       {!snapshot.exists ? (
         <Text color="red">missing</Text>
       ) : total > 0 ? (
-        <Box gap={1}>
-          {open > 0 && <><Text color="yellow">{open}</Text><Text dimColor>open</Text></>}
-          {closed > 0 && <><Text color="green">{closed}</Text><Text dimColor>done</Text></>}
-          <Text color="#30363d">│</Text>
+        <Box>
+          {open > 0 && <Text color="yellow">{open} </Text>}
+          {open > 0 && <Text dimColor>open </Text>}
+          {closed > 0 && <Text color="green">{closed} </Text>}
+          {closed > 0 && <Text dimColor>done </Text>}
+          <Text color="#30363d">{"| "}</Text>
           {snapshot.hasConfig ? <Text dimColor>configured</Text> : <Text color="#d29922">needs setup</Text>}
         </Box>
       ) : (
@@ -356,11 +313,9 @@ function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.
   const closed = snapshot.beads.filter((b) => b.status !== "open");
 
   return (
-    <Box flexDirection="row" gap={1} paddingTop={1}>
-      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" width="60%" paddingX={1}>
-        <Box marginTop={-1}>
-          <Text color="#00ff88" bold>{` Beads (${open.length} open, ${closed.length} done) `}</Text>
-        </Box>
+    <Box flexDirection="row">
+      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" flexGrow={3} paddingX={1} marginRight={1}>
+        <Box marginTop={-1}><Text color="#00ff88" bold>{` Beads (${open.length} open, ${closed.length} done) `}</Text></Box>
         <Box flexDirection="column" paddingTop={1}>
           {snapshot.beads.length === 0 ? (
             <Text dimColor>No beads yet.</Text>
@@ -387,7 +342,7 @@ function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.
         </Box>
       </Box>
 
-      <Box flexDirection="column" width="40%" gap={1}>
+      <Box flexDirection="column" flexGrow={2}>
         <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1}>
           <Box marginTop={-1}><Text color="#00ff88" bold>{" Info "}</Text></Box>
           <Box flexDirection="column" paddingTop={1}>
@@ -397,7 +352,7 @@ function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.
           </Box>
         </Box>
         {configSections.length > 0 && (
-          <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1}>
+          <Box flexDirection="column" borderStyle="round" borderColor="#30363d" paddingX={1} marginTop={1}>
             <Box marginTop={-1}><Text color="#00ff88" bold>{" Config "}</Text></Box>
             <Box flexDirection="column" paddingTop={1}>
               {configSections.map((s) => <Text key={s} color="#6e7681">  [{s}]</Text>)}
@@ -413,8 +368,8 @@ function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.
 
 function HelpView(): React.ReactElement {
   return (
-    <Box flexDirection="row" gap={1} paddingTop={1}>
-      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" width="50%" paddingX={1}>
+    <Box flexDirection="row">
+      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" flexGrow={1} paddingX={1} marginRight={1}>
         <Box marginTop={-1}><Text color="#00ff88" bold>{" Keys "}</Text></Box>
         <Box flexDirection="column" paddingTop={1}>
           <KeyHint k=":" desc="open command input" />
@@ -426,7 +381,7 @@ function HelpView(): React.ReactElement {
           <KeyHint k="ctrl+c" desc="force quit" />
         </Box>
       </Box>
-      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" width="50%" paddingX={1}>
+      <Box flexDirection="column" borderStyle="round" borderColor="#30363d" flexGrow={1} paddingX={1}>
         <Box marginTop={-1}><Text color="#00ff88" bold>{" Config "}</Text></Box>
         <Box flexDirection="column" paddingTop={1}>
           <Text><Text bold>config.toml</Text><Text dimColor>       all projects</Text></Text>
