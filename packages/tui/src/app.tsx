@@ -109,18 +109,52 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Use alternate screen buffer — this preserves the dashboard underneath
-    // and gives the agent a clean full screen. When the agent exits,
-    // we restore the main buffer and the dashboard reappears.
-    stdout.write("\x1b[?1049h"); // enter alternate screen
-    stdout.write("\x1b[2J\x1b[H"); // clear alternate screen
-    stdout.write("\x1b[38;2;0;255;136morc > root orchestrator\x1b[0m\n");
-    stdout.write("\x1b[2m" + "─".repeat(Math.min(stdout.columns || 80, 80)) + "\x1b[0m\n\n");
+    const rows = stdout.rows || 24;
+    const cols = stdout.columns || 80;
+
+    // Enter alternate screen buffer — preserves dashboard underneath
+    stdout.write("\x1b[?1049h");
+    stdout.write("\x1b[2J\x1b[H");
+
+    // Set scroll region: rows 1 to (rows-1), reserving bottom row for status bar
+    stdout.write(`\x1b[1;${rows - 1}r`);
+
+    // Draw the pinned status bar on the last row
+    const drawStatusBar = () => {
+      const currentCols = stdout.columns || 80;
+      const left = " orc > root orchestrator ";
+      const right = " /exit to return ";
+      const padding = Math.max(0, currentCols - left.length - right.length);
+      const bar = left + " ".repeat(padding) + right;
+
+      // Save cursor, move to last row, draw bar, restore cursor
+      stdout.write("\x1b7"); // save cursor
+      stdout.write(`\x1b[${stdout.rows || rows};1H`); // move to last row
+      stdout.write(`\x1b[48;2;0;255;136m\x1b[38;2;13;17;23m\x1b[1m${bar}\x1b[0m`); // green bg, dark text
+      stdout.write("\x1b8"); // restore cursor
+    };
+
+    drawStatusBar();
+
+    // Redraw status bar on terminal resize
+    const onResize = () => {
+      const newRows = stdout.rows || 24;
+      stdout.write(`\x1b[1;${newRows - 1}r`); // update scroll region
+      drawStatusBar();
+    };
+    stdout.on("resize", onResize);
+
+    // Position cursor in the scroll region for the agent
+    stdout.write("\x1b[1;1H");
 
     const child = spawn(command, args, {
       cwd: orcRoot,
       stdio: "inherit",
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        // Tell the agent CLI it has 1 fewer row (status bar occupies the last)
+        LINES: String((stdout.rows || rows) - 1),
+      },
     });
 
     agentProcess.current = child;
@@ -128,7 +162,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
 
     const restoreScreen = () => {
       agentProcess.current = null;
-      // Leave alternate screen — dashboard is preserved in main buffer
+      stdout.off("resize", onResize);
+      // Reset scroll region to full screen
+      stdout.write(`\x1b[1;${stdout.rows || rows}r`);
+      // Leave alternate screen — dashboard restored
       stdout.write("\x1b[?1049l");
       // Restore raw mode for Ink
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
