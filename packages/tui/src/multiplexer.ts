@@ -157,49 +157,24 @@ export class SessionMultiplexer extends EventEmitter {
       alive: true,
     };
 
-    // Suppress initial output for 800ms to let terminal capability
-    // handshake complete. Agent CLIs (especially Ink-based ones like
-    // Claude Code) send DA1/DCS queries on startup that produce
-    // visible garbage if piped to stdout during the handshake.
-    const spawnedAt = Date.now();
-    const STARTUP_QUIET_MS = 800;
-
+    // Pipe PTY output directly — no buffering, no filtering.
+    // Raw bytes go straight to stdout for native rendering.
     p.onData((data: string) => {
       const buf = Buffer.from(data);
-      const elapsed = Date.now() - spawnedAt;
 
-      if (elapsed < STARTUP_QUIET_MS) {
-        // During startup quiet period: buffer but don't display
-        session.scrollbackRaw.push(buf);
-        session.scrollbackSize += buf.length;
-        return;
-      }
-
+      // Always accumulate scrollback (for session switching later)
       session.scrollbackRaw.push(buf);
       session.scrollbackSize += buf.length;
-
-      // Cap scrollback
       while (session.scrollbackSize > MAX_SCROLLBACK_BYTES && session.scrollbackRaw.length > 0) {
         const removed = session.scrollbackRaw.shift()!;
         session.scrollbackSize -= removed.length;
       }
 
-      // Pipe to stdout if this is the active session and multiplexer is active
+      // Pipe to stdout if this is the active, visible session
       if (this._active && this.activeId === id) {
         this.stdout.write(buf);
       }
     });
-
-    // After quiet period, replay buffered output (which now has the
-    // capability responses stripped by the terminal itself)
-    setTimeout(() => {
-      if (this._active && this.activeId === id) {
-        // Clear screen and replay clean output
-        this.stdout.write(`${ESC}[2J${ESC}[1;1H`);
-        this.replayScrollback(id);
-        this.drawStatusBar();
-      }
-    }, STARTUP_QUIET_MS + 50);
 
     p.onExit(() => {
       session.alive = false;
