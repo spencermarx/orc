@@ -359,11 +359,13 @@ export class SessionMultiplexer extends EventEmitter {
       if (second === 0x50) return;
     }
 
-    // Forward raw Buffer to active PTY.
+    // Forward to active PTY.
+    // Use toString("utf-8") for the write — node-pty internally handles
+    // strings more reliably than Buffers for single-byte inputs.
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        session.pty.write(data);
+        session.pty.write(data.toString("utf-8"));
       }
     }
   }
