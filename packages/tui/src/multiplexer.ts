@@ -74,11 +74,12 @@ export class SessionMultiplexer extends EventEmitter {
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Enter alternate screen, clear, set up scroll region
-    const rows = this.stdout.rows || 24;
+    // Enter alternate screen and clear
     this.stdout.write(`${ESC}[?1049h`);   // alternate screen
     this.stdout.write(`${ESC}[2J${ESC}[H`); // clear
-    this.stdout.write(`${ESC}[1;${rows - 1}r`); // scroll region: all but last row
+    // NO scroll region — it conflicts with agent CLIs (like Ink) that
+    // manage the screen themselves. The status bar is drawn over the
+    // agent output and redrawn on each output event.
 
     this.drawStatusBar();
 
@@ -118,9 +119,7 @@ export class SessionMultiplexer extends EventEmitter {
       this.resizeListener = null;
     }
 
-    // Reset scroll region, leave alternate screen, clear main buffer
-    const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[1;${rows}r`);
+    // Leave alternate screen, clear main buffer
     this.stdout.write(`${ESC}[?1049l`);
     this.stdout.write(`${ESC}[2J${ESC}[H`);
 
@@ -137,7 +136,7 @@ export class SessionMultiplexer extends EventEmitter {
     const p = pty.spawn(opts.command, opts.args, {
       name: "xterm-256color",
       cols,
-      rows: rows - 1, // minus status bar row
+      rows, // full terminal height — no scroll region reservation
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env } as Record<string, string>,
     });
@@ -355,13 +354,14 @@ export class SessionMultiplexer extends EventEmitter {
       if (second === 0x50) return;
     }
 
-    // Forward raw bytes to active PTY — pass Buffer directly.
-    // Converting Buffer→String→write() can mangle escape sequences
-    // and special keys (backspace, delete, etc).
+    // Forward to active PTY using binary encoding to preserve raw bytes.
+    // node-pty.write() with a string uses the PTY's encoding.
+    // Using 'binary' (latin1) preserves each byte as-is, matching what
+    // the agent would receive if it owned stdin directly.
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        session.pty.write(data);
+        session.pty.write(data.toString("binary"));
       }
     }
   }
@@ -415,10 +415,7 @@ export class SessionMultiplexer extends EventEmitter {
     this.stdout.write(`${ESC}8`);         // restore cursor + attributes
   }
 
-  private setupScrollRegion(): void {
-    const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[1;${rows - 1}r`);
-  }
+  // No scroll region — conflicts with agent CLIs that manage their own screen.
 
   // ─── Resize ─────────────────────────────────────────────────────────────
 
@@ -428,14 +425,11 @@ export class SessionMultiplexer extends EventEmitter {
     const rows = this.stdout.rows || 24;
     const cols = this.stdout.columns || 80;
 
-    // Update scroll region
-    this.setupScrollRegion();
-
-    // Resize active PTY
+    // Resize active PTY to full terminal size (no scroll region reserved)
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        try { session.pty.resize(cols, rows - 1); } catch {}
+        try { session.pty.resize(cols, rows); } catch {}
       }
     }
 
