@@ -171,7 +171,7 @@ describe("Agent Adapters", () => {
     });
     expect(result.command).toBe("claude");
     expect(result.args).toContain("--dangerously-skip-permissions");
-    expect(result.args).toContain("--system-prompt");
+    expect(result.args).toContain("--append-system-prompt");
   });
 
   it("codex adapter builds correct command", () => {

@@ -16,9 +16,11 @@ export type AgentAdapter = {
 export const claudeAdapter: AgentAdapter = {
   name: "claude",
   buildLaunchCommand(options) {
-    const args = ["--print"];
+    const args: string[] = [];
+    // --append-system-prompt injects persona into the interactive session
+    // (not --print, which is one-shot non-interactive mode)
     if (options.personaPath) {
-      args.push("--system-prompt", options.personaPath);
+      args.push("--append-system-prompt", options.personaPath);
     }
     if (options.yolo) {
       args.push("--dangerously-skip-permissions");
@@ -35,7 +37,7 @@ export const claudeAdapter: AgentAdapter = {
     return ["--dangerously-skip-permissions"];
   },
   injectPersona(personaPath) {
-    return ["--system-prompt", personaPath];
+    return ["--append-system-prompt", personaPath];
   },
 };
 

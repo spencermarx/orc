@@ -173,18 +173,23 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       rootAgentId.current = null;
     }
 
-    // Spawn root orchestrator agent
-    setCommandHistory((h) => [...h, { role: "orc", text: `Launching ${agentCmd} agent...` }]);
+    // Spawn root orchestrator agent with the user's message as initial prompt
+    setCommandHistory((h) => [...h, { role: "orc", text: `Starting ${agentCmd}...` }]);
     orchestrator.spawnRootOrchestrator()
       .then((workerId) => {
         rootAgentId.current = workerId;
-        // Send the initial command after a brief delay for agent startup
-        setTimeout(() => {
-          const proc = orchestrator.processManager.getProcess(workerId);
-          if (proc) {
+        // The initial user command is passed via adapter's prompt option
+        // in the launch command. For subsequent messages, we'll write to stdin.
+        // But the current spawnRootOrchestrator uses a generic init prompt,
+        // so we need to send the user's actual message to stdin after startup.
+        const proc = orchestrator.processManager.getProcess(workerId);
+        if (proc) {
+          // Wait for agent to be ready, then send user's message
+          // Agent CLIs need time to initialize before accepting stdin
+          setTimeout(() => {
             proc.write(cmd + "\n");
-          }
-        }, 1000);
+          }, 2000);
+        }
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);

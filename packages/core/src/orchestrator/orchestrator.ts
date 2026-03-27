@@ -356,7 +356,7 @@ export class Orchestrator extends EventEmitter {
     const initPrompt = persona.buildRootOrchPrompt(this.config, this.orcRoot);
     const adapter = this.resolveAdapter();
     const { command, args } = adapter.buildLaunchCommand({
-      cwd: this.orcRoot, prompt: initPrompt, personaPath: "", yolo: false,
+      cwd: this.orcRoot, prompt: initPrompt, personaPath: personaContent, yolo: false,
     });
 
     const managed = this.processManager.spawn({ command, args, cwd: this.orcRoot });
