@@ -103,12 +103,17 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
 
     setAgentStatus("launching");
 
-    // Exit Ink's raw mode so the child process can take over the terminal
+    // Release Ink's raw mode so the agent can take over
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       try { process.stdin.setRawMode(false); } catch {}
     }
 
-    // Spawn with inherited stdio — agent owns the terminal
+    // Clear screen and show branded transition
+    process.stdout.write("\x1b[2J\x1b[H"); // clear screen, cursor to top
+    process.stdout.write("\x1b[38;2;0;255;136m"); // green
+    process.stdout.write("orc > root orchestrator\x1b[0m\n");
+    process.stdout.write("\x1b[2m" + "─".repeat(Math.min(process.stdout.columns || 80, 80)) + "\x1b[0m\n\n");
+
     const child = spawn(command, args, {
       cwd: orcRoot,
       stdio: "inherit",
@@ -118,21 +123,24 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     agentProcess.current = child;
     setAgentStatus("running");
 
-    child.on("exit", (code) => {
+    child.on("exit", () => {
       agentProcess.current = null;
-      setAgentStatus("idle");
-      // Restore Ink's raw mode
+      // Clear screen before restoring dashboard
+      process.stdout.write("\x1b[2J\x1b[H");
+      // Restore raw mode for Ink
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(true); } catch {}
       }
+      setAgentStatus("idle");
     });
 
-    child.on("error", (err) => {
+    child.on("error", () => {
       agentProcess.current = null;
-      setAgentStatus("idle");
+      process.stdout.write("\x1b[2J\x1b[H");
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(true); } catch {}
       }
+      setAgentStatus("idle");
     });
   }, [config, orcRoot]);
 
@@ -191,9 +199,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     return <SplashScreen projectCount={snapshots.length} beadCount={totalBeads} />;
   }
 
-  // When agent is running, show minimal status — agent owns the terminal
-  if (agentStatus === "running") {
-    return <Box><Text dimColor>agent running (exit agent to return to orc)</Text></Box>;
+  // When agent is running, render nothing — agent owns the screen.
+  // Ink pauses rendering; the branded header is drawn via raw ANSI above the agent.
+  if (agentStatus === "running" || agentStatus === "launching") {
+    return <Box />;
   }
 
   const viewLabel = view === "dashboard" ? "dashboard"
