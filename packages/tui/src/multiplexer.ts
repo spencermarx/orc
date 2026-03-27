@@ -341,38 +341,27 @@ export class SessionMultiplexer extends EventEmitter {
     }
 
     // Filter terminal response sequences from stdin.
-    // The outer terminal responds to queries with DA1/DCS/focus sequences.
-    // These arrive on stdin but are NOT user input — drop them.
-    //
-    // Use a broad filter: any stdin data starting with ESC[ followed by
-    // ? or > is a terminal response, not a user escape sequence.
-    // User escape sequences (arrow keys, etc) start with ESC[ followed
-    // by a letter or number directly, never ? or >.
-    const str = data.toString();
+    // Check first bytes: ESC[? or ESC[> or ESC P = terminal response, not user input.
     if (data.length > 1 && byte === 0x1b) {
-      const second = data.length > 1 ? data[1] : 0;
+      const second = data[1];
       if (second === 0x5b) { // ESC[
         const third = data.length > 2 ? data[2] : 0;
-        if (third === 0x3f || third === 0x3e) {
-          // ESC[? or ESC[> = terminal response — drop silently
-          return;
-        }
-        // Check for ESC[I or ESC[O (focus events)
-        if (third === 0x49 || third === 0x4f) {
-          return;
-        }
+        // ESC[? or ESC[> = terminal response (DA1/DA2)
+        if (third === 0x3f || third === 0x3e) return;
+        // ESC[I or ESC[O = focus events
+        if (third === 0x49 || third === 0x4f) return;
       }
-      if (second === 0x50) {
-        // ESC P = DCS response — drop
-        return;
-      }
+      // ESC P = DCS response
+      if (second === 0x50) return;
     }
 
-    // Forward user input to active PTY
+    // Forward raw bytes to active PTY — pass Buffer directly.
+    // Converting Buffer→String→write() can mangle escape sequences
+    // and special keys (backspace, delete, etc).
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        session.pty.write(str);
+        session.pty.write(data);
       }
     }
   }
