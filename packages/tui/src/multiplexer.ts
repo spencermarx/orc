@@ -353,11 +353,22 @@ export class SessionMultiplexer extends EventEmitter {
       return;
     }
 
-    // Everything else → forward to active PTY
+    // Filter terminal response sequences from stdin before forwarding.
+    // The outer terminal sends DA1 responses (\x1b[?1;2c), DCS responses,
+    // and focus events through stdin. These are NOT user input.
+    const str = data.toString();
+    if (str.match(/^\x1b\[\?[0-9;]*c/) ||      // DA1 response
+        str.match(/^\x1bP>/) ||                  // DCS response start
+        str.match(/^\x1b\[[IO]/) ||              // Focus in/out
+        str.match(/^\x1b\[>[0-9;]*[a-z]/)) {    // DA2/DA3 response
+      return; // drop terminal responses, not user input
+    }
+
+    // Forward user input to active PTY
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
-        session.pty.write(data.toString());
+        session.pty.write(str);
       }
     }
   }
