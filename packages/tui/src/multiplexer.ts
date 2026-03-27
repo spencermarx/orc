@@ -180,13 +180,26 @@ export class SessionMultiplexer extends EventEmitter {
         contentStarted = true;
       }
 
-      // Strip terminal capability response sequences that render as garbage.
-      // These can appear at any time (not just startup) when the agent re-renders.
+      // Intercept terminal capability QUERIES and RESPONSES from PTY output.
+      //
+      // The root cause of stdin garbage: the agent sends queries like \x1b[c
+      // (DA1) through the PTY output. We pipe that to stdout. The OUTER
+      // terminal sees the query and responds with \x1b[?1;2c on stdin.
+      // Our stdin handler forwards it to the PTY as "user input" = garbage.
+      //
+      // The robust fix: strip BOTH queries AND responses from the output
+      // so the outer terminal never sees them and never responds.
       let cleaned = data;
-      cleaned = cleaned.replace(/\x1bP>?\|[^\x1b\x07]*(?:\x1b\\|\x07)/g, ""); // DCS strings
-      cleaned = cleaned.replace(/\x1b\[\?[0-9;]*c/g, "");                       // DA1 responses
-      cleaned = cleaned.replace(/\x1b\[[IO]/g, "");                              // Focus in/out
-      cleaned = cleaned.replace(/\x1b\[>[0-9]*[a-z]/g, "");                      // DA2/DA3 queries echoed
+      // Queries (sent by agent, would trigger outer terminal response)
+      cleaned = cleaned.replace(/\x1b\[c/g, "");                                  // DA1 query
+      cleaned = cleaned.replace(/\x1b\[>[0-9]*q/g, "");                           // XTVERSION query
+      cleaned = cleaned.replace(/\x1b\[=[0-9]*c/g, "");                           // DA3 query
+      cleaned = cleaned.replace(/\x1b\[>[0-9]*c/g, "");                           // DA2 query
+      // Responses (in case they still arrive)
+      cleaned = cleaned.replace(/\x1bP>?\|[^\x1b\x07]*(?:\x1b\\|\x07)/g, "");    // DCS strings
+      cleaned = cleaned.replace(/\x1b\[\?[0-9;]*c/g, "");                         // DA1 response
+      cleaned = cleaned.replace(/\x1b\[[IO]/g, "");                               // Focus in/out
+      cleaned = cleaned.replace(/\x1b\[>[0-9;]*[a-z]/g, "");                      // DA2/DA3 response
 
       if (cleaned.length === 0) return;
 
@@ -353,15 +366,32 @@ export class SessionMultiplexer extends EventEmitter {
       return;
     }
 
-    // Filter terminal response sequences from stdin before forwarding.
-    // The outer terminal sends DA1 responses (\x1b[?1;2c), DCS responses,
-    // and focus events through stdin. These are NOT user input.
+    // Filter terminal response sequences from stdin.
+    // The outer terminal responds to queries with DA1/DCS/focus sequences.
+    // These arrive on stdin but are NOT user input — drop them.
+    //
+    // Use a broad filter: any stdin data starting with ESC[ followed by
+    // ? or > is a terminal response, not a user escape sequence.
+    // User escape sequences (arrow keys, etc) start with ESC[ followed
+    // by a letter or number directly, never ? or >.
     const str = data.toString();
-    if (str.match(/^\x1b\[\?[0-9;]*c/) ||      // DA1 response
-        str.match(/^\x1bP>/) ||                  // DCS response start
-        str.match(/^\x1b\[[IO]/) ||              // Focus in/out
-        str.match(/^\x1b\[>[0-9;]*[a-z]/)) {    // DA2/DA3 response
-      return; // drop terminal responses, not user input
+    if (data.length > 1 && byte === 0x1b) {
+      const second = data.length > 1 ? data[1] : 0;
+      if (second === 0x5b) { // ESC[
+        const third = data.length > 2 ? data[2] : 0;
+        if (third === 0x3f || third === 0x3e) {
+          // ESC[? or ESC[> = terminal response — drop silently
+          return;
+        }
+        // Check for ESC[I or ESC[O (focus events)
+        if (third === 0x49 || third === 0x4f) {
+          return;
+        }
+      }
+      if (second === 0x50) {
+        // ESC P = DCS response — drop
+        return;
+      }
     }
 
     // Forward user input to active PTY
