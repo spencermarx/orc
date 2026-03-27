@@ -15,10 +15,8 @@
     ],
     "projectsRelationship": "fixed",
     "version": {
-      "generatorOptions": {
-        "currentVersionResolver": "git-tag",
-        "specifierSource": "prompt"
-      }
+      "currentVersionResolver": "git-tag",
+      "specifierSource": "prompt"
     },
     "changelog": {
       "projectChangelogs": false,

@@ -1,15 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { Box, Text, useInput, useApp } from "ink";
+import type { StoreApi } from "zustand/vanilla";
+import type { OrcState } from "@orc/core/store/types.js";
 
 type View = "dashboard" | "help";
 
 type AppProps = {
   interactive?: boolean;
+  store?: StoreApi<OrcState>;
 };
 
-export function App({ interactive = false }: AppProps): React.ReactElement {
+function useStore(store?: StoreApi<OrcState>): OrcState | null {
+  return useSyncExternalStore(
+    (cb) => store?.subscribe(cb) ?? (() => {}),
+    () => store?.getState() ?? null,
+  );
+}
+
+export function App({ interactive = false, store }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const [view, setView] = useState<View>("dashboard");
+  const state = useStore(store);
 
   useInput(
     (input, key) => {
@@ -23,6 +34,8 @@ export function App({ interactive = false }: AppProps): React.ReactElement {
     { isActive: interactive },
   );
 
+  const projects = state ? Array.from(state.projects.entries()) : [];
+
   return (
     <Box flexDirection="column" padding={1}>
       <Box marginBottom={1}>
@@ -30,7 +43,7 @@ export function App({ interactive = false }: AppProps): React.ReactElement {
         <Text dimColor> — Orchestrator Platform v1.0.0</Text>
       </Box>
 
-      {view === "dashboard" && <DashboardScreen />}
+      {view === "dashboard" && <DashboardScreen projects={projects} />}
       {view === "help" && <HelpScreen />}
 
       <Box marginTop={1}>
@@ -50,12 +63,34 @@ export function App({ interactive = false }: AppProps): React.ReactElement {
   );
 }
 
-function DashboardScreen(): React.ReactElement {
+type DashboardProps = {
+  projects: Array<[string, { path: string; name: string }]>;
+};
+
+function DashboardScreen({ projects }: DashboardProps): React.ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>Dashboard</Text>
-      <Box marginTop={1} flexDirection="column">
-        <Text dimColor>No projects registered. Run `orc add` to get started.</Text>
+
+      {projects.length === 0 ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>No projects registered. Run `orc add` to get started.</Text>
+        </Box>
+      ) : (
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>{projects.length} project{projects.length !== 1 ? "s" : ""} registered:</Text>
+          <Box marginTop={1} flexDirection="column">
+            {projects.map(([key, project]) => (
+              <Box key={key}>
+                <Text bold color="green">  {key}</Text>
+                <Text dimColor>  {project.path}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      <Box marginTop={1}>
         <Text dimColor>No active goals or workers.</Text>
       </Box>
     </Box>

@@ -2,10 +2,16 @@
 import React from "react";
 import { Readable } from "node:stream";
 import { render } from "ink";
+import { createStore } from "@orc/core/store/store.js";
+import { findOrcRoot, hydrateStoreFromLegacy } from "@orc/core/bridge/index.js";
 import { App } from "./app.js";
 
+// Find orc repo root and initialize store with legacy project data
+const orcRoot = findOrcRoot() ?? process.cwd();
+const store = createStore();
+hydrateStoreFromLegacy(store, orcRoot);
+
 // Test if raw mode actually works by trying it.
-// NX/pnpm subprocesses may report isTTY=true but fail when setting raw mode.
 let interactive = false;
 if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
   try {
@@ -17,17 +23,15 @@ if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
   }
 }
 
-// Ink requires a readable stream for stdin — use a no-op stream when
-// raw mode is unavailable so Ink never tries to setRawMode.
 const stdinStream = interactive
   ? process.stdin
   : new Readable({ read() {} });
 
-const { waitUntilExit } = render(<App interactive={interactive} />, {
-  stdin: stdinStream,
-});
+const { waitUntilExit } = render(
+  <App interactive={interactive} store={store} />,
+  { stdin: stdinStream },
+);
 
-// Process-level SIGINT so Ctrl+C always exits, even through NX/pnpm.
 process.on("SIGINT", () => {
   process.exit(0);
 });
