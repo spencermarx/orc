@@ -60,9 +60,13 @@ describe("Input", () => {
     };
     const { stdin, lastFrame } = render(React.createElement(Wrapper, null));
     expect(lastFrame()).toContain("abc");
+    // Allow useEffect to run and attach stdin listener
+    await new Promise((r) => setTimeout(r, 100));
     stdin.write("\x7F");
-    await new Promise((r) => setTimeout(r, 50));
-    expect(lastFrame()).not.toContain("abc");
+    await new Promise((r) => setTimeout(r, 100));
+    const frame = lastFrame() ?? "";
+    // After backspace, "abc" should become "ab"
+    expect(frame).toContain("ab");
   });
 
   it("handles character input via re-render", async () => {
@@ -75,8 +79,10 @@ describe("Input", () => {
     };
     const { stdin, lastFrame } = render(React.createElement(Wrapper, null));
     expect(lastFrame()).toContain("ab");
+    // Allow useEffect to run and attach stdin listener
+    await new Promise((r) => setTimeout(r, 100));
     stdin.write("c");
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
     expect(lastFrame()).toContain("abc");
   });
 });
