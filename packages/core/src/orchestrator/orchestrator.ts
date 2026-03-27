@@ -4,6 +4,7 @@
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { execSync } from "node:child_process";
 import type { StoreApi } from "zustand/vanilla";
 import type { OrcState } from "../store/types.js";
 import type { OrcConfig } from "../config/schema.js";
@@ -838,7 +839,6 @@ export class Orchestrator extends EventEmitter {
       // Auto-detection: try claude first, then others
       for (const name of ["claude", "opencode", "codex", "gemini"]) {
         try {
-          const { execSync } = require("node:child_process");
           execSync(`which ${name}`, { stdio: "pipe" });
           return getAdapter(name);
         } catch {}

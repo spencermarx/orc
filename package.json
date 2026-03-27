@@ -6,8 +6,8 @@
   "scripts": {
     "orc:install": "bash packages/cli/lib/init.sh",
     "build": "nx run-many -t build",
-    "test": "vitest run --workspace vitest.workspace.ts",
-    "test:watch": "vitest --workspace vitest.workspace.ts",
+    "test": "NX_DAEMON=false nx run-many -t test --projects=@orc/core,@orc/ui,@orc/tui,@orc/web,@orc/api,@orc/plugins",
+    "test:watch": "NX_DAEMON=false nx run-many -t test --projects=@orc/core,@orc/ui,@orc/tui -- --watch",
     "test:e2e": "playwright test",
     "start:tui": "npx tsx packages/tui/src/index.tsx"
   },
