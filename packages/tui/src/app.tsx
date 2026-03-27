@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import { Box, Text, useInput, useApp } from "ink";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import type { StoreApi } from "zustand/vanilla";
 import type { OrcState } from "@orc/core/store/types.js";
 import type { OrcConfig } from "@orc/core/config/schema.js";
 import type { Orchestrator } from "@orc/core/orchestrator/orchestrator.js";
 import type { ProjectSnapshot } from "@orc/core/bridge/projects-toml.js";
+import { getAdapter } from "@orc/core/process/adapter.js";
+import { loadPersona, buildRootOrchPrompt } from "@orc/core/orchestrator/persona.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,7 +24,7 @@ type AppProps = {
   config?: OrcConfig;
 };
 
-// ─── ASCII Art (from assets/ascii-art.txt) ──────────────────────────────────
+// ─── ASCII Art ──────────────────────────────────────────────────────────────
 
 const ORC_FACE = [
   "                    ██████████                    ",
@@ -60,12 +64,9 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("navigate");
   const [commandBuffer, setCommandBuffer] = useState("");
-  const [commandHistory, setCommandHistory] = useState<Array<{ role: "user" | "orc"; text: string }>>([]);
+  const [agentStatus, setAgentStatus] = useState<"idle" | "launching" | "running">("idle");
 
-  // Track root orchestrator agent process
-  const rootAgentId = useRef<string | null>(null);
-  const agentOutputBuffer = useRef<string>("");
-
+  const agentProcess = useRef<ChildProcess | null>(null);
   const projectKeys = snapshots.map((s) => s.key);
   const agentCmd = config?.defaults.agent_cmd ?? "auto";
 
@@ -76,44 +77,79 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     }
   }, [view]);
 
-  // Wire agent output to command history
-  useEffect(() => {
-    if (!orchestrator) return;
-    const pm = orchestrator.processManager;
-    const handler = (processId: string, data: string) => {
-      if (processId === rootAgentId.current) {
-        // Accumulate output, flush on newlines
-        agentOutputBuffer.current += data;
-        const lines = agentOutputBuffer.current.split("\n");
-        if (lines.length > 1) {
-          // Flush complete lines
-          const complete = lines.slice(0, -1).join("\n").trim();
-          agentOutputBuffer.current = lines[lines.length - 1];
-          if (complete) {
-            // Strip ANSI escape codes for clean display
-            const clean = complete.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
-            if (clean) {
-              setCommandHistory((h) => [...h, { role: "orc", text: clean.slice(0, 200) }]);
-            }
-          }
-        }
+  // Launch the agent CLI as a child process with inherited stdio.
+  // This gives the agent FULL control of the terminal — colors, spinners,
+  // cursor movement all work natively. When the agent exits, Ink resumes.
+  const launchAgent = useCallback((initialPrompt: string) => {
+    if (!config || !orcRoot) return;
+
+    // Resolve which CLI to use
+    const resolvedCmd = config.defaults.agent_cmd === "auto" ? "claude" : config.defaults.agent_cmd;
+    const adapter = getAdapter(resolvedCmd);
+
+    // Load persona
+    let personaContent = "";
+    try {
+      personaContent = loadPersona("root-orchestrator", orcRoot);
+    } catch {}
+
+    // Build launch command
+    const { command, args } = adapter.buildLaunchCommand({
+      cwd: orcRoot,
+      prompt: initialPrompt,
+      personaPath: personaContent,
+      yolo: false,
+    });
+
+    setAgentStatus("launching");
+
+    // Exit Ink's raw mode so the child process can take over the terminal
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(false); } catch {}
+    }
+
+    // Spawn with inherited stdio — agent owns the terminal
+    const child = spawn(command, args, {
+      cwd: orcRoot,
+      stdio: "inherit",
+      env: { ...process.env },
+    });
+
+    agentProcess.current = child;
+    setAgentStatus("running");
+
+    child.on("exit", (code) => {
+      agentProcess.current = null;
+      setAgentStatus("idle");
+      // Restore Ink's raw mode
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(true); } catch {}
       }
-    };
-    pm.on("data", handler);
-    return () => { pm.off("data", handler); };
-  }, [orchestrator]);
+    });
+
+    child.on("error", (err) => {
+      agentProcess.current = null;
+      setAgentStatus("idle");
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(true); } catch {}
+      }
+    });
+  }, [config, orcRoot]);
 
   useInput(
     (input, key) => {
       if (view === "splash") { setView("dashboard"); return; }
 
+      // Don't capture input when agent is running — it owns the terminal
+      if (agentStatus === "running") return;
+
       if (inputMode === "command") {
         if (key.escape) { setInputMode("navigate"); setCommandBuffer(""); return; }
         if (key.return && commandBuffer.trim()) {
           const cmd = commandBuffer.trim();
-          setCommandHistory((h) => [...h, { role: "user", text: cmd }]);
-          handleCommand(cmd);
           setCommandBuffer("");
+          setInputMode("navigate");
+          handleCommand(cmd);
           return;
         }
         if (key.backspace || key.delete) { setCommandBuffer((b) => b.slice(0, -1)); return; }
@@ -135,66 +171,16 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         if (key.return) { setSelectedProject(projectKeys[selectedIdx]); setView("project"); }
       }
     },
-    { isActive: interactive },
+    { isActive: interactive && agentStatus !== "running" },
   );
 
   function handleCommand(cmd: string) {
-    // Built-in commands
-    if (cmd === "clear") { setCommandHistory([]); return; }
-    if (cmd === "help") {
-      setCommandHistory((h) => [...h, { role: "orc", text: "Built-in: status, projects, clear, help. All other input is sent to the root orchestrator agent." }]);
-      return;
-    }
-    if (cmd.startsWith("status")) {
-      const open = snapshots.reduce((s, p) => s + p.beads.filter((b) => b.status === "open").length, 0);
-      setCommandHistory((h) => [...h, { role: "orc", text: `${snapshots.length} projects, ${open} open beads.` }]);
-      return;
-    }
-    if (cmd.startsWith("projects") || cmd.startsWith("list")) {
-      const list = snapshots.map((s) => `  ${s.key} (${s.beads.length} beads)`).join("\n");
-      setCommandHistory((h) => [...h, { role: "orc", text: list || "No projects registered." }]);
-      return;
-    }
+    if (cmd === "clear" || cmd === "help") return;
+    if (cmd.startsWith("status")) return;
+    if (cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // Send to root orchestrator agent
-    if (!orchestrator) {
-      setCommandHistory((h) => [...h, { role: "orc", text: "Orchestrator not initialized." }]);
-      return;
-    }
-
-    if (rootAgentId.current) {
-      // Agent already running — send to its stdin
-      const proc = orchestrator.processManager.getProcess(rootAgentId.current);
-      if (proc) {
-        proc.write(cmd + "\n");
-        return;
-      }
-      // Process died — reset
-      rootAgentId.current = null;
-    }
-
-    // Spawn root orchestrator agent with the user's message as initial prompt
-    setCommandHistory((h) => [...h, { role: "orc", text: `Starting ${agentCmd}...` }]);
-    orchestrator.spawnRootOrchestrator()
-      .then((workerId) => {
-        rootAgentId.current = workerId;
-        // The initial user command is passed via adapter's prompt option
-        // in the launch command. For subsequent messages, we'll write to stdin.
-        // But the current spawnRootOrchestrator uses a generic init prompt,
-        // so we need to send the user's actual message to stdin after startup.
-        const proc = orchestrator.processManager.getProcess(workerId);
-        if (proc) {
-          // Wait for agent to be ready, then send user's message
-          // Agent CLIs need time to initialize before accepting stdin
-          setTimeout(() => {
-            proc.write(cmd + "\n");
-          }, 2000);
-        }
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        setCommandHistory((h) => [...h, { role: "orc", text: `Failed to launch agent: ${msg}` }]);
-      });
+    // Launch agent with the user's message as initial prompt
+    launchAgent(cmd);
   }
 
   const totalBeads = snapshots.reduce((sum, s) => sum + s.beads.length, 0);
@@ -203,6 +189,11 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
 
   if (view === "splash") {
     return <SplashScreen projectCount={snapshots.length} beadCount={totalBeads} />;
+  }
+
+  // When agent is running, show minimal status — agent owns the terminal
+  if (agentStatus === "running") {
+    return <Box><Text dimColor>agent running (exit agent to return to orc)</Text></Box>;
   }
 
   const viewLabel = view === "dashboard" ? "dashboard"
@@ -217,8 +208,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
         <DashboardView
           snapshots={snapshots} selectedIdx={interactive ? selectedIdx : -1}
           totalBeads={totalBeads} openBeads={openBeads} closedBeads={closedBeads}
-          commandHistory={commandHistory} agentCmd={agentCmd}
-          agentRunning={rootAgentId.current !== null}
+          agentCmd={agentCmd} agentStatus={agentStatus}
         />
       )}
       {view === "project" && selectedProject && (
@@ -266,9 +256,9 @@ function SplashScreen({ projectCount, beadCount }: { projectCount: number; beadC
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
-function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, commandHistory, agentCmd, agentRunning }: {
+function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, agentCmd, agentStatus }: {
   snapshots: ProjectSnapshot[]; selectedIdx: number; totalBeads: number; openBeads: number; closedBeads: number;
-  commandHistory: Array<{ role: "user" | "orc"; text: string }>; agentCmd: string; agentRunning: boolean;
+  agentCmd: string; agentStatus: string;
 }): React.ReactElement {
   return (
     <Box flexDirection="column">
@@ -302,21 +292,10 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
       </Box>
 
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" paddingX={1} marginTop={1}>
-        <Text color="#00ff88" bold>Root Orchestrator <Text dimColor>({agentCmd}){agentRunning ? " running" : ""}</Text></Text>
+        <Text color="#00ff88" bold>Root Orchestrator <Text dimColor>({agentCmd})</Text></Text>
         <Text>{" "}</Text>
-        {commandHistory.length === 0 ? (
-          <Text dimColor>Press <Text bold color="#00ff88">:</Text> to talk to the orchestrator</Text>
-        ) : (
-          commandHistory.slice(-8).map((entry, i) => (
-            <Box key={i}>
-              {entry.role === "user" ? (
-                <Text><Text color="#00ff88" bold>{"> "}</Text>{entry.text}</Text>
-              ) : (
-                <Text><Text color="#6e7681">{"  "}</Text><Text dimColor>{entry.text}</Text></Text>
-              )}
-            </Box>
-          ))
-        )}
+        <Text dimColor>Press <Text bold color="#00ff88">:</Text> then type a message to launch the orchestrator</Text>
+        <Text dimColor>The agent CLI will take over the terminal. Exit the agent to return here.</Text>
       </Box>
     </Box>
   );
@@ -324,10 +303,7 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
 
 function StatRow({ label, value, color }: { label: string; value: string; color?: string }): React.ReactElement {
   return (
-    <Box>
-      <Box width={10}><Text dimColor>{label}</Text></Box>
-      <Text bold color={color}>{value}</Text>
-    </Box>
+    <Box><Box width={10}><Text dimColor>{label}</Text></Box><Text bold color={color}>{value}</Text></Box>
   );
 }
 
@@ -410,12 +386,12 @@ function HelpView(): React.ReactElement {
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={1} paddingX={1} marginRight={1}>
         <Text color="#00ff88" bold>Keys</Text>
         <Text>{" "}</Text>
-        <KeyHint k=":" desc="open command input" />
+        <KeyHint k=":" desc="talk to root orchestrator" />
         <KeyHint k="j / k" desc="navigate up/down" />
         <KeyHint k="enter" desc="open project" />
         <KeyHint k="q" desc="back / quit" />
         <KeyHint k="?" desc="toggle help" />
-        <KeyHint k="esc" desc="close command input" />
+        <KeyHint k="esc" desc="cancel" />
         <KeyHint k="ctrl+c" desc="force quit" />
       </Box>
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={1} paddingX={1}>
