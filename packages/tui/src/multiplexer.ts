@@ -50,6 +50,8 @@ export class SessionMultiplexer extends EventEmitter {
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────
 
+  private sigquitHandler: (() => void) | null = null;
+
   enter(): void {
     if (this._entered) return;
     this._entered = true;
@@ -58,6 +60,14 @@ export class SessionMultiplexer extends EventEmitter {
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       try { process.stdin.setRawMode(false); } catch {}
     }
+
+    // Listen for SIGQUIT (Ctrl+\) to return to dashboard.
+    // The parent process catches it; the child agent ignores it
+    // because we handle it here before it propagates.
+    this.sigquitHandler = () => {
+      if (this._entered) this.leave();
+    };
+    process.on("SIGQUIT", this.sigquitHandler);
 
     // Resume the active agent (it was suspended or just spawned)
     if (this.activeId) {
@@ -72,7 +82,13 @@ export class SessionMultiplexer extends EventEmitter {
     if (!this._entered) return;
     this._entered = false;
 
-    // Suspend the active agent
+    // Stop listening for SIGQUIT
+    if (this.sigquitHandler) {
+      process.off("SIGQUIT", this.sigquitHandler);
+      this.sigquitHandler = null;
+    }
+
+    // Suspend the active agent (keeps it alive in background)
     if (this.activeId) {
       const session = this.sessions.get(this.activeId);
       if (session?.alive) {
@@ -82,8 +98,8 @@ export class SessionMultiplexer extends EventEmitter {
 
     // Reset scroll region and clear screen for Ink to resume
     const rows = this.stdout.rows || 24;
-    this.stdout.write(`${ESC}[1;${rows}r`);    // reset scroll region to full
-    this.stdout.write(`${ESC}[2J${ESC}[H`);    // clear
+    this.stdout.write(`${ESC}[1;${rows}r`);
+    this.stdout.write(`${ESC}[2J${ESC}[H`);
 
     // Restore Ink's raw mode
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
@@ -234,31 +250,41 @@ export class SessionMultiplexer extends EventEmitter {
     const rows = this.stdout.rows || 24;
     const cols = this.stdout.columns || 80;
 
-    // Build tab list
+    // Full-width dark background bar with orc branding
+    const BAR_BG = `${ESC}[48;2;22;27;34m`;   // dark blue-gray background
+    const BAR_FG = `${ESC}[38;2;110;118;129m`; // muted text
+    const ACCENT = `${ESC}[38;2;0;255;136m`;   // orc green
+    const WHITE = `${ESC}[38;2;200;200;200m`;  // bright text
+
+    // Left: orc brand + session tabs
+    const brand = `${BAR_BG}${ACCENT}${BOLD} orc ${RESET}${BAR_BG}`;
+
     const tabs = this.sessionOrder.map((id, i) => {
       const s = this.sessions.get(id);
       const label = s?.label ?? "?";
       const num = i + 1;
       const isActive = id === activeId;
       if (isActive) {
-        return `${GREEN_BG}${DARK_FG}${BOLD} ${num}:${label} ${RESET}`;
+        return `${GREEN_BG}${DARK_FG}${BOLD} ${num}:${label} ${RESET}${BAR_BG}`;
       }
-      return `${DIM} ${num}:${label} ${RESET}`;
+      return `${BAR_FG} ${num}:${label} ${RESET}${BAR_BG}`;
     }).join("");
 
     // If no sessions in order yet (about to be added), show the new one
     const displayTabs = this.sessionOrder.length === 0
-      ? `${GREEN_BG}${DARK_FG}${BOLD} 1:${activeLabel} ${RESET}`
+      ? `${GREEN_BG}${DARK_FG}${BOLD} 1:${activeLabel} ${RESET}${BAR_BG}`
       : tabs;
 
-    const hints = `${DIM}Ctrl+\\ dash${RESET}`;
+    // Right: navigation hints
+    const hints = `${BAR_FG}Ctrl+\\ dashboard${RESET}${BAR_BG}`;
 
     const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-    const tabsWidth = stripAnsi(displayTabs).length;
-    const hintsWidth = stripAnsi(hints).length;
-    const padding = Math.max(1, cols - tabsWidth - hintsWidth);
+    const leftContent = stripAnsi(brand) + stripAnsi(displayTabs);
+    const rightContent = stripAnsi(hints);
+    const padding = Math.max(1, cols - leftContent.length - rightContent.length);
 
-    const bar = displayTabs + " ".repeat(padding) + hints;
+    // Compose: full-width bar with background color
+    const bar = `${BAR_BG}${brand}${displayTabs}${" ".repeat(padding)}${hints} ${RESET}`;
 
     // Draw on the last row (outside scroll region)
     this.stdout.write(`${ESC}7`);              // save cursor
