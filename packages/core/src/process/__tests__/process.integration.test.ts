@@ -3,6 +3,25 @@ import { ProcessManager } from "../manager.js";
 import { VirtualTerminal } from "../terminal.js";
 import { getAdapter, ADAPTERS } from "../adapter.js";
 
+/**
+ * Check if node-pty can spawn processes in this environment.
+ * node-pty requires native compilation matching the current platform —
+ * if compiled on Linux but running on macOS (or vice versa), it will fail.
+ */
+function canSpawnPty(): boolean {
+  try {
+    const pm = new ProcessManager();
+    const proc = pm.spawn({ command: "echo", args: ["test"] });
+    proc.kill();
+    pm.cleanup();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const HAS_PTY = canSpawnPty();
+
 describe("ProcessManager", () => {
   let pm: ProcessManager;
 
@@ -10,7 +29,7 @@ describe("ProcessManager", () => {
     pm?.cleanup();
   });
 
-  it("spawns a process and receives output", async () => {
+  it.skipIf(!HAS_PTY)("spawns a process and receives output", async () => {
     pm = new ProcessManager();
     const proc = pm.spawn({ command: "echo", args: ["hello world"] });
 
@@ -26,7 +45,7 @@ describe("ProcessManager", () => {
     expect(output).toContain("hello world");
   });
 
-  it("writes to PTY stdin", async () => {
+  it.skipIf(!HAS_PTY)("writes to PTY stdin", async () => {
     pm = new ProcessManager();
     const proc = pm.spawn({ command: "cat", args: [] });
 
@@ -45,7 +64,7 @@ describe("ProcessManager", () => {
     expect(output).toContain("test input");
   });
 
-  it("kills process and triggers exit", async () => {
+  it.skipIf(!HAS_PTY)("kills process and triggers exit", async () => {
     pm = new ProcessManager();
     const proc = pm.spawn({ command: "sleep", args: ["60"] });
 
@@ -57,7 +76,7 @@ describe("ProcessManager", () => {
     expect(typeof exitCode).toBe("number");
   });
 
-  it("accumulates scrollback", async () => {
+  it.skipIf(!HAS_PTY)("accumulates scrollback", async () => {
     pm = new ProcessManager();
     const proc = pm.spawn({
       command: "bash",
@@ -72,7 +91,7 @@ describe("ProcessManager", () => {
     expect(scrollback.length).toBeGreaterThan(0);
   });
 
-  it("tracks all process IDs", () => {
+  it.skipIf(!HAS_PTY)("tracks all process IDs", () => {
     pm = new ProcessManager();
     const p1 = pm.spawn({ command: "sleep", args: ["60"] });
     const p2 = pm.spawn({ command: "sleep", args: ["60"] });
@@ -82,7 +101,7 @@ describe("ProcessManager", () => {
     expect(ids).toContain(p2.id);
   });
 
-  it("cleanup kills all processes", () => {
+  it.skipIf(!HAS_PTY)("cleanup kills all processes", () => {
     pm = new ProcessManager();
     pm.spawn({ command: "sleep", args: ["60"] });
     pm.spawn({ command: "sleep", args: ["60"] });
