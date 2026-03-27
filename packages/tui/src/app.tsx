@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import type { StoreApi } from "zustand/vanilla";
 import type { OrcState } from "@orc/core/store/types.js";
+import type { OrcConfig } from "@orc/core/config/schema.js";
+import type { Orchestrator } from "@orc/core/orchestrator/orchestrator.js";
 import type { ProjectSnapshot } from "@orc/core/bridge/projects-toml.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -14,6 +16,8 @@ type AppProps = {
   store?: StoreApi<OrcState>;
   snapshots?: ProjectSnapshot[];
   orcRoot?: string;
+  orchestrator?: Orchestrator;
+  config?: OrcConfig;
 };
 
 // ─── ASCII Art (from assets/ascii-art.txt) ──────────────────────────────────
@@ -49,7 +53,7 @@ function useStore(store?: StoreApi<OrcState>): OrcState | null {
 
 // ─── App ────────────────────────────────────────────────────────────────────
 
-export function App({ interactive = false, store, snapshots = [], orcRoot = "" }: AppProps): React.ReactElement {
+export function App({ interactive = false, store, snapshots = [], orcRoot = "", orchestrator, config }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const [view, setView] = useState<View>("splash");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -58,7 +62,12 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
   const [commandBuffer, setCommandBuffer] = useState("");
   const [commandHistory, setCommandHistory] = useState<Array<{ role: "user" | "orc"; text: string }>>([]);
 
+  // Track root orchestrator agent process
+  const rootAgentId = useRef<string | null>(null);
+  const agentOutputBuffer = useRef<string>("");
+
   const projectKeys = snapshots.map((s) => s.key);
+  const agentCmd = config?.defaults.agent_cmd ?? "auto";
 
   useEffect(() => {
     if (view === "splash") {
@@ -66,6 +75,33 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
       return () => clearTimeout(timer);
     }
   }, [view]);
+
+  // Wire agent output to command history
+  useEffect(() => {
+    if (!orchestrator) return;
+    const pm = orchestrator.processManager;
+    const handler = (processId: string, data: string) => {
+      if (processId === rootAgentId.current) {
+        // Accumulate output, flush on newlines
+        agentOutputBuffer.current += data;
+        const lines = agentOutputBuffer.current.split("\n");
+        if (lines.length > 1) {
+          // Flush complete lines
+          const complete = lines.slice(0, -1).join("\n").trim();
+          agentOutputBuffer.current = lines[lines.length - 1];
+          if (complete) {
+            // Strip ANSI escape codes for clean display
+            const clean = complete.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
+            if (clean) {
+              setCommandHistory((h) => [...h, { role: "orc", text: clean.slice(0, 200) }]);
+            }
+          }
+        }
+      }
+    };
+    pm.on("data", handler);
+    return () => { pm.off("data", handler); };
+  }, [orchestrator]);
 
   useInput(
     (input, key) => {
@@ -103,19 +139,57 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
   );
 
   function handleCommand(cmd: string) {
+    // Built-in commands
+    if (cmd === "clear") { setCommandHistory([]); return; }
+    if (cmd === "help") {
+      setCommandHistory((h) => [...h, { role: "orc", text: "Built-in: status, projects, clear, help. All other input is sent to the root orchestrator agent." }]);
+      return;
+    }
     if (cmd.startsWith("status")) {
       const open = snapshots.reduce((s, p) => s + p.beads.filter((b) => b.status === "open").length, 0);
       setCommandHistory((h) => [...h, { role: "orc", text: `${snapshots.length} projects, ${open} open beads.` }]);
-    } else if (cmd.startsWith("help")) {
-      setCommandHistory((h) => [...h, { role: "orc", text: "Commands: status, projects, help, clear." }]);
-    } else if (cmd.startsWith("projects") || cmd.startsWith("list")) {
+      return;
+    }
+    if (cmd.startsWith("projects") || cmd.startsWith("list")) {
       const list = snapshots.map((s) => `  ${s.key} (${s.beads.length} beads)`).join("\n");
       setCommandHistory((h) => [...h, { role: "orc", text: list || "No projects registered." }]);
-    } else if (cmd === "clear") {
-      setCommandHistory([]);
-    } else {
-      setCommandHistory((h) => [...h, { role: "orc", text: `Acknowledged: "${cmd}". Engine integration pending.` }]);
+      return;
     }
+
+    // Send to root orchestrator agent
+    if (!orchestrator) {
+      setCommandHistory((h) => [...h, { role: "orc", text: "Orchestrator not initialized." }]);
+      return;
+    }
+
+    if (rootAgentId.current) {
+      // Agent already running — send to its stdin
+      const proc = orchestrator.processManager.getProcess(rootAgentId.current);
+      if (proc) {
+        proc.write(cmd + "\n");
+        return;
+      }
+      // Process died — reset
+      rootAgentId.current = null;
+    }
+
+    // Spawn root orchestrator agent
+    setCommandHistory((h) => [...h, { role: "orc", text: `Launching ${agentCmd} agent...` }]);
+    orchestrator.spawnRootOrchestrator()
+      .then((workerId) => {
+        rootAgentId.current = workerId;
+        // Send the initial command after a brief delay for agent startup
+        setTimeout(() => {
+          const proc = orchestrator.processManager.getProcess(workerId);
+          if (proc) {
+            proc.write(cmd + "\n");
+          }
+        }, 1000);
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setCommandHistory((h) => [...h, { role: "orc", text: `Failed to launch agent: ${msg}` }]);
+      });
   }
 
   const totalBeads = snapshots.reduce((sum, s) => sum + s.beads.length, 0);
@@ -132,14 +206,14 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
 
   return (
     <Box flexDirection="column" paddingRight={1}>
-      {/* Status bar: NEVER changes content — mode shown in footer only */}
       <Text color="#00ff88" bold>orc <Text color="#30363d">&gt;</Text> <Text color="#8b949e">{viewLabel}</Text></Text>
 
       {view === "dashboard" && (
         <DashboardView
           snapshots={snapshots} selectedIdx={interactive ? selectedIdx : -1}
           totalBeads={totalBeads} openBeads={openBeads} closedBeads={closedBeads}
-          commandHistory={commandHistory}
+          commandHistory={commandHistory} agentCmd={agentCmd}
+          agentRunning={rootAgentId.current !== null}
         />
       )}
       {view === "project" && selectedProject && (
@@ -147,7 +221,6 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "" }
       )}
       {view === "help" && <HelpView />}
 
-      {/* Footer: always same structure. Command buffer shown inline. */}
       <Box>
         {interactive && inputMode === "command" ? (
           <Text><Text color="#00ff88" bold>{"> "}</Text>{commandBuffer}<Text color="#00ff88">_</Text></Text>
@@ -188,14 +261,13 @@ function SplashScreen({ projectCount, beadCount }: { projectCount: number; beadC
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
-function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, commandHistory }: {
+function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBeads, commandHistory, agentCmd, agentRunning }: {
   snapshots: ProjectSnapshot[]; selectedIdx: number; totalBeads: number; openBeads: number; closedBeads: number;
-  commandHistory: Array<{ role: "user" | "orc"; text: string }>;
+  commandHistory: Array<{ role: "user" | "orc"; text: string }>; agentCmd: string; agentRunning: boolean;
 }): React.ReactElement {
   return (
     <Box flexDirection="column">
       <Box flexDirection="row">
-        {/* Left: Projects */}
         <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={3} paddingX={1} marginRight={1}>
           <Text color="#00ff88" bold>Projects</Text>
           <Text>{" "}</Text>
@@ -207,8 +279,6 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
             ))
           )}
         </Box>
-
-        {/* Right: Status + Workers */}
         <Box flexDirection="column" flexGrow={2}>
           <Box flexDirection="column" borderStyle="single" borderColor="#30363d" paddingX={1}>
             <Text color="#00ff88" bold>Status</Text>
@@ -226,14 +296,13 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
         </Box>
       </Box>
 
-      {/* Root orchestrator */}
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" paddingX={1} marginTop={1}>
-        <Text color="#00ff88" bold>Root Orchestrator</Text>
+        <Text color="#00ff88" bold>Root Orchestrator <Text dimColor>({agentCmd}){agentRunning ? " running" : ""}</Text></Text>
         <Text>{" "}</Text>
         {commandHistory.length === 0 ? (
           <Text dimColor>Press <Text bold color="#00ff88">:</Text> to talk to the orchestrator</Text>
         ) : (
-          commandHistory.slice(-6).map((entry, i) => (
+          commandHistory.slice(-8).map((entry, i) => (
             <Box key={i}>
               {entry.role === "user" ? (
                 <Text><Text color="#00ff88" bold>{"> "}</Text>{entry.text}</Text>
@@ -261,7 +330,6 @@ function ProjectRow({ snapshot, selected }: { snapshot: ProjectSnapshot; selecte
   const open = snapshot.beads.filter((b) => b.status === "open").length;
   const closed = snapshot.beads.filter((b) => b.status !== "open").length;
   const total = snapshot.beads.length;
-
   return (
     <Box>
       <Text color="#00ff88">{selected ? "> " : "  "}</Text>
@@ -286,11 +354,9 @@ function ProjectRow({ snapshot, selected }: { snapshot: ProjectSnapshot; selecte
 
 function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.ReactElement {
   if (!snapshot) return <Text dimColor>Project not found.</Text>;
-
   const configSections = Object.keys(snapshot.config);
   const open = snapshot.beads.filter((b) => b.status === "open");
   const closed = snapshot.beads.filter((b) => b.status !== "open");
-
   return (
     <Box flexDirection="row">
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={3} paddingX={1} marginRight={1}>
@@ -301,25 +367,16 @@ function ProjectDetailView({ snapshot }: { snapshot?: ProjectSnapshot }): React.
         ) : (
           <>
             {open.slice(0, 12).map((b) => (
-              <Box key={b.id}>
-                <Text color="yellow">* </Text>
-                <Box width={14}><Text color="#6e7681">{b.id}</Text></Box>
-                <Text>{b.title.slice(0, 50)}</Text>
-              </Box>
+              <Box key={b.id}><Text color="yellow">* </Text><Box width={14}><Text color="#6e7681">{b.id}</Text></Box><Text>{b.title.slice(0, 50)}</Text></Box>
             ))}
             {open.length > 12 && <Text dimColor>  +{open.length - 12} more</Text>}
             {closed.slice(0, 5).map((b) => (
-              <Box key={b.id}>
-                <Text color="green">+ </Text>
-                <Box width={14}><Text color="#6e7681">{b.id}</Text></Box>
-                <Text dimColor>{b.title.slice(0, 50)}</Text>
-              </Box>
+              <Box key={b.id}><Text color="green">+ </Text><Box width={14}><Text color="#6e7681">{b.id}</Text></Box><Text dimColor>{b.title.slice(0, 50)}</Text></Box>
             ))}
             {closed.length > 5 && <Text dimColor>  +{closed.length - 5} more done</Text>}
           </>
         )}
       </Box>
-
       <Box flexDirection="column" flexGrow={2}>
         <Box flexDirection="column" borderStyle="single" borderColor="#30363d" paddingX={1}>
           <Text color="#00ff88" bold>Info</Text>
