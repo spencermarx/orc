@@ -165,8 +165,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       stdout.off("resize", onResize);
       // Reset scroll region to full screen
       stdout.write(`\x1b[1;${stdout.rows || rows}r`);
-      // Leave alternate screen — dashboard restored
+      // Leave alternate screen
       stdout.write("\x1b[?1049l");
+      // Clear the main screen buffer so Ink doesn't render below stale output
+      stdout.write("\x1b[2J\x1b[H");
       // Restore raw mode for Ink
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(true); } catch {}
