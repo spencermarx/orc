@@ -190,6 +190,11 @@ export class TmuxSession {
     tmux(`set-option -t ${s} mouse ${config.theme.mouse ? "on" : "off"}`);
     tmux(`set-option -t ${s} allow-rename off`);
 
+    // When an agent exits, its window closes automatically
+    tmux(`set-option -t ${s} remain-on-exit off`);
+    // When the last window closes, detach — returns user to orc dashboard
+    tmux(`set-option -t ${s} detach-on-destroy on`);
+
     // ─── Pane borders ─────────────────────────────────────────────────
     tmux(`set-option -t ${s} pane-border-style "fg=${border}"`);
     tmux(`set-option -t ${s} pane-active-border-style "fg=${accent}"`);
