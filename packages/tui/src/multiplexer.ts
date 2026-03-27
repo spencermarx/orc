@@ -157,22 +157,24 @@ export class SessionMultiplexer extends EventEmitter {
       alive: true,
     };
 
-    // Capture PTY output — always buffer, pipe to stdout if active
+    // Suppress initial output for 800ms to let terminal capability
+    // handshake complete. Agent CLIs (especially Ink-based ones like
+    // Claude Code) send DA1/DCS queries on startup that produce
+    // visible garbage if piped to stdout during the handshake.
+    const spawnedAt = Date.now();
+    const STARTUP_QUIET_MS = 800;
+
     p.onData((data: string) => {
-      // Filter terminal capability query responses that leak as visible text.
-      // These are sent by agent CLIs (like Claude Code/Ink) on startup:
-      // - DA1 responses: \x1b[?1;2c etc
-      // - DCS strings: \x1bP>|xterm.js(...)...\x1b\\
-      // - Focus events: \x1b[I, \x1b[O
-      const filtered = data
-        .replace(/\x1b\[\?[0-9;]*c/g, "")           // DA1 response
-        .replace(/\x1bP>[^\x1b]*\x1b\\/g, "")        // DCS response (xterm version)
-        .replace(/\x1bP>[^\x07]*\x07/g, "")           // DCS response (BEL terminated)
-        .replace(/\x1b\[[IO]/g, "");                   // Focus in/out events
+      const buf = Buffer.from(data);
+      const elapsed = Date.now() - spawnedAt;
 
-      if (filtered.length === 0) return;
+      if (elapsed < STARTUP_QUIET_MS) {
+        // During startup quiet period: buffer but don't display
+        session.scrollbackRaw.push(buf);
+        session.scrollbackSize += buf.length;
+        return;
+      }
 
-      const buf = Buffer.from(filtered);
       session.scrollbackRaw.push(buf);
       session.scrollbackSize += buf.length;
 
@@ -187,6 +189,17 @@ export class SessionMultiplexer extends EventEmitter {
         this.stdout.write(buf);
       }
     });
+
+    // After quiet period, replay buffered output (which now has the
+    // capability responses stripped by the terminal itself)
+    setTimeout(() => {
+      if (this._active && this.activeId === id) {
+        // Clear screen and replay clean output
+        this.stdout.write(`${ESC}[2J${ESC}[1;1H`);
+        this.replayScrollback(id);
+        this.drawStatusBar();
+      }
+    }, STARTUP_QUIET_MS + 50);
 
     p.onExit(() => {
       session.alive = false;
