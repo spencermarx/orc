@@ -76,6 +76,24 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     return tmuxRef.current;
   }, []);
 
+  // Attach to tmux session — blocks until user detaches (Ctrl+\)
+  const attachToTmux = useCallback((tmux: TmuxSession) => {
+    setAgentStatus("running");
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(false); } catch {}
+    }
+    // Alternate screen preserves Ink's dashboard underneath
+    stdout.write("\x1b[?1049h");
+    stdout.write("\x1b[2J\x1b[H");
+    tmux.attach();
+    stdout.write("\x1b[?1049l");
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(true); } catch {}
+    }
+    setAgentStatus("idle");
+    setSessionCount(tmux.getWindowCount());
+  }, [stdout]);
+
   const launchAgent = useCallback((initialPrompt: string) => {
     if (!config || !orcRoot) return;
 
@@ -98,31 +116,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     // Add agent as a tmux window
     tmux.addAgent({ label: "root-orch", command, args, cwd: orcRoot });
 
-    setAgentStatus("running");
-
-    // Release Ink's raw mode before tmux takes over
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-      try { process.stdin.setRawMode(false); } catch {}
-    }
-
-    // Enter alternate screen — preserves Ink's output in main buffer.
-    // tmux renders in the alternate screen. When it detaches, we exit
-    // the alternate screen and Ink's dashboard is already there.
-    stdout.write("\x1b[?1049h");
-    stdout.write("\x1b[2J\x1b[H");
-
-    // Attach to tmux — blocks until user detaches (Ctrl+\)
-    tmux.attach();
-
-    // Exit alternate screen — Ink's main buffer is preserved underneath
-    stdout.write("\x1b[?1049l");
-
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-      try { process.stdin.setRawMode(true); } catch {}
-    }
-
-    setAgentStatus("idle");
-    setSessionCount(tmux.getWindowCount());
+    attachToTmux(tmux);
   }, [config, orcRoot, getTmux, stdout]);
 
   useInput(
@@ -175,22 +169,10 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     if (cmd === "clear" || cmd === "help") return;
     if (cmd.startsWith("status") || cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // Resume existing session (from Tab key or any : command when sessions exist)
+    // Resume existing session (Tab key only)
     const tmux = tmuxRef.current;
-    if (cmd === "__resume__" || (tmux && tmux.isRunning() && tmux.getWindowCount() > 0)) {
-      setAgentStatus("running");
-      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-        try { process.stdin.setRawMode(false); } catch {}
-      }
-      stdout.write("\x1b[?1049h");
-      stdout.write("\x1b[2J\x1b[H");
-      tmux.attach();
-      stdout.write("\x1b[?1049l");
-      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-        try { process.stdin.setRawMode(true); } catch {}
-      }
-      setAgentStatus("idle");
-      setSessionCount(tmux.getWindowCount());
+    if (cmd === "__resume__" && tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
+      attachToTmux(tmux);
       return;
     }
 
