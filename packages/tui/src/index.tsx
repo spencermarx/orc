@@ -3,15 +3,15 @@ import React from "react";
 import { Readable } from "node:stream";
 import { render } from "ink";
 import { createStore } from "@orc/core/store/store.js";
-import { findOrcRoot, hydrateStoreFromLegacy } from "@orc/core/bridge/index.js";
+import { findOrcRoot, buildProjectSnapshots, hydrateStoreFromLegacy } from "@orc/core/bridge/projects-toml.js";
+import type { ProjectSnapshot } from "@orc/core/bridge/projects-toml.js";
 import { App } from "./app.js";
 
-// Find orc repo root and initialize store with legacy project data
 const orcRoot = findOrcRoot() ?? process.cwd();
 const store = createStore();
 hydrateStoreFromLegacy(store, orcRoot);
+const snapshots = buildProjectSnapshots(orcRoot);
 
-// Test if raw mode actually works by trying it.
 let interactive = false;
 if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
   try {
@@ -28,12 +28,10 @@ const stdinStream = interactive
   : new Readable({ read() {} });
 
 const { waitUntilExit } = render(
-  <App interactive={interactive} store={store} />,
+  <App interactive={interactive} store={store} snapshots={snapshots} orcRoot={orcRoot} />,
   { stdin: stdinStream },
 );
 
-process.on("SIGINT", () => {
-  process.exit(0);
-});
+process.on("SIGINT", () => process.exit(0));
 
 await waitUntilExit();
