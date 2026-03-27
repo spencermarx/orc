@@ -26,6 +26,60 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v1.0.0 — TUI Runtime Redesign (2026-03-27)
+
+### BREAKING CHANGES
+
+#### Bash → TypeScript runtime — Full rewrite
+
+**What changed:** The entire orc runtime has been rewritten from bash+tmux to TypeScript+React+Ink. Six new packages replace the bash CLI layer: `@orc/core` (engine, store, config, process, IPC), `@orc/ui` (React components, themes, layouts), `@orc/tui` (terminal surface via Ink), `@orc/web` (web surface via Fastify), `@orc/api` (headless REST+WebSocket), `@orc/plugins` (plugin runtime).
+
+**Migration:** Run `orc doctor --migrate` for guided migration. Existing `config.toml` is backward compatible — all existing fields are preserved with new sections added alongside.
+
+**New prerequisites:** Node.js 18+, Bun 1.3+
+
+### New Capabilities
+
+#### New: `[observability]` — Built-in telemetry and cost tracking
+- `enabled`, `cost_tracking`, `token_tracking`, `timing`
+
+#### New: `[collaboration]` — Multi-user session sharing
+- `enabled`, `port`, `auth_required`
+
+#### New: `[ai]` — AI-native intelligence layer
+- `enabled`, `model`, `cache_ttl`
+
+#### New: `[a11y]` — Accessibility modes
+- `high_contrast`, `reduced_motion`, `large_text`, `sound_cues`, `screen_reader`
+
+#### New: `[recording]` — Session recording and replay
+- `enabled`, `auto_record`, `retention_days`, `compression`
+
+#### New: `[plugins]` — Plugin ecosystem
+- `enabled`, `directory`
+
+#### New: `[api]` — Headless API server
+- `enabled`, `port`, `host`
+
+### New Commands
+
+#### New command: `orc sessions`
+List, kill, and clean orc sessions.
+
+#### New command: `orc recordings`
+List, play, and export session recordings.
+
+#### New command: `orc web`
+Start the web surface (Fastify + React DOM + xterm.js).
+
+#### New command: `orc api`
+Start the headless REST + WebSocket API server.
+
+#### New command: `orc --gallery`
+Launch component gallery mode for UI development.
+
+---
+
 ## v0.2.11 — TUI Navigation Layer (2026-03-26)
 
 ### New Capabilities
