@@ -202,10 +202,12 @@ export class TmuxSession {
     tmux(`set-option -t ${s} pane-border-format " #{pane_title} "`);
 
     // ─── Keybindings ──────────────────────────────────────────────────
+    // Note: bind-key is global (no -t session flag). These apply to the
+    // tmux server, not a specific session. They only matter when attached.
     // Ctrl+\ to detach (return to orc dashboard)
-    tmux(`bind-key -t ${s} -n C-\\\\ detach-client`);
+    tmux(`bind-key -n C-\\\\ detach-client`);
     // Ctrl+] to next window
-    tmux(`bind-key -t ${s} -n C-] next-window`);
+    tmux(`bind-key -n C-] next-window`);
   }
 
   // ─── Query ──────────────────────────────────────────────────────────────
