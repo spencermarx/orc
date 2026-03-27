@@ -8,7 +8,8 @@
     "build": "nx run-many -t build",
     "test": "vitest run --workspace vitest.workspace.ts",
     "test:watch": "vitest --workspace vitest.workspace.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "start": "bun packages/tui/src/index.tsx"
   },
   "devDependencies": {
     "@nx/js": "^22.6.1",
