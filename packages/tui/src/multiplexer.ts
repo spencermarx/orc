@@ -157,30 +157,40 @@ export class SessionMultiplexer extends EventEmitter {
       alive: true,
     };
 
-    // Agent CLIs (especially Ink-based like Claude Code) emit terminal
-    // mode-setting sequences on startup (events 1-4, typically <50 bytes each).
-    // These contain focus reporting enables, DA queries, and mode responses
-    // that render as ^[[I^[P>|xterm.js... garbage when piped to stdout.
+    // Filter and pipe PTY output.
     //
-    // The actual content (Claude header, ASCII art) arrives in larger chunks
-    // (100+ bytes). We skip small initial events and start piping when we
-    // see the first substantial content frame.
+    // Agent CLIs (especially Ink-based like Claude Code) periodically send
+    // terminal capability queries whose responses render as visible garbage:
+    //   - DCS responses: \x1bP>|xterm.js(6.1.0-beta.109)\x1b\\
+    //   - DA1 responses: \x1b[?1;2c
+    //   - Focus events: \x1b[I, \x1b[O
+    //   - DA queries echoed: \x1b[>0q, \x1b[c
+    //
+    // We also skip small startup events (<50 bytes) that are pure mode-setting.
     let contentStarted = false;
     let skippedBytes = 0;
-    const MAX_SKIP_BYTES = 200; // don't skip more than this total
 
     p.onData((data: string) => {
-      const buf = Buffer.from(data);
-
+      // Skip small startup mode-setting bursts
       if (!contentStarted) {
-        // Skip small mode-setting bursts at startup
-        if (data.length < 50 && skippedBytes < MAX_SKIP_BYTES) {
+        if (data.length < 50 && skippedBytes < 200) {
           skippedBytes += data.length;
           return;
         }
-        // First large event = actual content rendering
         contentStarted = true;
       }
+
+      // Strip terminal capability response sequences that render as garbage.
+      // These can appear at any time (not just startup) when the agent re-renders.
+      let cleaned = data;
+      cleaned = cleaned.replace(/\x1bP>?\|[^\x1b\x07]*(?:\x1b\\|\x07)/g, ""); // DCS strings
+      cleaned = cleaned.replace(/\x1b\[\?[0-9;]*c/g, "");                       // DA1 responses
+      cleaned = cleaned.replace(/\x1b\[[IO]/g, "");                              // Focus in/out
+      cleaned = cleaned.replace(/\x1b\[>[0-9]*[a-z]/g, "");                      // DA2/DA3 queries echoed
+
+      if (cleaned.length === 0) return;
+
+      const buf = Buffer.from(cleaned);
 
       // Accumulate scrollback for session switching
       session.scrollbackRaw.push(buf);
