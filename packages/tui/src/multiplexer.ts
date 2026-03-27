@@ -31,7 +31,7 @@ export type AddSessionOptions = {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const MAX_SCROLLBACK_BYTES = 2_000_000; // 2MB per session
-const ESC_DOUBLE_TAP_MS = 300;
+// Ctrl+\ (0x1c) = return to dashboard. Single keystroke, no timing issues.
 
 // ANSI
 const ESC = "\x1b";
@@ -53,8 +53,6 @@ export class SessionMultiplexer extends EventEmitter {
   private sessions = new Map<string, AgentSession>();
   private sessionOrder: string[] = [];
   private activeId: string | null = null;
-  private lastEscTime = 0;
-  private escTimer: ReturnType<typeof setTimeout> | null = null;
   private stdinListener: ((data: Buffer) => void) | null = null;
   private resizeListener: (() => void) | null = null;
   private stdout: NodeJS.WriteStream;
@@ -107,9 +105,6 @@ export class SessionMultiplexer extends EventEmitter {
   leave(): void {
     if (!this._active) return;
     this._active = false;
-
-    // Cancel pending Esc timer
-    if (this.escTimer) { clearTimeout(this.escTimer); this.escTimer = null; }
 
     // Disconnect stdin
     if (this.stdinListener) {
@@ -320,33 +315,12 @@ export class SessionMultiplexer extends EventEmitter {
 
     const byte = data[0];
 
-    // Esc detection (double-tap to leave)
-    if (byte === 0x1b && data.length === 1) {
-      // Standalone Esc (not part of an escape sequence)
-      const now = Date.now();
-      if (now - this.lastEscTime < ESC_DOUBLE_TAP_MS) {
-        // Double Esc — return to dashboard
-        if (this.escTimer) { clearTimeout(this.escTimer); this.escTimer = null; }
-        this.lastEscTime = 0;
-        this.leave();
-        return;
-      }
-      this.lastEscTime = now;
-      // Wait to see if second Esc comes. If not, forward the first Esc to agent.
-      this.escTimer = setTimeout(() => {
-        this.escTimer = null;
-        if (this._active && this.activeId) {
-          const session = this.sessions.get(this.activeId);
-          if (session?.alive) {
-            session.pty.write(ESC);
-          }
-        }
-      }, ESC_DOUBLE_TAP_MS);
+    // Ctrl+\ (0x1c) — return to dashboard
+    // Single keystroke, never used by agent CLIs, always detectable.
+    if (byte === 0x1c) {
+      this.leave();
       return;
     }
-
-    // Reset Esc timer on any non-Esc input
-    this.lastEscTime = 0;
 
     // Ctrl+] — next session
     if (byte === 0x1d) {
@@ -433,7 +407,7 @@ export class SessionMultiplexer extends EventEmitter {
       return `${DIM} ${num}:${s.label} ${RESET}`;
     }).join("");
 
-    const hints = `${DIM} Ctrl+] next  Esc Esc dash ${RESET}`;
+    const hints = `${DIM} Ctrl+] next  Ctrl+\\ dash ${RESET}`;
 
     // Calculate visible width (strip ANSI for measurement)
     const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");

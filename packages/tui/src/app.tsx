@@ -303,7 +303,7 @@ function DashboardView({ snapshots, selectedIdx, totalBeads, openBeads, closedBe
         ) : (
           <>
             <Text dimColor>Press <Text bold color="#00ff88">:</Text> then type a message to launch the orchestrator</Text>
-            <Text dimColor>Navigate between agents with Ctrl+] and return with Esc Esc</Text>
+            <Text dimColor>Navigate between agents with Ctrl+] and return with Ctrl+\</Text>
           </>
         )}
       </Box>
@@ -408,7 +408,7 @@ function HelpView(): React.ReactElement {
         <KeyHint k="Ctrl+]" desc="next agent session" />
         <KeyHint k="Ctrl+N" desc="next (alternative)" />
         <KeyHint k="Ctrl+P" desc="previous session" />
-        <KeyHint k="Esc Esc" desc="return to dashboard" />
+        <KeyHint k="Ctrl+\" desc="return to dashboard" />
         <Text>{" "}</Text>
         <Text dimColor>All other keys go to the agent.</Text>
       </Box>
