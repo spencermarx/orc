@@ -80,8 +80,10 @@ export class SessionMultiplexer extends EventEmitter {
       }
     }
 
-    // Clear screen for Ink to resume
-    this.stdout.write(`${ESC}[2J${ESC}[H`);
+    // Reset scroll region and clear screen for Ink to resume
+    const rows = this.stdout.rows || 24;
+    this.stdout.write(`${ESC}[1;${rows}r`);    // reset scroll region to full
+    this.stdout.write(`${ESC}[2J${ESC}[H`);    // clear
 
     // Restore Ink's raw mode
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
@@ -95,6 +97,8 @@ export class SessionMultiplexer extends EventEmitter {
 
   addSession(opts: AddSessionOptions): string {
     const id = randomUUID().slice(0, 8);
+    const rows = this.stdout.rows || 24;
+    const cols = this.stdout.columns || 80;
 
     // If there's already an active session, suspend it first
     if (this.activeId) {
@@ -104,14 +108,24 @@ export class SessionMultiplexer extends EventEmitter {
       }
     }
 
-    // Clear screen for the new agent
-    this.stdout.write(`${ESC}[2J${ESC}[H`);
+    // Set up scroll region BEFORE spawning the agent.
+    // Reserve the last row for our status bar.
+    this.stdout.write(`${ESC}[2J${ESC}[H`);           // clear screen
+    this.stdout.write(`${ESC}[1;${rows - 1}r`);       // scroll region: rows 1 to N-1
+    this.drawStatusBarFor(id, opts.label);             // draw status bar on row N
+    this.stdout.write(`${ESC}[1;1H`);                 // cursor to top of scroll region
 
-    // Spawn with inherited stdio — agent gets the REAL terminal
+    // Spawn with inherited stdio — agent gets the REAL terminal.
+    // Pass LINES so the agent knows it has one fewer row.
     const child = spawn(opts.command, opts.args, {
       cwd: opts.cwd,
       stdio: "inherit",
-      env: { ...process.env, ...opts.env },
+      env: {
+        ...process.env,
+        ...opts.env,
+        LINES: String(rows - 1),
+        COLUMNS: String(cols),
+      },
     });
 
     const session: AgentSession = {
@@ -187,12 +201,16 @@ export class SessionMultiplexer extends EventEmitter {
       }
     }
 
-    // Clear and resume next
+    // Set up scroll region, draw status bar, resume next agent
+    const rows = this.stdout.rows || 24;
     this.stdout.write(`${ESC}[2J${ESC}[H`);
+    this.stdout.write(`${ESC}[1;${rows - 1}r`);
     this.activeId = id;
     const next = this.sessions.get(id);
-    if (next?.alive) {
-      next.process.kill("SIGCONT");
+    if (next) {
+      this.drawStatusBarFor(id, next.label);
+      this.stdout.write(`${ESC}[1;1H`);
+      if (next.alive) next.process.kill("SIGCONT");
     }
   }
 
@@ -208,6 +226,46 @@ export class SessionMultiplexer extends EventEmitter {
     const idx = this.sessionOrder.indexOf(this.activeId);
     const prevIdx = (idx - 1 + this.sessionOrder.length) % this.sessionOrder.length;
     this.switchTo(this.sessionOrder[prevIdx]);
+  }
+
+  // ─── Status Bar ────────────────────────────────────────────────────────
+
+  private drawStatusBarFor(activeId: string, activeLabel: string): void {
+    const rows = this.stdout.rows || 24;
+    const cols = this.stdout.columns || 80;
+
+    // Build tab list
+    const tabs = this.sessionOrder.map((id, i) => {
+      const s = this.sessions.get(id);
+      const label = s?.label ?? "?";
+      const num = i + 1;
+      const isActive = id === activeId;
+      if (isActive) {
+        return `${GREEN_BG}${DARK_FG}${BOLD} ${num}:${label} ${RESET}`;
+      }
+      return `${DIM} ${num}:${label} ${RESET}`;
+    }).join("");
+
+    // If no sessions in order yet (about to be added), show the new one
+    const displayTabs = this.sessionOrder.length === 0
+      ? `${GREEN_BG}${DARK_FG}${BOLD} 1:${activeLabel} ${RESET}`
+      : tabs;
+
+    const hints = `${DIM}Ctrl+\\ dash${RESET}`;
+
+    const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+    const tabsWidth = stripAnsi(displayTabs).length;
+    const hintsWidth = stripAnsi(hints).length;
+    const padding = Math.max(1, cols - tabsWidth - hintsWidth);
+
+    const bar = displayTabs + " ".repeat(padding) + hints;
+
+    // Draw on the last row (outside scroll region)
+    this.stdout.write(`${ESC}7`);              // save cursor
+    this.stdout.write(`${ESC}[${rows};1H`);    // move to last row
+    this.stdout.write(`${ESC}[2K`);            // clear line
+    this.stdout.write(bar);
+    this.stdout.write(`${ESC}8`);              // restore cursor
   }
 
   // ─── Queries ────────────────────────────────────────────────────────────
