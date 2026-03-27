@@ -7,7 +7,7 @@ import type { Orchestrator } from "@orc/core/orchestrator/orchestrator.js";
 import type { ProjectSnapshot } from "@orc/core/bridge/projects-toml.js";
 import { getAdapter } from "@orc/core/process/adapter.js";
 import { loadPersona } from "@orc/core/orchestrator/persona.js";
-import { SessionMultiplexer } from "./multiplexer.js";
+import { TmuxSession } from "./tmux-session.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
   const [agentStatus, setAgentStatus] = useState<"idle" | "running">("idle");
   const [sessionCount, setSessionCount] = useState(0);
 
-  const multiplexerRef = useRef<SessionMultiplexer | null>(null);
+  const tmuxRef = useRef<TmuxSession | null>(null);
   const projectKeys = snapshots.map((s) => s.key);
   const agentCmd = config?.defaults.agent_cmd ?? "auto";
 
@@ -69,21 +69,12 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     }
   }, [view]);
 
-  // Initialize multiplexer once
-  const getMultiplexer = useCallback(() => {
-    if (!multiplexerRef.current) {
-      multiplexerRef.current = new SessionMultiplexer(stdout);
-      multiplexerRef.current.on("leave", () => {
-        // Multiplexer already handled raw mode and screen restoration
-        setAgentStatus("idle");
-        setSessionCount(multiplexerRef.current?.getSessionCount() ?? 0);
-      });
-      multiplexerRef.current.on("session-exit", () => {
-        setSessionCount(multiplexerRef.current?.getSessionCount() ?? 0);
-      });
+  const getTmux = useCallback(() => {
+    if (!tmuxRef.current) {
+      tmuxRef.current = new TmuxSession("orc-tui");
     }
-    return multiplexerRef.current;
-  }, [stdout]);
+    return tmuxRef.current;
+  }, []);
 
   const launchAgent = useCallback((initialPrompt: string) => {
     if (!config || !orcRoot) return;
@@ -101,23 +92,34 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
       yolo: false,
     });
 
-    const mux = getMultiplexer();
+    const tmux = getTmux();
+    tmux.ensureSession(config);
 
-    mux.addSession({
-      label: "root-orch",
-      role: "root-orchestrator",
-      command,
-      args,
-      cwd: orcRoot,
-    });
-
-    if (!mux.isActive()) {
-      mux.enter();
-    }
+    // Add agent as a tmux window
+    tmux.addAgent({ label: "root-orch", command, args, cwd: orcRoot });
 
     setAgentStatus("running");
-    setSessionCount(mux.getSessionCount());
-  }, [config, orcRoot, getMultiplexer]);
+
+    // Release Ink's raw mode before tmux takes over
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(false); } catch {}
+    }
+
+    // Clear screen before tmux attaches
+    stdout.write("\x1b[2J\x1b[H");
+
+    // Attach to tmux — blocks until user detaches (Ctrl+\)
+    tmux.attach();
+
+    // User detached — clear screen and restore Ink
+    stdout.write("\x1b[2J\x1b[H");
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(true); } catch {}
+    }
+
+    setAgentStatus("idle");
+    setSessionCount(tmux.getWindowCount());
+  }, [config, orcRoot, getTmux, stdout]);
 
   useInput(
     (input, key) => {
@@ -159,21 +161,21 @@ export function App({ interactive = false, store, snapshots = [], orcRoot = "", 
     if (cmd === "clear" || cmd === "help") return;
     if (cmd.startsWith("status") || cmd.startsWith("projects") || cmd.startsWith("list")) return;
 
-    // If multiplexer has sessions, re-enter it (don't spawn new agent)
-    const mux = multiplexerRef.current;
-    if (mux && mux.getSessionCount() > 0) {
-      mux.enter();
+    // If tmux session has windows, re-attach (don't spawn new agent)
+    const tmux = tmuxRef.current;
+    if (tmux && tmux.isRunning() && tmux.getWindowCount() > 0) {
       setAgentStatus("running");
-      // Send the new message to the active agent
-      const activeId = mux.getActiveId();
-      if (activeId) {
-        const sessions = mux.getSessions();
-        const active = sessions.find((s) => s.id === activeId);
-        if (active?.alive) {
-          // Brief delay for screen setup, then send
-          setTimeout(() => active.pty.write(cmd + "\n"), 100);
-        }
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(false); } catch {}
       }
+      stdout.write("\x1b[2J\x1b[H");
+      tmux.attach();
+      stdout.write("\x1b[2J\x1b[H");
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(true); } catch {}
+      }
+      setAgentStatus("idle");
+      setSessionCount(tmux.getWindowCount());
       return;
     }
 
@@ -403,14 +405,14 @@ function HelpView(): React.ReactElement {
         <KeyHint k="?" desc="toggle help" />
       </Box>
       <Box flexDirection="column" borderStyle="single" borderColor="#30363d" flexGrow={1} paddingX={1}>
-        <Text color="#00ff88" bold>Agent Sessions</Text>
+        <Text color="#00ff88" bold>Agent Sessions (tmux)</Text>
         <Text>{" "}</Text>
-        <KeyHint k="Ctrl+]" desc="next agent session" />
-        <KeyHint k="Ctrl+N" desc="next (alternative)" />
-        <KeyHint k="Ctrl+P" desc="previous session" />
-        <KeyHint k="Ctrl+\" desc="return to dashboard" />
+        <KeyHint k="Ctrl+\\" desc="return to orc dashboard" />
+        <KeyHint k="Ctrl+]" desc="next agent window" />
+        <KeyHint k="Prefix+n/p" desc="next/prev window" />
+        <KeyHint k="Prefix+1-9" desc="jump to window" />
         <Text>{" "}</Text>
-        <Text dimColor>All other keys go to the agent.</Text>
+        <Text dimColor>Agents run in tmux. All keys pass through.</Text>
       </Box>
     </Box>
   );
