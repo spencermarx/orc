@@ -379,7 +379,11 @@ func (m Model) renderCopilotPanel(s viewStyles, width int) string {
 	if m.copilotFocused {
 		cb.WriteString("\n")
 		cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
-		cb.WriteString(s.accent.Render("● LIVE") + "  " + s.muted.Render("keystrokes → agent  ") + s.muted.Render("Esc unfocus  Tab close"))
+		if m.copilotError != "" {
+			cb.WriteString(s.error.Render("✗ " + m.copilotError))
+		} else {
+			cb.WriteString(s.accent.Render("● LIVE") + "  " + s.muted.Render("keystrokes → agent  ") + s.muted.Render("Esc unfocus  Tab close"))
+		}
 	}
 
 	return cb.String()

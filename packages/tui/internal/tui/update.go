@@ -102,7 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Refresh copilot panel (root orchestrator output)
 		if m.copilotVisible {
-			m.copilotOutput = capturePaneOutput("orc", "", "orc")
+			m.copilotOutput = capturePaneOutput("orc", "", "")
 		}
 
 		return m, tickCmd()
@@ -250,13 +250,21 @@ func (m Model) handleCopilotKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyRunes:
 		// Regular typed characters — send as literal text
 		if len(msg.Runes) > 0 {
-			sendRawKeyToRoot(string(msg.Runes))
+			if err := sendRawKeyToRoot(string(msg.Runes)); err != nil {
+				m.copilotError = "No root orchestrator running. Press 's' or Enter on a project first."
+			} else {
+				m.copilotError = ""
+			}
 			return m, nil
 		}
 	}
 
 	if tmuxKey != "" {
-		sendRawKeyToRoot(tmuxKey)
+		if err := sendRawKeyToRoot(tmuxKey); err != nil {
+			m.copilotError = "No root orchestrator running. Press 's' or Enter on a project first."
+		} else {
+			m.copilotError = ""
+		}
 	}
 
 	return m, nil
