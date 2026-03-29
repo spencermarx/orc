@@ -156,15 +156,11 @@ Beyond navigation and chrome, the Hub introduces AI-native DX patterns that make
 
 **Attention management**: The sidebar dynamically reorders items by urgency. Blocked agents and pending reviews float to the top. A "while you were away" summary greets users on reattach, walking through what happened and what needs action. Each notification resolves via a clear action — inbox-zero for orchestration.
 
-**Trust calibration**: Show when an agent has been working longer than expected (based on similar past beads). Display review pass-rate history. Show cost-so-far per agent and cumulative. Surface anomalies: "This agent has restarted 3 times" or "Review round 3 of 3 — escalating to you next."
+**Temporal awareness**: Timeline indicators in the sidebar show when each agent started and elapsed time. Agents report their phase (investigating → implementing → testing → self-reviewing) via extended `.worker-status` or the Hub HTTP API. The Hub shows these phases inline. Projected completion estimates based on similar past beads.
 
-**Temporal awareness**: Timeline indicators in the sidebar show when each agent started and elapsed time. Agents report their phase (investigating → implementing → testing → self-reviewing) via extended `.worker-status` or the Hub HTTP API. The Hub shows these phases inline.
-
-**Predictive UI**: "Next up" indicators show what happens after the current bead completes (auto-review → dispatch next → delivery). Dependency awareness: "bd-e5f6 is blocked by bd-c3d4 (in review)."
+**AI-native command input**: The copilot panel doubles as a natural language command surface. Users can type orchestration commands naturally: "approve all pending reviews", "what's taking longest?", "show me the diff for bd-c3d4", "pause all engineers in myapp". The copilot routes these to the right action — some execute immediately (approve), some query state (cost), some delegate to the root orchestrator agent.
 
 **Progressive density**: Toggle between minimal (icons + names), standard (+ elapsed + phase), and detailed (+ cost + next action + last activity) with a single key (`z`).
-
-**Session intelligence**: On reattach after extended absence, show elapsed time since detach, summary of changes, and highlight anything stuck since the user left. "Catch-up" mode walks through pending items one by one.
 
 ### The Hub Sidebar Per Window Level
 
