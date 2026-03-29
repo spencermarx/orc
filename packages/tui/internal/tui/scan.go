@@ -74,10 +74,8 @@ func scanProject(proj config.Project) ProjectState {
 				Name:   goalName,
 				Status: readStatusFile(filepath.Join(goalDir, ".worker-status")),
 			}
-			// Detect goal branch
-			for _, prefix := range []string{"feat/", "fix/", "task/"} {
-				gs.Branch = prefix + goalName
-			}
+			// Detect goal branch — check which prefixed branch exists via git
+			gs.Branch = detectGoalBranch(proj.Path, goalName)
 			gs.Elapsed = fileAge(filepath.Join(goalDir, ".worker-status"))
 			ps.Goals = append(ps.Goals, gs)
 		}
@@ -168,6 +166,21 @@ func fileAge(path string) time.Duration {
 		return 0
 	}
 	return time.Since(info.ModTime())
+}
+
+// detectGoalBranch finds which branch prefix (feat/, fix/, task/) exists for a goal.
+// Falls back to "feat/<goalName>" if no branch is found.
+func detectGoalBranch(projectPath, goalName string) string {
+	for _, prefix := range []string{"feat/", "fix/", "task/"} {
+		branch := prefix + goalName
+		// Check if the branch ref exists
+		refPath := filepath.Join(projectPath, ".git", "refs", "heads", prefix+goalName)
+		if _, err := os.Stat(refPath); err == nil {
+			return branch
+		}
+	}
+	// Default to feat/ if none found (goal may not have been created yet)
+	return "feat/" + goalName
 }
 
 func detectGoalFromWorktree(beadDir string) string {

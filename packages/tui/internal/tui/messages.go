@@ -4,7 +4,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/thefinalsource/orc/packages/tui/internal/events"
 )
 
 // Messages for the BubbleTea update loop.
@@ -13,11 +12,6 @@ import (
 type stateRefreshed struct {
 	projects  []ProjectState
 	attention []AttentionItem
-}
-
-// eventReceived is sent when a new event arrives from the event bus.
-type eventReceived struct {
-	event events.Event
 }
 
 // tickMsg triggers periodic state refresh.

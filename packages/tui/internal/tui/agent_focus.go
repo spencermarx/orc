@@ -207,18 +207,17 @@ func sendMessageToAgent(projectKey, goalName, beadName, message string) error {
 		return fmt.Errorf("listing panes: %w", err)
 	}
 
-	var paneIdx string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
-			paneIdx = parts[0]
-			break
+	// When targeting a project orchestrator (no beadName), use pane 0 directly.
+	// Otherwise, search for the pane with the matching bead title.
+	paneIdx := "0"
+	if beadName != "" {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 && strings.Contains(parts[1], beadName) {
+				paneIdx = parts[0]
+				break
+			}
 		}
-	}
-
-	// If no pane found by title, default to pane 0 (single-pane windows)
-	if paneIdx == "" {
-		paneIdx = "0"
 	}
 
 	target := fmt.Sprintf("orc:%s.%s", windowName, paneIdx)
@@ -243,12 +242,15 @@ func capturePaneOutput(projectKey, goalName, beadName string) []string {
 		return nil
 	}
 
+	// When targeting a project orchestrator (no beadName), use pane 0 directly.
 	paneIdx := "0"
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
-			paneIdx = parts[0]
-			break
+	if beadName != "" {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 && strings.Contains(parts[1], beadName) {
+				paneIdx = parts[0]
+				break
+			}
 		}
 	}
 
