@@ -30,6 +30,9 @@ type AgentFocusState struct {
 
 	// Diff summary
 	DiffStat string
+
+	// Cost/token summary parsed from output
+	Cost CostSummary
 }
 
 // loadAgentFocus populates the agent focus state for the selected bead.
@@ -88,6 +91,10 @@ func loadAgentFocus(projects []ProjectState, projectKey, goalName, beadName, orc
 
 	// Git diff stat
 	state.DiffStat = gitDiffStat(beadDir)
+
+	// Parse cost from output
+	allOutput := readAgentLog(projectPath, beadName)
+	state.Cost = ParseCostFromOutput(allOutput)
 
 	return state
 }

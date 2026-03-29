@@ -31,6 +31,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = projects
 		m.attention = attention
 		m.approvals = scanApprovals(projects)
+		enrichApprovalDiffs(m.approvals, m.projects)
+
+		// Session recovery: detect orphaned agents on first tick
+		if !m.recoveryDismissed && m.recoveryAgentCount == 0 {
+			if _, count := HasExistingSession(); count > 0 {
+				m.recoveryAgentCount = count
+			}
+		}
+
+		// Desktop notifications for new attention items
+		for _, item := range m.attention {
+			key := item.Level + ":" + item.Scope
+			if !m.notifiedItems[key] {
+				m.notifiedItems[key] = true
+				switch item.Level {
+				case "BLOCKED":
+					sendDesktopNotification("Orc: Agent Blocked", item.Scope+": "+item.Message)
+				case "DEAD":
+					sendDesktopNotification("Orc: Agent Dead", item.Scope+": "+item.Message)
+				}
+			}
+		}
+		// Notify on new approvals
+		for _, req := range m.approvals {
+			key := "approval:" + req.ID
+			if !m.notifiedItems[key] {
+				m.notifiedItems[key] = true
+				sendDesktopNotification("Orc: Approval Needed",
+					req.Gate+" — "+req.Project+"/"+req.Goal)
+			}
+		}
 
 		// Refresh agent focus view if active
 		if m.activeView == ViewAgentFocus && m.focusedAgent.BeadName != "" {

@@ -68,6 +68,13 @@ func (m Model) viewDashboard() string {
 	}
 	b.WriteString(header + "\n")
 
+	// Session recovery banner
+	if m.recoveryAgentCount > 0 && !m.recoveryDismissed {
+		b.WriteString(s.activity.Render(fmt.Sprintf(
+			"  ⚡ Found %d agent(s) running in background tmux session", m.recoveryAgentCount)) + "\n")
+		b.WriteString(s.muted.Render("  Agents persist across TUI restarts. Status updates will appear below.") + "\n\n")
+	}
+
 	// Projects
 	if len(m.projects) == 0 {
 		b.WriteString(s.section.Render("GETTING STARTED") + "\n\n")
@@ -132,6 +139,11 @@ func (m Model) viewDashboard() string {
 					m.statusIndicator(goal.Status),
 					s.muted.Render(fmt.Sprintf("%d beads", len(goal.Beads))),
 					s.muted.Render(formatElapsed(goal.Elapsed))))
+
+				// Goal completion summary
+				if summary := ComputeGoalSummary(proj, goal); summary != nil {
+					b.WriteString(fmt.Sprintf("      %s\n", s.accent.Render(summary.FormatSummary())))
+				}
 				cursorPos++
 
 				if expanded {
@@ -267,6 +279,9 @@ func (m Model) viewAgentFocus() string {
 
 	if af.DiffStat != "" {
 		b.WriteString(fmt.Sprintf("  Diff: %s\n", s.muted.Render(af.DiffStat)))
+	}
+	if costStr := af.Cost.FormatCost(); costStr != "" {
+		b.WriteString(fmt.Sprintf("  Cost: %s\n", s.activity.Render(costStr)))
 	}
 
 	// Live output (tmux capture-pane with file fallback)
@@ -445,6 +460,25 @@ func (m Model) viewApproval() string {
 			if len(req.Beads) > 0 {
 				b.WriteString(fmt.Sprintf("    Beads: %s\n",
 					s.muted.Render(strings.Join(req.Beads, ", "))))
+			}
+
+			// Inline diff preview for merge/review gates
+			if req.DiffPreview != "" && isCursor {
+				b.WriteString(s.section.PaddingLeft(4).Render("DIFF PREVIEW") + "\n")
+				diffLines := strings.Split(req.DiffPreview, "\n")
+				maxDiff := 10
+				if len(diffLines) > maxDiff {
+					diffLines = diffLines[len(diffLines)-maxDiff:]
+				}
+				for _, line := range diffLines {
+					styled := s.muted.Render("      " + line)
+					if strings.HasPrefix(strings.TrimSpace(line), "+") && !strings.HasPrefix(strings.TrimSpace(line), "+++") {
+						styled = s.accent.Render("      " + line)
+					} else if strings.HasPrefix(strings.TrimSpace(line), "-") && !strings.HasPrefix(strings.TrimSpace(line), "---") {
+						styled = s.error.Render("      " + line)
+					}
+					b.WriteString(styled + "\n")
+				}
 			}
 
 			b.WriteString("\n")

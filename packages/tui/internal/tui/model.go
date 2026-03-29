@@ -52,6 +52,13 @@ type Model struct {
 	copilotVisible bool
 	copilotOutput  []string
 
+	// Notification dedup (scope -> true for items already notified)
+	notifiedItems map[string]bool
+
+	// Session recovery
+	recoveryAgentCount int  // agents found on startup
+	recoveryDismissed  bool // user dismissed the banner
+
 	// Text input mode
 	inputMode   bool
 	inputBuffer string
@@ -124,6 +131,7 @@ func NewModel(projects []config.Project, theme Theme, orcRoot string) Model {
 		activeView:    ViewDashboard,
 		expandedGoals: make(map[string]bool),
 		controlLevel:  ControlApproveAll, // default: Level 4
+		notifiedItems: make(map[string]bool),
 		theme:         theme,
 		orcRoot:       orcRoot,
 		rawProjects:   projects,

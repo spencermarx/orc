@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +19,9 @@ type ApprovalRequest struct {
 	Message   string    `json:"message"`
 	Beads     []string  `json:"beads,omitempty"`
 	Timestamp time.Time `json:"ts"`
+
+	// Populated by TUI for merge approvals
+	DiffPreview string `json:"-"`
 }
 
 // ApprovalResponse is written back to the agent.
@@ -69,6 +73,68 @@ func scanApprovals(projects []ProjectState) []ApprovalRequest {
 	}
 
 	return approvals
+}
+
+// enrichApprovalDiffs populates diff previews for merge/review approvals.
+func enrichApprovalDiffs(approvals []ApprovalRequest, projects []ProjectState) {
+	for i := range approvals {
+		if approvals[i].Gate != "merge" && approvals[i].Gate != "review" {
+			continue
+		}
+		for _, proj := range projects {
+			if proj.Key != approvals[i].Project {
+				continue
+			}
+			// Get diff for the beads in this approval
+			for _, beadName := range approvals[i].Beads {
+				beadDir := filepath.Join(proj.Path, ".worktrees", beadName)
+				diff := getDiffPreview(beadDir)
+				if diff != "" {
+					if approvals[i].DiffPreview != "" {
+						approvals[i].DiffPreview += "\n"
+					}
+					approvals[i].DiffPreview += diff
+				}
+			}
+			// If no beads specified, try the goal branch
+			if len(approvals[i].Beads) == 0 && approvals[i].Goal != "" {
+				diff := getGoalDiffPreview(proj.Path, approvals[i].Goal)
+				approvals[i].DiffPreview = diff
+			}
+			break
+		}
+	}
+}
+
+// getDiffPreview returns a compact diff stat for a worktree.
+func getDiffPreview(beadDir string) string {
+	// Try diff against parent branch
+	cmd := exec.Command("git", "-C", beadDir, "diff", "--stat", "--no-color", "HEAD~3..HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		cmd = exec.Command("git", "-C", beadDir, "diff", "--stat", "--no-color", "HEAD")
+		out, err = cmd.Output()
+		if err != nil {
+			return ""
+		}
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// getGoalDiffPreview returns diff stat for a goal branch vs default branch.
+func getGoalDiffPreview(projectPath, goalName string) string {
+	defaultBranch := detectDefaultBranch(projectPath)
+	// Find the goal branch
+	for _, prefix := range []string{"feat/", "fix/", "task/"} {
+		branch := prefix + goalName
+		cmd := exec.Command("git", "-C", projectPath, "diff", "--stat", "--no-color",
+			fmt.Sprintf("%s...%s", defaultBranch, branch))
+		out, err := cmd.Output()
+		if err == nil && len(out) > 0 {
+			return strings.TrimSpace(string(out))
+		}
+	}
+	return ""
 }
 
 // writeApprovalResponse writes an approval response file.

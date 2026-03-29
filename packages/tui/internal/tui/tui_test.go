@@ -574,3 +574,86 @@ func TestResolveProjectPath(t *testing.T) {
 		t.Error("expected empty for unknown project")
 	}
 }
+
+func TestParseCostFromOutput(t *testing.T) {
+	// Claude Code style output
+	lines := []string{
+		"Analyzing codebase...",
+		"Found 42 files",
+		"Total tokens: 12,345",
+		"Total cost: $1.23",
+	}
+	cost := ParseCostFromOutput(lines)
+	if !cost.HasData {
+		t.Error("expected cost data")
+	}
+	if cost.CostUSD != 1.23 {
+		t.Errorf("expected cost $1.23, got $%.2f", cost.CostUSD)
+	}
+	if cost.TotalTokens != 12345 {
+		t.Errorf("expected 12345 tokens, got %d", cost.TotalTokens)
+	}
+
+	// No cost data
+	empty := ParseCostFromOutput([]string{"just some text", "no costs here"})
+	if empty.HasData {
+		t.Error("expected no cost data")
+	}
+}
+
+func TestCostSummaryFormat(t *testing.T) {
+	c := CostSummary{HasData: true, CostUSD: 2.50, TotalTokens: 50000}
+	s := c.FormatCost()
+	if s != "$2.50, 50.0k tokens" {
+		t.Errorf("unexpected format: %q", s)
+	}
+
+	empty := CostSummary{}
+	if empty.FormatCost() != "" {
+		t.Error("expected empty format for no data")
+	}
+}
+
+func TestGoalSummary(t *testing.T) {
+	proj := ProjectState{Key: "myapp", Path: t.TempDir()}
+	goal := GoalState{
+		Name: "fix-auth",
+		Beads: []BeadState{
+			{Name: "bd-1", Status: "done", Elapsed: 300e9},
+			{Name: "bd-2", Status: "done", Elapsed: 120e9},
+		},
+	}
+
+	summary := ComputeGoalSummary(proj, goal)
+	if summary == nil {
+		t.Fatal("expected summary for completed goal")
+	}
+	if !summary.AllDone {
+		t.Error("expected AllDone=true")
+	}
+	if summary.BeadCount != 2 {
+		t.Errorf("expected 2 beads, got %d", summary.BeadCount)
+	}
+
+	// Not all done
+	goal.Beads[1].Status = "working"
+	summary = ComputeGoalSummary(proj, goal)
+	if summary != nil {
+		t.Error("expected nil summary for incomplete goal")
+	}
+}
+
+func TestSessionRecovery(t *testing.T) {
+	// HasExistingSession should not panic regardless of tmux availability
+	exists, count := HasExistingSession()
+	t.Logf("HasExistingSession: exists=%v, count=%d", exists, count)
+}
+
+func TestControlLevelName(t *testing.T) {
+	if ControlLevelName(ControlYOLO) != "YOLO" {
+		t.Error("expected YOLO")
+	}
+	if ControlLevelName(ControlApproveAll) != "Approve All" {
+		t.Error("expected Approve All")
+	}
+}
