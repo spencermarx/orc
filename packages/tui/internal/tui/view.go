@@ -17,16 +17,14 @@ func (m Model) View() string {
 	switch m.activeView {
 	case ViewDashboard:
 		return m.viewDashboard()
-	case ViewTimeline:
-		return m.viewTimeline()
 	case ViewAgentFocus:
 		return m.viewAgentFocus()
 	case ViewGit:
 		return m.viewGit()
-	case ViewSearch:
-		return m.viewSearch()
 	case ViewApproval:
 		return m.viewApproval()
+	case ViewControl:
+		return m.viewControl()
 	case ViewHelp:
 		return m.viewHelp()
 	default:
@@ -153,6 +151,21 @@ func (m Model) viewDashboard() string {
 							title,
 							m.statusIndicator(bead.Status),
 							s.muted.Render(formatElapsed(bead.Elapsed))))
+
+						// Live output snippet (2 lines)
+						snippet := readAgentLog(proj.Path, bead.Name)
+						if len(snippet) > 2 {
+							snippet = snippet[len(snippet)-2:]
+						}
+						for _, line := range snippet {
+							trimmed := strings.TrimSpace(line)
+							if trimmed == "" || trimmed == "(no agent output available yet)" {
+								continue
+							}
+							b.WriteString(fmt.Sprintf("         %s\n",
+								s.muted.Render(truncate(trimmed, m.width-14))))
+						}
+
 						cursorPos++
 					}
 				}
@@ -183,43 +196,53 @@ func (m Model) viewDashboard() string {
 
 	b.WriteString("\n")
 	b.WriteString(m.renderFooter())
-	return s.frame.Render(b.String())
-}
 
-// ─── TIMELINE ───────────────────────────────────────────────────────────────
+	dashContent := b.String()
 
-func (m Model) viewTimeline() string {
-	s := m.styles()
-	var b strings.Builder
-
-	b.WriteString(s.title.Render("⚔ Timeline") + "\n\n")
-
-	if len(m.timeline) == 0 {
-		b.WriteString(s.muted.Render("  No events yet. Events will appear here as agents work.") + "\n")
-		b.WriteString(s.muted.Render("  Start agents with `orc <project>` to see activity.") + "\n")
-	} else {
-		for i, ev := range m.timeline {
-			isCursor := i == m.cursor
-			prefix := "  "
-			if isCursor {
-				prefix = "▶ "
-			}
-			ts := ev.Timestamp.Format("15:04:05")
-			scope := ev.Project
-			if ev.Goal != "" {
-				scope += "/" + ev.Goal
-			}
-			if ev.Bead != "" {
-				scope += "/" + ev.Bead
-			}
-			b.WriteString(fmt.Sprintf("%s%s  %s  %s\n",
-				prefix, s.muted.Render(ts), s.accent.Render(scope), ev.Type))
+	// If copilot panel is visible, render side-by-side
+	if m.copilotVisible && m.width > 60 {
+		copilotWidth := m.width / 3
+		if copilotWidth < 30 {
+			copilotWidth = 30
 		}
+		dashWidth := m.width - copilotWidth - 5 // borders + padding
+
+		var cb strings.Builder
+		cb.WriteString(s.bold.Render("ROOT ORCHESTRATOR") + "\n")
+		cb.WriteString(s.muted.Render(strings.Repeat("─", copilotWidth-4)) + "\n")
+
+		copilotLines := m.copilotOutput
+		maxLines := m.height - 8
+		if maxLines < 5 {
+			maxLines = 5
+		}
+		if len(copilotLines) > maxLines {
+			copilotLines = copilotLines[len(copilotLines)-maxLines:]
+		}
+		if len(copilotLines) == 0 {
+			cb.WriteString(s.muted.Render("Not running. Press 's' on a project\nor use 'orc start' to begin.") + "\n")
+		} else {
+			for _, line := range copilotLines {
+				cb.WriteString(truncate(line, copilotWidth-4) + "\n")
+			}
+		}
+
+		leftPanel := lipgloss.NewStyle().
+			Width(dashWidth).Height(m.height - 2).
+			Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Border).
+			Padding(0, 1).
+			Render(dashContent)
+
+		rightPanel := lipgloss.NewStyle().
+			Width(copilotWidth).Height(m.height - 2).
+			Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Border).
+			Padding(0, 1).
+			Render(cb.String())
+
+		return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 	}
 
-	b.WriteString("\n")
-	b.WriteString(m.renderFooter())
-	return s.frame.Render(b.String())
+	return s.frame.Render(dashContent)
 }
 
 // ─── AGENT FOCUS ────────────────────────────────────────────────────────────
@@ -246,7 +269,7 @@ func (m Model) viewAgentFocus() string {
 		b.WriteString(fmt.Sprintf("  Diff: %s\n", s.muted.Render(af.DiffStat)))
 	}
 
-	// Live output (from log file, not tmux)
+	// Live output (tmux capture-pane with file fallback)
 	b.WriteString(s.section.Render("AGENT OUTPUT") + "\n")
 	outputBox := lipgloss.NewStyle().
 		Width(m.width - 8).
@@ -386,62 +409,6 @@ func (m Model) viewGit() string {
 	return s.frame.Render(b.String())
 }
 
-// ─── SEARCH ─────────────────────────────────────────────────────────────────
-
-func (m Model) viewSearch() string {
-	s := m.styles()
-	var b strings.Builder
-
-	b.WriteString(s.title.Render("⚔ Search") + "\n\n")
-
-	cursor := ""
-	if m.inputMode {
-		cursor = s.accent.Render("█")
-	}
-	b.WriteString(fmt.Sprintf("  %s %s%s\n\n",
-		s.accent.Render(">"),
-		m.searchQuery,
-		cursor))
-
-	if len(m.searchResults) == 0 {
-		if m.searchQuery != "" {
-			b.WriteString(s.muted.Render("  No results found.") + "\n")
-		} else {
-			b.WriteString(s.muted.Render("  Type to search across projects, goals, beads, and events.") + "\n")
-		}
-	} else {
-		categories := []string{"Project", "Goal", "Bead", "Attention"}
-		for _, cat := range categories {
-			var catResults []SearchResult
-			for _, r := range m.searchResults {
-				if r.Category == cat {
-					catResults = append(catResults, r)
-				}
-			}
-			if len(catResults) == 0 {
-				continue
-			}
-
-			b.WriteString(s.section.Render(fmt.Sprintf("%s (%d)", cat, len(catResults))) + "\n")
-			for _, r := range catResults {
-				b.WriteString(fmt.Sprintf("    %s  %s\n",
-					s.accent.Render(r.Scope),
-					s.muted.Render(r.Text)))
-			}
-		}
-	}
-
-	b.WriteString("\n")
-	keys := []struct{ key, label string }{
-		{"Enter", "select"},
-		{"Esc", "back"},
-		{"q", "quit"},
-	}
-	b.WriteString(m.renderKeybar(keys))
-
-	return s.frame.Render(b.String())
-}
-
 // ─── APPROVAL ───────────────────────────────────────────────────────────────
 
 func (m Model) viewApproval() string {
@@ -494,6 +461,65 @@ func (m Model) viewApproval() string {
 	return s.frame.Render(b.String())
 }
 
+// ─── CONTROL LEVEL ─────────────────────────────────────────────────────────
+
+func (m Model) viewControl() string {
+	s := m.styles()
+	var b strings.Builder
+
+	b.WriteString(s.title.Render("⚔ Control Level") + "\n\n")
+	b.WriteString(s.muted.Render("  Adjust how much autonomy agents have. Press Enter to select.") + "\n\n")
+
+	levels := []ControlLevel{ControlYOLO, ControlNotify, ControlApproveMaj, ControlApproveAll, ControlStepThru}
+	for i, level := range levels {
+		isCursor := i == m.cursor
+		isCurrent := level == m.controlLevel
+
+		prefix := "  "
+		if isCursor {
+			prefix = "▶ "
+		}
+
+		// Show filled/empty dots for the level
+		dots := ""
+		for j := 0; j < int(level); j++ {
+			dots += "●"
+		}
+		for j := int(level); j < 5; j++ {
+			dots += "○"
+		}
+
+		name := ControlLevelName(level)
+		desc := ControlLevelDescription(level)
+
+		marker := "  "
+		if isCurrent {
+			marker = " ✓"
+		}
+
+		b.WriteString(fmt.Sprintf("%s%s %s%s  %s\n",
+			prefix,
+			s.accent.Render(dots),
+			s.bold.Render(name),
+			s.accent.Render(marker),
+			s.muted.Render(desc)))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(s.muted.Render("  Session override — does not persist to config.") + "\n")
+	b.WriteString(s.muted.Render("  Set global default in config.local.toml: [approval] control_level = N") + "\n")
+	b.WriteString(s.muted.Render("  Set per-project in {project}/.orc/config.toml") + "\n")
+
+	b.WriteString("\n")
+	keys := []struct{ key, label string }{
+		{"Enter", "select"},
+		{"Esc", "back"},
+	}
+	b.WriteString(m.renderKeybar(keys))
+
+	return s.frame.Render(b.String())
+}
+
 // ─── HELP ───────────────────────────────────────────────────────────────────
 
 func (m Model) viewHelp() string {
@@ -511,6 +537,8 @@ func (m Model) viewHelp() string {
 		{"s", "Start project orchestrator"},
 		{"r", "Request work (type what to build)"},
 		{"Space", "Expand / collapse goal"},
+		{"Tab", "Toggle root orchestrator copilot panel"},
+		{"c", "Adjust control level (autonomy dial)"},
 		{"g", "Git branch topology"},
 		{"a", "Pending approvals"},
 		{"?", "Toggle this help"},
@@ -528,9 +556,9 @@ func (m Model) viewHelp() string {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
 
-	b.WriteString(s.section.Render("Agent Controls (Agent Focus view)") + "\n")
+	b.WriteString(s.section.Render("Agent Focus") + "\n")
 	for _, kv := range []struct{ key, desc string }{
-		{"m", "Send message to agent (via tmux)"},
+		{"m", "Send message to agent terminal"},
 		{"x", "Halt agent"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
@@ -545,8 +573,7 @@ func (m Model) viewHelp() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(descStyle.Render("  Agents continue running when you quit the TUI.") + "\n")
-	b.WriteString(descStyle.Render("  Reopen anytime — agents persist in background tmux.") + "\n")
+	b.WriteString(descStyle.Render("  Agents persist in background tmux — quit and reopen anytime.") + "\n")
 
 	return s.frame.Render(b.String())
 }
@@ -554,16 +581,31 @@ func (m Model) viewHelp() string {
 // ─── FOOTER / KEY BAR ───────────────────────────────────────────────────────
 
 func (m Model) renderFooter() string {
+	// Control level indicator
+	dots := ""
+	for i := 0; i < int(m.controlLevel); i++ {
+		dots += "●"
+	}
+	for i := int(m.controlLevel); i < 5; i++ {
+		dots += "○"
+	}
+	controlStr := fmt.Sprintf("%s %s", dots, ControlLevelName(m.controlLevel))
+
 	keys := []struct{ key, label string }{
-		{"Enter", "start"},
+		{"Enter", "start/drill"},
 		{"r", "request"},
-		{"s", "start project"},
+		{"c", controlStr},
 		{"g", "git"},
 	}
 	if len(m.approvals) > 0 {
 		keys = append(keys, struct{ key, label string }{"a", fmt.Sprintf("approvals(%d)", len(m.approvals))})
 	}
+	copilotLabel := "copilot"
+	if m.copilotVisible {
+		copilotLabel = "copilot ✓"
+	}
 	keys = append(keys,
+		struct{ key, label string }{"Tab", copilotLabel},
 		struct{ key, label string }{"?", "help"},
 		struct{ key, label string }{"q", "quit"},
 	)

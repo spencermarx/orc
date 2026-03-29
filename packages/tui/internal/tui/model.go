@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/thefinalsource/orc/packages/tui/internal/config"
-	"github.com/thefinalsource/orc/packages/tui/internal/events"
 )
 
 // View represents the active TUI view.
@@ -14,12 +13,11 @@ type View int
 
 const (
 	ViewDashboard View = iota
-	ViewTimeline
 	ViewAgentFocus
 	ViewGit
-	ViewSearch
 	ViewApproval
 	ViewHelp
+	ViewControl
 )
 
 // Model is the top-level BubbleTea model.
@@ -28,7 +26,6 @@ type Model struct {
 	projects  []ProjectState
 	attention []AttentionItem
 	approvals []ApprovalRequest
-	timeline  []events.Event
 	width     int
 	height    int
 
@@ -45,18 +42,20 @@ type Model struct {
 	gitProject  string // which project to show git for
 	gitBranches []GitBranch
 
-	// Search state
-	searchQuery   string
-	searchResults []SearchResult
-	searchCursor  int
-
 	// Approval state
 	approvalCursor int
 
+	// Control level (session override)
+	controlLevel ControlLevel
+
+	// Copilot panel (root orchestrator)
+	copilotVisible bool
+	copilotOutput  []string
+
 	// Text input mode
-	inputMode    bool
-	inputBuffer  string
-	inputAction  string // "search", "send_message"
+	inputMode   bool
+	inputBuffer string
+	inputAction string // "send_message", "request_work"
 
 	// Config
 	theme       Theme
@@ -124,6 +123,7 @@ func NewModel(projects []config.Project, theme Theme, orcRoot string) Model {
 	return Model{
 		activeView:    ViewDashboard,
 		expandedGoals: make(map[string]bool),
+		controlLevel:  ControlApproveAll, // default: Level 4
 		theme:         theme,
 		orcRoot:       orcRoot,
 		rawProjects:   projects,

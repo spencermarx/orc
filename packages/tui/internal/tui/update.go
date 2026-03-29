@@ -38,6 +38,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusedAgent.ProjectKey, m.focusedAgent.GoalName,
 				m.focusedAgent.BeadName, m.orcRoot)
 		}
+
+		// Refresh copilot panel (root orchestrator output)
+		if m.copilotVisible {
+			m.copilotOutput = capturePaneOutput("orc", "", "orc")
+		}
+
 		return m, tickCmd()
 
 	case stateRefreshed:
@@ -62,27 +68,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.cursor = 0
 		return m, nil
-	case "t":
-		m.activeView = ViewTimeline
-		m.cursor = 0
-		return m, nil
 	case "g":
 		m = m.enterGitView()
 		return m, nil
-	case "/":
-		m.previousView = m.activeView
-		m.activeView = ViewSearch
-		m.inputMode = true
-		m.inputAction = "search"
-		m.inputBuffer = m.searchQuery
-		m.searchCursor = 0
-		return m, nil
+	case "c":
+		return m.handleControlLevel()
 	case "?":
 		if m.activeView == ViewHelp {
 			m.activeView = ViewDashboard
 		} else {
 			m.activeView = ViewHelp
 		}
+		return m, nil
+
+	// Toggle copilot panel (root orchestrator)
+	case "tab":
+		m.copilotVisible = !m.copilotVisible
 		return m, nil
 
 	// Navigation
@@ -137,18 +138,11 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.inputMode = false
-		if m.inputAction == "search" && m.searchQuery == "" {
-			m.activeView = m.previousView
-		}
 		return m, nil
 
 	case "enter":
 		m.inputMode = false
 		switch m.inputAction {
-		case "search":
-			m.searchQuery = m.inputBuffer
-			m.searchResults = searchAll(m.searchQuery, m.projects, m.attention)
-			m.searchCursor = 0
 		case "send_message":
 			if m.focusedAgent.BeadName != "" && m.inputBuffer != "" {
 				sendMessageToAgent(m.focusedAgent.ProjectKey,
@@ -157,9 +151,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inputBuffer = ""
 		case "request_work":
 			if m.focusedAgent.ProjectKey != "" && m.inputBuffer != "" {
-				// Ensure orchestrator is running, then send the request
 				startProject(m.orcRoot, m.focusedAgent.ProjectKey)
-				// Send the request to the orchestrator via tmux send-keys
 				sendMessageToAgent(m.focusedAgent.ProjectKey, "", "", m.inputBuffer)
 			}
 			m.inputBuffer = ""
@@ -170,10 +162,6 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "backspace":
 		if len(m.inputBuffer) > 0 {
 			m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
-			if m.inputAction == "search" {
-				m.searchQuery = m.inputBuffer
-				m.searchResults = searchAll(m.searchQuery, m.projects, m.attention)
-			}
 		}
 		return m, nil
 
@@ -183,10 +171,6 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		if len(key) == 1 {
 			m.inputBuffer += key
-			if m.inputAction == "search" {
-				m.searchQuery = m.inputBuffer
-				m.searchResults = searchAll(m.searchQuery, m.projects, m.attention)
-			}
 		}
 		return m, nil
 	}
@@ -213,20 +197,11 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ViewSearch:
-		if m.searchCursor < len(m.searchResults) {
-			result := m.searchResults[m.searchCursor]
-			proj, goal, bead := splitScope(result.Scope)
-			if bead != "" {
-				m.focusedAgent = loadAgentFocus(m.projects, proj, goal, bead, m.orcRoot)
-				m.previousView = ViewSearch
-				m.activeView = ViewAgentFocus
-			}
-		}
-		return m, nil
-
 	case ViewApproval:
 		return m.handleApprove()
+
+	case ViewControl:
+		return m.handleControlLevel()
 	}
 
 	return m, nil
@@ -237,7 +212,7 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 	case ViewAgentFocus:
 		m.activeView = ViewDashboard
 		m.focusedAgent = AgentFocusState{}
-	case ViewGit, ViewSearch, ViewApproval:
+	case ViewGit, ViewApproval, ViewControl:
 		m.activeView = ViewDashboard
 		m.cursor = 0
 	case ViewHelp:
@@ -361,6 +336,24 @@ func (m Model) handleRequestWork() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleControlLevel() (tea.Model, tea.Cmd) {
+	if m.activeView == ViewControl {
+		// In control view: Enter selects the level at cursor
+		level := ControlLevel(m.cursor + 1)
+		if level >= ControlYOLO && level <= ControlStepThru {
+			m.controlLevel = level
+		}
+		m.activeView = ViewDashboard
+		m.cursor = 0
+		return m, nil
+	}
+	// Open control view
+	m.previousView = m.activeView
+	m.activeView = ViewControl
+	m.cursor = int(m.controlLevel) - 1 // position cursor at current level
+	return m, nil
+}
+
 func (m Model) enterGitView() Model {
 	for _, proj := range m.projects {
 		if len(proj.Goals) > 0 {
@@ -429,14 +422,12 @@ func (m Model) maxCursorPos() int {
 	switch m.activeView {
 	case ViewDashboard:
 		return m.dashboardItemCount()
-	case ViewTimeline:
-		return len(m.timeline)
-	case ViewSearch:
-		return len(m.searchResults)
 	case ViewApproval:
 		return len(m.approvals)
 	case ViewGit:
 		return len(m.gitBranches)
+	case ViewControl:
+		return 5 // 5 control levels
 	}
 	return 0
 }
