@@ -1664,46 +1664,27 @@ _orc_tui_stop_daemon() {
   rm -f "$pid_file"
 }
 
-# Register Prefix+d keybinding to launch TUI dashboard popup.
+# Register keybinding for TUI dashboard (legacy tmux integration).
 _orc_tui_register_keybinding() {
+  # The TUI now runs as a standalone full-screen app via `orc` or `orc-tui`.
+  # This keybinding is kept for users who still want to launch it from within tmux.
   local bin
   bin="$(_orc_tui_bin)" || return 1
 
-  # Prefix+d opens the TUI dashboard as a tmux popup
-  tmux bind-key -T prefix d display-popup -E -w 80% -h 85% \
-    -T ' ⚔ Orc Dashboard ' \
+  tmux bind-key -T prefix d run-shell \
     "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
-
-  # Also bind Alt+d if keybindings are enabled
-  local kb_enabled
-  kb_enabled="$(_config_get "keybindings.enabled" "false")"
-  if [[ "$kb_enabled" == "true" ]]; then
-    local dashboard_key
-    dashboard_key="$(_config_get "keybindings.dashboard" "M-d")"
-    if [[ -n "$dashboard_key" ]]; then
-      tmux bind-key -n "$dashboard_key" display-popup -E -w 80% -h 85% \
-        -T ' ⚔ Orc Dashboard ' \
-        "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
-    fi
-  fi
 }
 
-# Launch the TUI dashboard popup right now (for initial session).
-_orc_tui_launch_popup() {
+# Launch the TUI dashboard directly in the current terminal.
+_orc_tui_launch() {
   local bin
   bin="$(_orc_tui_bin)" || return 1
 
-  # Only launch in tmux
-  [[ -n "${TMUX:-}" ]] || return 1
-
-  # Check if TUI is enabled
   local tui_enabled
   tui_enabled="$(_config_get "tui.enabled" "true")"
   [[ "$tui_enabled" == "true" ]] || return 0
 
-  tmux display-popup -E -w 80% -h 85% \
-    -T ' ⚔ Orc Dashboard ' \
-    "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
+  ORC_ROOT="$ORC_ROOT" exec "$bin"
 }
 
 # Append a notification to the log. Optionally triggers OS notification.

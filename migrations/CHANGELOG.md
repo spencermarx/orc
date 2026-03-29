@@ -64,7 +64,15 @@ Per-gate overrides in `[approval]` still take precedence when set.
 
 ### New: TUI Dashboard (`orc-tui` binary)
 
-**What it does:** Interactive BubbleTea dashboard launched as tmux popup via `Prefix+d`. Five views: Dashboard, Timeline, Agent Focus, Git Topology, Search. Plus interactive approval modals and agent controls (message, halt, take over).
+**What it does:** Full-screen interactive terminal dashboard that **owns the terminal** (like lazygit/k9s). No tmux expertise required — the TUI is the primary interface. Seven views: Dashboard, Timeline, Agent Focus, Git Topology, Search, Approvals, Help. Agent output read from log files, messages sent via signal files.
+
+**Architecture change:** The TUI no longer launches as a tmux popup. It runs as a standalone full-screen app. Tmux is used only as invisible infrastructure for agent process management — users never need to interact with tmux directly. The event daemon runs as a goroutine inside the TUI process.
+
+**Modes:**
+- `orc-tui` — Launch full-screen dashboard (default)
+- `orc-tui --daemon` — Headless event daemon
+- `orc-tui --events` — Stream events to stdout
+- `orc-tui --status` — One-line status for shell prompts
 
 **Setup:** Build with `cd packages/tui && go build -o orc-tui ./cmd/orc-tui/` and place on PATH.
 

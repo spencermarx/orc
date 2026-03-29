@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -443,5 +444,113 @@ func TestTruncate(t *testing.T) {
 	}
 	if truncate("hello world this is long", 10) != "hello wor…" {
 		t.Errorf("truncate got %q", truncate("hello world this is long", 10))
+	}
+}
+
+func TestTailFile(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "test.log")
+
+	// Non-existent file
+	lines := tailFile(filepath.Join(dir, "nonexistent"), 10)
+	if lines != nil {
+		t.Error("expected nil for nonexistent file")
+	}
+
+	// Empty file
+	os.WriteFile(logFile, []byte(""), 0o644)
+	lines = tailFile(logFile, 10)
+	if lines != nil {
+		t.Errorf("expected nil for empty file, got %v", lines)
+	}
+
+	// File with fewer lines than requested
+	os.WriteFile(logFile, []byte("line1\nline2\nline3\n"), 0o644)
+	lines = tailFile(logFile, 10)
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+	if lines[0] != "line1" || lines[2] != "line3" {
+		t.Errorf("unexpected lines: %v", lines)
+	}
+
+	// File with more lines than requested
+	var content string
+	for i := 1; i <= 20; i++ {
+		content += fmt.Sprintf("line%d\n", i)
+	}
+	os.WriteFile(logFile, []byte(content), 0o644)
+	lines = tailFile(logFile, 5)
+	if len(lines) != 5 {
+		t.Errorf("expected 5 lines, got %d", len(lines))
+	}
+	if lines[0] != "line16" || lines[4] != "line20" {
+		t.Errorf("expected last 5 lines, got: %v", lines)
+	}
+}
+
+func TestReadAgentLog(t *testing.T) {
+	dir := t.TempDir()
+	beadName := "bd-test"
+
+	// No log file — should return default message
+	lines := readAgentLog(dir, beadName)
+	if len(lines) != 1 || lines[0] != "(no agent output available yet)" {
+		t.Errorf("expected default message, got: %v", lines)
+	}
+
+	// Create .worker-output in worktree
+	beadDir := filepath.Join(dir, ".worktrees", beadName)
+	os.MkdirAll(beadDir, 0o755)
+	os.WriteFile(filepath.Join(beadDir, ".worker-output"), []byte("working on auth\nfixed bug\n"), 0o644)
+
+	lines = readAgentLog(dir, beadName)
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines from .worker-output, got %d", len(lines))
+	}
+	if lines[0] != "working on auth" {
+		t.Errorf("expected 'working on auth', got %q", lines[0])
+	}
+}
+
+func TestSendMessageToAgent(t *testing.T) {
+	dir := t.TempDir()
+	beadName := "bd-test"
+
+	beadDir := filepath.Join(dir, ".worktrees", beadName)
+	os.MkdirAll(beadDir, 0o755)
+
+	err := sendMessageToAgent(dir, beadName, "please fix the tests")
+	if err != nil {
+		t.Fatalf("sendMessageToAgent failed: %v", err)
+	}
+
+	// Verify the message file was created
+	msgFile := filepath.Join(beadDir, ".worker-message")
+	data, err := os.ReadFile(msgFile)
+	if err != nil {
+		t.Fatalf("reading message file: %v", err)
+	}
+
+	content := string(data)
+	if !contains(content, "please fix the tests") {
+		t.Errorf("message file should contain the message, got: %q", content)
+	}
+}
+
+func TestResolveProjectPath(t *testing.T) {
+	projects := []ProjectState{
+		{Key: "myapp", Path: "/tmp/myapp"},
+		{Key: "api", Path: "/tmp/api"},
+	}
+
+	if resolveProjectPath(projects, "myapp") != "/tmp/myapp" {
+		t.Error("expected /tmp/myapp")
+	}
+	if resolveProjectPath(projects, "api") != "/tmp/api" {
+		t.Error("expected /tmp/api")
+	}
+	if resolveProjectPath(projects, "unknown") != "" {
+		t.Error("expected empty for unknown project")
 	}
 }

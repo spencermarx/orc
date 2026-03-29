@@ -1,3 +1,6 @@
+// Package daemon provides the filesystem watching event daemon for orc.
+// It monitors project state files and emits structured events.
+// No tmux dependency — works standalone or embedded in the TUI.
 package daemon
 
 import (
@@ -7,86 +10,52 @@ import (
 
 	"github.com/thefinalsource/orc/packages/tui/internal/config"
 	"github.com/thefinalsource/orc/packages/tui/internal/events"
-	"github.com/thefinalsource/orc/packages/tui/internal/tmux"
 )
 
-// Daemon is the main event daemon that watches files and emits events.
+// Daemon coordinates filesystem watching and event emission.
 type Daemon struct {
 	bus      *events.Bus
-	watcher  *Watcher
 	projects []config.Project
-	theme    tmux.Theme
-
-	// statusInterval controls how often we push tmux status updates.
-	statusInterval time.Duration
 }
 
-// New creates a new daemon with the given event bus and projects.
-func New(bus *events.Bus, projects []config.Project, theme tmux.Theme) *Daemon {
+// New creates a daemon with the given event bus and projects.
+func New(bus *events.Bus, projects []config.Project) *Daemon {
 	return &Daemon{
-		bus:            bus,
-		projects:       projects,
-		theme:          theme,
-		statusInterval: 2 * time.Second,
+		bus:      bus,
+		projects: projects,
 	}
 }
 
-// Run starts the daemon and blocks until the context is cancelled.
+// Run starts the event bus, filesystem watcher, and blocks until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
-	// Start the event bus (Unix socket listener)
 	if err := d.bus.Start(); err != nil {
 		return err
 	}
 	defer d.bus.Stop()
 
-	// Emit startup event
 	d.bus.Emit(events.Event{
 		Type:      events.TypeDaemonStarted,
 		Timestamp: time.Now(),
+		Message:   "orc event daemon started",
 	})
 
-	// Start file watchers
-	d.watcher = NewWatcher(d.bus, d.projects)
-	if err := d.watcher.Start(); err != nil {
-		return err
-	}
-	defer d.watcher.Stop()
-
-	log.Printf("orc-tui daemon started: watching %d projects, socket at %s",
-		len(d.projects), d.bus.SocketPath())
-
-	// Reactive status bar update loop
-	ticker := time.NewTicker(d.statusInterval)
-	defer ticker.Stop()
-
-	// Initial status push
-	d.pushTmuxStatus()
-
-	for {
-		select {
-		case <-ctx.Done():
-			d.bus.Emit(events.Event{
-				Type:      events.TypeDaemonStopped,
-				Timestamp: time.Now(),
-			})
-			return nil
-		case <-ticker.C:
-			d.pushTmuxStatus()
-		}
-	}
-}
-
-// pushTmuxStatus scans the current state and pushes it to the tmux status bar.
-func (d *Daemon) pushTmuxStatus() {
-	if !tmux.IsAvailable() {
-		return
+	w := NewWatcher(d.bus, d.projects)
+	if err := w.Start(); err != nil {
+		log.Printf("watcher start error: %v", err)
+		// Non-fatal — daemon still runs for manual event consumers
+	} else {
+		defer w.Stop()
 	}
 
-	state := ScanState(d.projects)
-	line := tmux.FormatStatusLine(state, d.theme)
+	log.Printf("orc event daemon: watching %d projects", len(d.projects))
 
-	if err := tmux.SetUserOption("orc_status", line); err != nil {
-		// Non-fatal — tmux session might not exist yet
-		log.Printf("failed to set tmux status: %v", err)
-	}
+	<-ctx.Done()
+
+	d.bus.Emit(events.Event{
+		Type:      events.TypeDaemonStopped,
+		Timestamp: time.Now(),
+		Message:   "orc event daemon stopped",
+	})
+
+	return nil
 }

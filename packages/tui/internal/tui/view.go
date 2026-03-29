@@ -39,8 +39,8 @@ func (m Model) View() string {
 func (m Model) styles() viewStyles {
 	t := m.theme
 	return viewStyles{
-		title: lipgloss.NewStyle().Bold(true).Foreground(t.Accent).PaddingLeft(1),
-		section: lipgloss.NewStyle().Bold(true).Foreground(t.FG).PaddingLeft(1).PaddingTop(1),
+		title:    lipgloss.NewStyle().Bold(true).Foreground(t.Accent).PaddingLeft(1),
+		section:  lipgloss.NewStyle().Bold(true).Foreground(t.FG).PaddingLeft(1).PaddingTop(1),
 		muted:    lipgloss.NewStyle().Foreground(t.Muted),
 		error:    lipgloss.NewStyle().Foreground(t.Error),
 		accent:   lipgloss.NewStyle().Foreground(t.Accent),
@@ -117,9 +117,14 @@ func (m Model) viewDashboard() string {
 						if beadCursor {
 							beadPrefix = "   ▶ "
 						}
-						b.WriteString(fmt.Sprintf("%s%s  %s  %s\n",
+						title := bead.Name
+						if bead.Title != "" {
+							title = bead.Title
+						}
+						b.WriteString(fmt.Sprintf("%s%s  %s  %s  %s\n",
 							beadPrefix,
-							bead.Name,
+							s.muted.Render(bead.Name),
+							title,
 							m.statusIndicator(bead.Status),
 							s.muted.Render(formatElapsed(bead.Elapsed))))
 						cursorPos++
@@ -215,8 +220,8 @@ func (m Model) viewAgentFocus() string {
 		b.WriteString(fmt.Sprintf("  Diff: %s\n", s.muted.Render(af.DiffStat)))
 	}
 
-	// Live output
-	b.WriteString(s.section.Render("LIVE OUTPUT") + "\n")
+	// Live output (from log file, not tmux)
+	b.WriteString(s.section.Render("AGENT OUTPUT") + "\n")
 	outputBox := lipgloss.NewStyle().
 		Width(m.width - 8).
 		MaxHeight(m.height / 2).
@@ -225,7 +230,6 @@ func (m Model) viewAgentFocus() string {
 		Padding(0, 1)
 
 	outputLines := af.Output
-	// Show last N lines that fit
 	maxLines := (m.height / 2) - 4
 	if maxLines < 5 {
 		maxLines = 5
@@ -278,8 +282,7 @@ func (m Model) viewAgentFocus() string {
 
 	// Footer
 	b.WriteString("\n")
-	footer := m.renderAgentFooter()
-	b.WriteString(footer)
+	b.WriteString(m.renderAgentFooter())
 
 	return s.frame.Render(b.String())
 }
@@ -287,7 +290,6 @@ func (m Model) viewAgentFocus() string {
 func (m Model) renderAgentFooter() string {
 	keys := []struct{ key, label string }{
 		{"m", "message"},
-		{"T", "take over"},
 		{"x", "halt"},
 		{"Esc", "back"},
 		{"?", "help"},
@@ -308,10 +310,8 @@ func (m Model) viewGit() string {
 		b.WriteString(s.muted.Render("  No goal or work branches found.") + "\n")
 		b.WriteString(s.muted.Render("  Branches appear when goals are created.") + "\n")
 	} else {
-		// Render main line
 		b.WriteString(s.muted.Render("  main ") + s.muted.Render(strings.Repeat("─", 50)) + "\n")
 
-		// Group by goal
 		goalBranches := make(map[string][]GitBranch)
 		var goals []GitBranch
 		for _, br := range m.gitBranches {
@@ -329,7 +329,6 @@ func (m Model) viewGit() string {
 			}
 			b.WriteString("\n")
 
-			// Extract goal name without prefix for lookup
 			goalKey := goal.Name
 			for _, prefix := range []string{"feat/", "fix/", "task/"} {
 				goalKey = strings.TrimPrefix(goalKey, prefix)
@@ -369,7 +368,6 @@ func (m Model) viewSearch() string {
 
 	b.WriteString(s.title.Render("⚔ Search") + "\n\n")
 
-	// Search input
 	cursor := ""
 	if m.inputMode {
 		cursor = s.accent.Render("█")
@@ -386,7 +384,6 @@ func (m Model) viewSearch() string {
 			b.WriteString(s.muted.Render("  Type to search across projects, goals, beads, and events.") + "\n")
 		}
 	} else {
-		// Group by category
 		categories := []string{"Project", "Goal", "Bead", "Attention"}
 		for _, cat := range categories {
 			var catResults []SearchResult
@@ -491,7 +488,7 @@ func (m Model) viewHelp() string {
 		{"a", "Pending approvals"},
 		{"?", "Toggle this help"},
 		{"Esc", "Back to previous view"},
-		{"q", "Quit TUI (agents keep running)"},
+		{"q", "Quit (agents keep running)"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
@@ -502,7 +499,6 @@ func (m Model) viewHelp() string {
 		{"k / ↑", "Move up"},
 		{"Space", "Expand / collapse goal"},
 		{"Enter", "Drill into selected item"},
-		{"T", "Take over — switch to raw tmux pane"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
@@ -510,8 +506,7 @@ func (m Model) viewHelp() string {
 	b.WriteString(s.section.Render("Agent Controls (Agent Focus view)") + "\n")
 	for _, kv := range []struct{ key, desc string }{
 		{"m", "Send message to agent"},
-		{"x", "Halt agent (with confirmation)"},
-		{"T", "Take over — switch to raw tmux pane"},
+		{"x", "Halt agent"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
@@ -526,7 +521,7 @@ func (m Model) viewHelp() string {
 
 	b.WriteString("\n")
 	b.WriteString(descStyle.Render("  Agents continue running when you quit the TUI.") + "\n")
-	b.WriteString(descStyle.Render("  Press T to take over any agent in its raw tmux pane.") + "\n")
+	b.WriteString(descStyle.Render("  All agent state is file-based — restart the TUI anytime.") + "\n")
 
 	return s.frame.Render(b.String())
 }
@@ -544,7 +539,6 @@ func (m Model) renderFooter() string {
 		keys = append(keys, struct{ key, label string }{"a", fmt.Sprintf("approvals(%d)", len(m.approvals))})
 	}
 	keys = append(keys,
-		struct{ key, label string }{"T", "tmux"},
 		struct{ key, label string }{"?", "help"},
 		struct{ key, label string }{"q", "quit"},
 	)

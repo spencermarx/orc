@@ -1,10 +1,16 @@
-// orc-tui is the event daemon and TUI overlay for orc.
+// orc-tui is the terminal dashboard for orc.
+//
+// This is the PRIMARY user interface for orc. It owns the terminal completely
+// (like lazygit/k9s/htop) — no tmux knowledge required. Agents run as
+// background processes managed by the orc CLI; this TUI reads their state
+// from the filesystem and presents a unified view.
 //
 // Modes:
 //
-//	orc-tui              Launch full BubbleTea TUI dashboard
-//	orc-tui --daemon     Headless mode: watch files, emit events, push tmux status
-//	orc-tui --events     Stream events to stdout (for debugging)
+//	orc-tui              Launch full-screen TUI dashboard (DEFAULT)
+//	orc-tui --daemon     Headless mode: watch files, emit events to socket
+//	orc-tui --events     Stream events to stdout (for debugging/scripting)
+//	orc-tui --status     Print one-line status summary (for shell prompts)
 package main
 
 import (
@@ -17,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,13 +31,11 @@ import (
 	"github.com/thefinalsource/orc/packages/tui/internal/config"
 	"github.com/thefinalsource/orc/packages/tui/internal/daemon"
 	"github.com/thefinalsource/orc/packages/tui/internal/events"
-	"github.com/thefinalsource/orc/packages/tui/internal/tmux"
 	"github.com/thefinalsource/orc/packages/tui/internal/tui"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		// No arguments: launch full TUI dashboard
 		runTUI()
 		return
 	}
@@ -40,19 +45,29 @@ func main() {
 		runDaemon()
 	case "--events":
 		runEvents()
+	case "--status":
+		runStatusLine()
 	case "--help", "-h":
-		fmt.Println("orc-tui — Event daemon and TUI dashboard for orc")
+		fmt.Println("orc-tui — Terminal dashboard for orc agent orchestration")
 		fmt.Println()
 		fmt.Println("Usage:")
-		fmt.Println("  orc-tui              Launch TUI dashboard")
+		fmt.Println("  orc-tui              Launch full-screen dashboard")
 		fmt.Println("  orc-tui --daemon     Run headless event daemon")
 		fmt.Println("  orc-tui --events     Stream events to stdout")
+		fmt.Println("  orc-tui --status     One-line status (for shell prompts)")
+		fmt.Println()
+		fmt.Println("The TUI is the primary interface for orc. It shows all agent")
+		fmt.Println("activity, handles approvals, and provides full control over")
+		fmt.Println("the orchestration lifecycle — no tmux expertise needed.")
 	default:
 		fmt.Fprintf(os.Stderr, "unknown flag: %s\n", os.Args[1])
 		os.Exit(1)
 	}
 }
 
+// runTUI launches the full-screen BubbleTea dashboard.
+// This IS the orc experience — it owns the terminal completely.
+// The event daemon runs as a goroutine inside this process.
 func runTUI() {
 	orcRoot := resolveOrcRoot()
 
@@ -72,6 +87,23 @@ func runTUI() {
 		Error:    lipgloss.Color("#f85149"),
 	}
 
+	// Start the event daemon as a background goroutine.
+	// This watches filesystem state and emits events — the TUI subscribes.
+	socketPath := socketPath()
+	persistPath := filepath.Join(orcStateDir(), "events.jsonl")
+	bus := events.NewBus(socketPath, persistPath)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		d := daemon.New(bus, projects)
+		if err := d.Run(ctx); err != nil && ctx.Err() == nil {
+			// Daemon error — non-fatal for TUI, log and continue
+			log.Printf("event daemon: %v", err)
+		}
+	}()
+
 	model := tui.NewModel(projects, theme, orcRoot)
 
 	p := tea.NewProgram(model,
@@ -80,8 +112,10 @@ func runTUI() {
 	)
 
 	if _, err := p.Run(); err != nil {
+		cancel()
 		log.Fatalf("TUI error: %v", err)
 	}
+	cancel()
 }
 
 func runDaemon() {
@@ -94,16 +128,8 @@ func runDaemon() {
 		log.Fatalf("loading projects: %v", err)
 	}
 
-	cfg, _ := config.LoadConfig(orcRoot)
-	theme := tmux.Theme{
-		Accent:   cfg.Theme.Accent,
-		FG:       cfg.Theme.FG,
-		Activity: cfg.Theme.Activity,
-		Error:    "#f85149",
-	}
-
 	bus := events.NewBus(socketPath, persistPath)
-	d := daemon.New(bus, projects, theme)
+	d := daemon.New(bus, projects)
 
 	// Write PID file
 	pidFile := filepath.Join(orcStateDir(), "orc-tui.pid")
@@ -114,7 +140,6 @@ func runDaemon() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -141,7 +166,6 @@ func runEvents() {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		// Pretty-print JSON
 		var v any
 		if json.Unmarshal(line, &v) == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ")
@@ -155,14 +179,76 @@ func runEvents() {
 	}
 }
 
-// resolveOrcRoot finds the orc repo root.
-// Priority: ORC_ROOT env var, then walk up from current directory.
+// runStatusLine prints a one-line status summary for shell prompts.
+// Reads state directly from files — no daemon required.
+func runStatusLine() {
+	orcRoot := resolveOrcRoot()
+	projects, err := config.LoadProjects(orcRoot)
+	if err != nil {
+		fmt.Print("orc: no projects")
+		return
+	}
+
+	working, review, blocked, goals := 0, 0, 0, 0
+	for _, proj := range projects {
+		goalsDir := filepath.Join(proj.Path, ".worktrees", ".orc-state", "goals")
+		entries, err := os.ReadDir(goalsDir)
+		if err == nil {
+			goals += len(entries)
+		}
+
+		wtDir := filepath.Join(proj.Path, ".worktrees")
+		entries, err = os.ReadDir(wtDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			statusFile := filepath.Join(wtDir, e.Name(), ".worker-status")
+			data, err := os.ReadFile(statusFile)
+			if err != nil {
+				continue
+			}
+			status := strings.TrimSpace(strings.Split(string(data), "\n")[0])
+			switch {
+			case strings.HasPrefix(status, "working"):
+				working++
+			case strings.HasPrefix(status, "review"):
+				review++
+			case strings.HasPrefix(status, "blocked"):
+				blocked++
+			}
+		}
+	}
+
+	var parts []string
+	if goals > 0 {
+		parts = append(parts, fmt.Sprintf("%d goals", goals))
+	}
+	if working > 0 {
+		parts = append(parts, fmt.Sprintf("%d working", working))
+	}
+	if review > 0 {
+		parts = append(parts, fmt.Sprintf("%d review", review))
+	}
+	if blocked > 0 {
+		parts = append(parts, fmt.Sprintf("%d blocked", blocked))
+	}
+
+	if len(parts) == 0 {
+		fmt.Print("orc: idle")
+	} else {
+		fmt.Printf("orc: %s", strings.Join(parts, " | "))
+	}
+}
+
 func resolveOrcRoot() string {
 	if root := os.Getenv("ORC_ROOT"); root != "" {
 		return root
 	}
 
-	// Walk up from current directory looking for config.toml + packages/
 	dir, _ := os.Getwd()
 	for dir != "/" {
 		if _, err := os.Stat(filepath.Join(dir, "config.toml")); err == nil {

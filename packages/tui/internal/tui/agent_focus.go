@@ -21,9 +21,9 @@ type AgentFocusState struct {
 	// Assignment content
 	Assignment string
 
-	// Live output captured from tmux pane
-	Output     []string
-	OutputErr  string
+	// Live output read from agent log file
+	Output    []string
+	OutputErr string
 
 	// Feedback from review
 	Feedback string
@@ -33,6 +33,7 @@ type AgentFocusState struct {
 }
 
 // loadAgentFocus populates the agent focus state for the selected bead.
+// Reads all state from the filesystem — no tmux dependency.
 func loadAgentFocus(projects []ProjectState, projectKey, goalName, beadName, orcRoot string) AgentFocusState {
 	state := AgentFocusState{
 		ProjectKey: projectKey,
@@ -63,7 +64,6 @@ func loadAgentFocus(projects []ProjectState, projectKey, goalName, beadName, orc
 	assignPath := filepath.Join(beadDir, ".orch-assignment.md")
 	if data, err := os.ReadFile(assignPath); err == nil {
 		state.Assignment = string(data)
-		// Truncate long assignments for display
 		if len(state.Assignment) > 500 {
 			state.Assignment = state.Assignment[:500] + "\n..."
 		}
@@ -78,8 +78,8 @@ func loadAgentFocus(projects []ProjectState, projectKey, goalName, beadName, orc
 	// Detect branch
 	state.Branch = detectBranchFromWorktree(beadDir)
 
-	// Capture tmux pane output
-	state.Output = capturePaneOutput(projectKey, goalName, beadName)
+	// Read agent output from log file (no tmux needed)
+	state.Output = readAgentLog(projectPath, beadName)
 
 	// Git diff stat
 	state.DiffStat = gitDiffStat(beadDir)
@@ -116,52 +116,50 @@ func detectBranchFromWorktree(beadDir string) string {
 	return strings.TrimPrefix(ref, "ref: refs/heads/")
 }
 
-func capturePaneOutput(projectKey, goalName, beadName string) []string {
-	// Try to capture from tmux pane
-	// Pane title format: "eng: <bead>"
-	windowName := fmt.Sprintf("%s/%s", projectKey, goalName)
-	cmd := exec.Command("tmux", "list-panes", "-t", fmt.Sprintf("orc:%s", windowName),
-		"-F", "#{pane_index}:#{pane_title}")
-	out, err := cmd.Output()
+// readAgentLog reads agent output from log files in the worktree.
+// The agent's output is captured to .worker-output in its worktree directory.
+// Falls back to reading from the orc state directory if not found.
+func readAgentLog(projectPath, beadName string) []string {
+	// Primary: .worker-output in the worktree
+	logPath := filepath.Join(projectPath, ".worktrees", beadName, ".worker-output")
+	lines := tailFile(logPath, 50)
+	if len(lines) > 0 {
+		return lines
+	}
+
+	// Fallback: orc state log directory
+	stateLogPath := filepath.Join(projectPath, ".worktrees", ".orc-state", "logs", beadName+".log")
+	lines = tailFile(stateLogPath, 50)
+	if len(lines) > 0 {
+		return lines
+	}
+
+	return []string{"(no agent output available yet)"}
+}
+
+// tailFile reads the last N lines from a file.
+func tailFile(path string, n int) []string {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return []string{"(unable to capture agent output — tmux not available)"}
+		return nil
 	}
 
-	var paneIdx string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
-			paneIdx = parts[0]
-			break
-		}
+	content := strings.TrimRight(string(data), "\n")
+	if content == "" {
+		return nil
 	}
 
-	if paneIdx == "" {
-		return []string{"(agent pane not found)"}
+	allLines := strings.Split(content, "\n")
+	if len(allLines) > n {
+		allLines = allLines[len(allLines)-n:]
 	}
-
-	// Capture the last 30 lines
-	captureCmd := exec.Command("tmux", "capture-pane", "-p",
-		"-t", fmt.Sprintf("orc:%s.%s", windowName, paneIdx),
-		"-S", "-30")
-	captureOut, err := captureCmd.Output()
-	if err != nil {
-		return []string{"(capture failed)"}
-	}
-
-	lines := strings.Split(string(captureOut), "\n")
-	// Trim trailing empty lines
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
+	return allLines
 }
 
 func gitDiffStat(beadDir string) string {
 	cmd := exec.Command("git", "-C", beadDir, "diff", "--stat", "HEAD~1")
 	out, err := cmd.Output()
 	if err != nil {
-		// Try diff against parent branch
 		cmd = exec.Command("git", "-C", beadDir, "diff", "--stat", "HEAD")
 		out, err = cmd.Output()
 		if err != nil {
@@ -169,7 +167,6 @@ func gitDiffStat(beadDir string) string {
 		}
 	}
 	s := strings.TrimSpace(string(out))
-	// Just return the summary line
 	lines := strings.Split(s, "\n")
 	if len(lines) > 0 {
 		return lines[len(lines)-1]
@@ -177,34 +174,21 @@ func gitDiffStat(beadDir string) string {
 	return ""
 }
 
-// sendToAgent sends a text message to an agent's tmux pane.
-func sendToAgent(projectKey, goalName, beadName, message string) error {
-	windowName := fmt.Sprintf("%s/%s", projectKey, goalName)
+// sendMessageToAgent writes a message to the agent's input signal file.
+// The agent monitors this file and processes incoming messages.
+func sendMessageToAgent(projectPath, beadName, message string) error {
+	beadDir := filepath.Join(projectPath, ".worktrees", beadName)
+	msgFile := filepath.Join(beadDir, ".worker-message")
 
-	// Find the pane
-	cmd := exec.Command("tmux", "list-panes", "-t", fmt.Sprintf("orc:%s", windowName),
-		"-F", "#{pane_index}:#{pane_title}")
-	out, err := cmd.Output()
+	// Append message with timestamp
+	entry := fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), message)
+	f, err := os.OpenFile(msgFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return fmt.Errorf("listing panes: %w", err)
+		return fmt.Errorf("writing message file: %w", err)
 	}
-
-	var paneIdx string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
-			paneIdx = parts[0]
-			break
-		}
-	}
-
-	if paneIdx == "" {
-		return fmt.Errorf("pane not found for %s", beadName)
-	}
-
-	target := fmt.Sprintf("orc:%s.%s", windowName, paneIdx)
-	sendCmd := exec.Command("tmux", "send-keys", "-t", target, message, "Enter")
-	return sendCmd.Run()
+	defer f.Close()
+	_, err = f.WriteString(entry)
+	return err
 }
 
 // haltAgent runs `orc halt` for a specific bead.
@@ -214,34 +198,12 @@ func haltAgent(orcRoot, projectKey, beadName string) error {
 	return cmd.Run()
 }
 
-// takeOverAgent switches to the raw tmux pane for the agent.
-func takeOverAgent(projectKey, goalName, beadName string) error {
-	windowName := fmt.Sprintf("%s/%s", projectKey, goalName)
-
-	// Find the pane
-	cmd := exec.Command("tmux", "list-panes", "-t", fmt.Sprintf("orc:%s", windowName),
-		"-F", "#{pane_index}:#{pane_title}")
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("listing panes: %w", err)
-	}
-
-	var paneIdx string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
-			paneIdx = parts[0]
-			break
+// resolveProjectPath finds the path for a project key.
+func resolveProjectPath(projects []ProjectState, projectKey string) string {
+	for _, p := range projects {
+		if p.Key == projectKey {
+			return p.Path
 		}
 	}
-
-	if paneIdx == "" {
-		return fmt.Errorf("pane not found for %s", beadName)
-	}
-
-	// Select the window and pane
-	target := fmt.Sprintf("orc:%s.%s", windowName, paneIdx)
-	exec.Command("tmux", "select-window", "-t", fmt.Sprintf("orc:%s", windowName)).Run()
-	exec.Command("tmux", "select-pane", "-t", target).Run()
-	return nil
+	return ""
 }
