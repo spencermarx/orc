@@ -332,13 +332,9 @@ func (m Model) viewDashboard() string {
 			Padding(0, 1).
 			Render(dashContent + footer)
 
-		rightBorder := m.theme.Border
-		if m.copilotFocused {
-			rightBorder = m.theme.Accent
-		}
 		rightPanel := lipgloss.NewStyle().
 			Width(copilotWidth).Height(m.height - 2).
-			Border(lipgloss.RoundedBorder()).BorderForeground(rightBorder).
+			Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Border).
 			Padding(0, 1).
 			Render(copilotContent)
 
@@ -351,15 +347,11 @@ func (m Model) viewDashboard() string {
 func (m Model) renderCopilotPanel(s viewStyles, width int) string {
 	var cb strings.Builder
 
-	titleStyle := s.bold
-	if m.copilotFocused {
-		titleStyle = lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent)
-	}
-	cb.WriteString(titleStyle.Render("ROOT ORCHESTRATOR") + "\n")
+	cb.WriteString(s.bold.Render("ROOT ORCHESTRATOR") + "\n")
 	cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
 
 	copilotLines := m.copilotOutput
-	maxLines := m.height - 8
+	maxLines := m.height - 10
 	if maxLines < 5 {
 		maxLines = 5
 	}
@@ -375,16 +367,10 @@ func (m Model) renderCopilotPanel(s viewStyles, width int) string {
 		}
 	}
 
-	// Passthrough indicator when focused
-	if m.copilotFocused {
-		cb.WriteString("\n")
-		cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
-		if m.copilotError != "" {
-			cb.WriteString(s.error.Render("✗ " + m.copilotError))
-		} else {
-			cb.WriteString(s.accent.Render("● LIVE") + "  " + s.muted.Render("keystrokes → agent  ") + s.muted.Render("Esc unfocus  Tab close"))
-		}
-	}
+	// Interaction hint
+	cb.WriteString("\n")
+	cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
+	cb.WriteString(s.accent.Render("Tab") + " " + s.muted.Render("attach to agent terminal"))
 
 	return cb.String()
 }
@@ -765,14 +751,12 @@ func (m Model) renderFooter() string {
 	if len(m.approvals) > 0 {
 		keys = append(keys, struct{ key, label string }{"a", fmt.Sprintf("approve(%d)", len(m.approvals))})
 	}
-	tabLabel := "Tab copilot"
-	if m.copilotFocused {
-		tabLabel = "Tab copilot ●"
-	} else if m.copilotVisible {
-		tabLabel = "Tab copilot ✓"
+	copilotLabel := "Tab copilot"
+	if m.copilotVisible {
+		copilotLabel = "Tab attach"
 	}
 	keys = append(keys,
-		struct{ key, label string }{"", tabLabel},
+		struct{ key, label string }{"", copilotLabel},
 		struct{ key, label string }{"?", "help"},
 		struct{ key, label string }{"q", "quit"},
 	)

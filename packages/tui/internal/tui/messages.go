@@ -20,6 +20,11 @@ type tickMsg time.Time
 // splashDoneMsg fires after the splash screen timeout.
 type splashDoneMsg struct{}
 
+// tmuxAttachDoneMsg fires when the user returns from a tmux attach session.
+type tmuxAttachDoneMsg struct {
+	err error
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)

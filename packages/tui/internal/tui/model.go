@@ -48,9 +48,7 @@ type Model struct {
 
 	// Copilot panel (root orchestrator)
 	copilotVisible bool
-	copilotFocused bool     // true = keystrokes forwarded to tmux pane
 	copilotOutput  []string
-	copilotError   string   // error message when keys can't be delivered
 
 	// Splash screen
 	splashDone bool

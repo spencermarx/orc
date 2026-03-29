@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os/exec"
 	"strings"
 	"time"
 
@@ -25,10 +26,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeView = ViewDashboard
 			m.splashDone = true
 			return m, nil
-		}
-		// Copilot passthrough: forward every key directly to tmux
-		if m.copilotFocused {
-			return m.handleCopilotKey(msg)
 		}
 		if m.inputMode {
 			return m.handleInputKey(msg)
@@ -107,6 +104,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tickCmd()
 
+	case tmuxAttachDoneMsg:
+		// User returned from tmux attach — refresh state
+		return m, tickCmd()
+
 	case splashDoneMsg:
 		if m.activeView == ViewSplash {
 			m.activeView = ViewDashboard
@@ -149,16 +150,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Toggle copilot panel: off → visible → focused(passthrough) → off
+	// Copilot panel: off → show panel → attach to tmux (full terminal handoff)
 	case "tab":
 		if !m.copilotVisible {
 			m.copilotVisible = true
-			m.copilotFocused = false
-		} else if !m.copilotFocused {
-			m.copilotFocused = true
 		} else {
-			m.copilotVisible = false
-			m.copilotFocused = false
+			// Attach directly to the root orchestrator's tmux pane.
+			// This suspends BubbleTea and gives the user full interactive
+			// control. They return via tmux detach (prefix+d).
+			return m, tea.ExecProcess(
+				exec.Command("tmux", "attach-session", "-t", "orc"),
+				func(err error) tea.Msg { return tmuxAttachDoneMsg{err: err} },
+			)
 		}
 		return m, nil
 
@@ -203,68 +206,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHalt()
 	case "m":
 		return m.handleSendMessage()
-	}
-
-	return m, nil
-}
-
-// handleCopilotKey forwards keystrokes to the root orchestrator's tmux pane.
-// This is passthrough mode — every key goes directly to the agent CLI.
-func (m Model) handleCopilotKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-
-	// Tab or Esc exit copilot focus
-	switch key {
-	case "tab":
-		m.copilotFocused = false
-		m.copilotVisible = false
-		return m, nil
-	case "esc":
-		m.copilotFocused = false
-		return m, nil
-	}
-
-	// Map BubbleTea keys to tmux send-keys format
-	tmuxKey := ""
-	switch msg.Type {
-	case tea.KeyEnter:
-		tmuxKey = "Enter"
-	case tea.KeyBackspace:
-		tmuxKey = "BSpace"
-	case tea.KeyUp:
-		tmuxKey = "Up"
-	case tea.KeyDown:
-		tmuxKey = "Down"
-	case tea.KeyLeft:
-		tmuxKey = "Left"
-	case tea.KeyRight:
-		tmuxKey = "Right"
-	case tea.KeySpace:
-		tmuxKey = "Space"
-	case tea.KeyCtrlC:
-		tmuxKey = "C-c"
-	case tea.KeyCtrlD:
-		tmuxKey = "C-d"
-	case tea.KeyCtrlL:
-		tmuxKey = "C-l"
-	case tea.KeyRunes:
-		// Regular typed characters — send as literal text
-		if len(msg.Runes) > 0 {
-			if err := sendRawKeyToRoot(string(msg.Runes)); err != nil {
-				m.copilotError = "No root orchestrator running. Press 's' or Enter on a project first."
-			} else {
-				m.copilotError = ""
-			}
-			return m, nil
-		}
-	}
-
-	if tmuxKey != "" {
-		if err := sendRawKeyToRoot(tmuxKey); err != nil {
-			m.copilotError = "No root orchestrator running. Press 's' or Enter on a project first."
-		} else {
-			m.copilotError = ""
-		}
 	}
 
 	return m, nil

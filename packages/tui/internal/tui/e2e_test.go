@@ -90,47 +90,28 @@ func TestE2E_SplashDismissOnTimer(t *testing.T) {
 	}
 }
 
-// ─── COPILOT INPUT ──────────────────────────────────────────────────────────
+// ─── COPILOT ATTACH ─────────────────────────────────────────────────────────
 
-func TestE2E_CopilotInput(t *testing.T) {
+func TestE2E_CopilotAttach(t *testing.T) {
 	m := newTestModel(nil)
 
-	// Tab 1: show copilot
+	// Tab 1: show copilot panel
 	m = sendSpecialKey(m, tea.KeyTab)
-	if !m.copilotVisible || m.copilotFocused {
-		t.Fatal("first Tab: visible=true, focused=false")
-	}
-
-	// Tab 2: focus copilot (passthrough mode)
-	m = sendSpecialKey(m, tea.KeyTab)
-	if !m.copilotFocused {
-		t.Fatal("second Tab: focused=true")
-	}
-
-	// Keys go to tmux (sendRawKeyToRoot) — we can't verify tmux delivery
-	// in unit tests, but we can verify the model state stays focused
-	m = sendKey(m, "h")
-	if !m.copilotFocused {
-		t.Error("typing should keep copilot focused")
-	}
-
-	// Esc unfocuses but keeps visible
-	m = sendSpecialKey(m, tea.KeyEscape)
-	if m.copilotFocused {
-		t.Error("Esc should unfocus copilot")
-	}
 	if !m.copilotVisible {
-		t.Error("Esc should keep copilot visible")
+		t.Fatal("first Tab should show copilot panel")
 	}
 
-	// Re-focus and Tab to close entirely
-	m = sendSpecialKey(m, tea.KeyTab) // focus again
-	if !m.copilotFocused {
-		t.Fatal("Tab should re-focus copilot")
+	// Tab 2: triggers tmux attach (returns a Cmd, not a model change)
+	// In tests without tmux, this produces a Cmd we can't execute,
+	// but the model state shouldn't change — the Cmd handles the attach.
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = result.(Model)
+	if cmd == nil {
+		t.Error("second Tab should return an exec command for tmux attach")
 	}
-	m = sendSpecialKey(m, tea.KeyTab) // close
-	if m.copilotVisible || m.copilotFocused {
-		t.Error("Tab from focused should close everything")
+	// Panel stays visible (it's still shown when user returns from tmux)
+	if !m.copilotVisible {
+		t.Error("copilot should stay visible during attach")
 	}
 }
 
@@ -334,26 +315,16 @@ func TestE2E_CopilotPanel(t *testing.T) {
 		t.Error("copilot panel should show 'Not running' when no tmux session")
 	}
 
-	// Second Tab: focus copilot (passthrough mode)
-	m = sendSpecialKey(m, tea.KeyTab)
-	if !m.copilotFocused {
-		t.Error("second Tab should focus copilot")
+	// Second Tab: triggers tmux attach (Cmd returned)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if cmd == nil {
+		t.Error("second Tab should return tmux attach command")
 	}
 
-	// Third Tab: close copilot entirely
-	m = sendSpecialKey(m, tea.KeyTab)
-	if m.copilotVisible {
-		t.Error("third Tab should hide copilot")
-	}
-	if m.copilotFocused {
-		t.Error("third Tab should unfocus copilot")
-	}
-
-	// Footer should reflect copilot state
-	m = sendSpecialKey(m, tea.KeyTab) // show again
+	// Check footer shows attach hint when panel visible
 	view3 := m.View()
-	if !strings.Contains(view3, "copilot") {
-		t.Error("footer should show copilot key")
+	if !strings.Contains(view3, "attach") {
+		t.Error("footer should show 'attach' when copilot panel is visible")
 	}
 }
 
