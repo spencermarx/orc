@@ -2,9 +2,9 @@
 //
 // Modes:
 //
+//	orc-tui              Launch full BubbleTea TUI dashboard
 //	orc-tui --daemon     Headless mode: watch files, emit events, push tmux status
 //	orc-tui --events     Stream events to stdout (for debugging)
-//	orc-tui              Full TUI (future: BubbleTea dashboard)
 package main
 
 import (
@@ -19,19 +19,20 @@ import (
 	"path/filepath"
 	"syscall"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/thefinalsource/orc/packages/tui/internal/config"
 	"github.com/thefinalsource/orc/packages/tui/internal/daemon"
 	"github.com/thefinalsource/orc/packages/tui/internal/events"
 	"github.com/thefinalsource/orc/packages/tui/internal/tmux"
+	"github.com/thefinalsource/orc/packages/tui/internal/tui"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		// Future: launch full BubbleTea TUI
-		fmt.Fprintln(os.Stderr, "usage: orc-tui [--daemon|--events]")
-		fmt.Fprintln(os.Stderr, "  --daemon    Run headless event daemon")
-		fmt.Fprintln(os.Stderr, "  --events    Stream events to stdout")
-		os.Exit(1)
+		// No arguments: launch full TUI dashboard
+		runTUI()
+		return
 	}
 
 	switch os.Args[1] {
@@ -39,9 +40,47 @@ func main() {
 		runDaemon()
 	case "--events":
 		runEvents()
+	case "--help", "-h":
+		fmt.Println("orc-tui — Event daemon and TUI dashboard for orc")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  orc-tui              Launch TUI dashboard")
+		fmt.Println("  orc-tui --daemon     Run headless event daemon")
+		fmt.Println("  orc-tui --events     Stream events to stdout")
 	default:
 		fmt.Fprintf(os.Stderr, "unknown flag: %s\n", os.Args[1])
 		os.Exit(1)
+	}
+}
+
+func runTUI() {
+	orcRoot := resolveOrcRoot()
+
+	projects, err := config.LoadProjects(orcRoot)
+	if err != nil {
+		log.Fatalf("loading projects: %v", err)
+	}
+
+	cfg, _ := config.LoadConfig(orcRoot)
+	theme := tui.Theme{
+		Accent:   lipgloss.Color(cfg.Theme.Accent),
+		BG:       lipgloss.Color(cfg.Theme.BG),
+		FG:       lipgloss.Color(cfg.Theme.FG),
+		Border:   lipgloss.Color(cfg.Theme.Border),
+		Muted:    lipgloss.Color(cfg.Theme.Muted),
+		Activity: lipgloss.Color(cfg.Theme.Activity),
+		Error:    lipgloss.Color("#f85149"),
+	}
+
+	model := tui.NewModel(projects, theme, orcRoot)
+
+	p := tea.NewProgram(model,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+
+	if _, err := p.Run(); err != nil {
+		log.Fatalf("TUI error: %v", err)
 	}
 }
 
@@ -117,7 +156,7 @@ func runEvents() {
 }
 
 // resolveOrcRoot finds the orc repo root.
-// Priority: ORC_ROOT env var, then walk up from executable.
+// Priority: ORC_ROOT env var, then walk up from current directory.
 func resolveOrcRoot() string {
 	if root := os.Getenv("ORC_ROOT"); root != "" {
 		return root

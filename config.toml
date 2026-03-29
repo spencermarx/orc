@@ -196,7 +196,8 @@ enabled = true                   # Context menu (Prefix+m / right-click) — rol
 [keybindings]
 enabled = false                  # Opt-in — set true to register Alt+ shortcuts
 project = "M-0"                  # Jump to project orchestrator
-dashboard = "M-s"                # Jump to status dashboard
+dashboard = "M-s"                # Jump to status dashboard (tmux window)
+tui = "M-d"                     # Open TUI dashboard popup (requires orc-tui binary)
 prev = "M-["                    # Previous window
 next = "M-]"                    # Next window
 palette = "M-p"                 # Open command palette

@@ -430,6 +430,9 @@ _tmux_ensure_session() {
         fi
       fi
 
+      # TUI dashboard: Prefix+d (always when TUI enabled, requires orc-tui binary)
+      _orc_tui_register_keybinding 2>/dev/null || true
+
       # Help overlay: Prefix+? (always when TUI enabled)
       tmux bind-key -T prefix '?' display-popup -E -w 60% -h 75% -T ' ⚔ Orc Help ' "${ORC_ROOT}/packages/cli/lib/help.sh"
       # Click the help hint in status-right opens help
@@ -1659,6 +1662,48 @@ _orc_tui_stop_daemon() {
   pid="$(cat "$pid_file" 2>/dev/null)" || return 0
   kill "$pid" 2>/dev/null || true
   rm -f "$pid_file"
+}
+
+# Register Prefix+d keybinding to launch TUI dashboard popup.
+_orc_tui_register_keybinding() {
+  local bin
+  bin="$(_orc_tui_bin)" || return 1
+
+  # Prefix+d opens the TUI dashboard as a tmux popup
+  tmux bind-key -T prefix d display-popup -E -w 80% -h 85% \
+    -T ' ⚔ Orc Dashboard ' \
+    "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
+
+  # Also bind Alt+d if keybindings are enabled
+  local kb_enabled
+  kb_enabled="$(_config_get "keybindings.enabled" "false")"
+  if [[ "$kb_enabled" == "true" ]]; then
+    local dashboard_key
+    dashboard_key="$(_config_get "keybindings.dashboard" "M-d")"
+    if [[ -n "$dashboard_key" ]]; then
+      tmux bind-key -n "$dashboard_key" display-popup -E -w 80% -h 85% \
+        -T ' ⚔ Orc Dashboard ' \
+        "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
+    fi
+  fi
+}
+
+# Launch the TUI dashboard popup right now (for initial session).
+_orc_tui_launch_popup() {
+  local bin
+  bin="$(_orc_tui_bin)" || return 1
+
+  # Only launch in tmux
+  [[ -n "${TMUX:-}" ]] || return 1
+
+  # Check if TUI is enabled
+  local tui_enabled
+  tui_enabled="$(_config_get "tui.enabled" "true")"
+  [[ "$tui_enabled" == "true" ]] || return 0
+
+  tmux display-popup -E -w 80% -h 85% \
+    -T ' ⚔ Orc Dashboard ' \
+    "ORC_ROOT='${ORC_ROOT}' '${bin}'" 2>/dev/null || true
 }
 
 # Append a notification to the log. Optionally triggers OS notification.
