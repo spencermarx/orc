@@ -5,12 +5,9 @@
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "orc:install": "bash packages/cli/lib/init.sh",
-    "build": "npx nx run-many -t build",
-    "test": "npx nx run-many -t test",
-    "test:tui": "npx nx test @orc/tui",
-    "test:cli": "npx nx test @orc/cli",
-    "lint": "npx nx run-many -t lint",
-    "build:tui": "npx nx build @orc/tui"
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint"
   },
   "devDependencies": {
     "@nx/js": "^22.6.1",
