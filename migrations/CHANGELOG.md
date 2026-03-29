@@ -26,6 +26,50 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.3.0 — Reimagined TUI Dashboard (2026-03-29)
+
+### New: `[control]` — Autonomy Spectrum
+
+**Fields:**
+- `level` (integer 1–5, default: 3)
+
+**What it does:** Replaces individual `ask_before_*` flags with a single dial:
+1. YOLO — Full autopilot, no approvals
+2. Notify — Auto-proceed, user gets notifications
+3. Approve Major — Pause for goals + delivery, auto for beads (DEFAULT)
+4. Approve All — Pause at every gate
+5. Step-Through — Debug mode, pause after every action
+
+Per-gate overrides in `[approval]` still take precedence when set.
+
+**Default (unconfigured):** Level 3 (Approve Major).
+
+### New: `[hooks]` — Event-Triggered Commands
+
+**Fields:** `on_bead_complete`, `on_goal_delivered`, `on_approval_needed`, `on_blocked`, `on_review_complete`
+
+**What it does:** Runs shell commands when events fire. Supports `{project}`, `{goal}`, `{bead}`, `{status}`, `{message}` placeholders.
+
+**Default (unconfigured):** All empty (disabled).
+
+### New: `keybindings.tui` key
+
+**What it does:** Opens the BubbleTea TUI dashboard popup (default: `M-d`). Requires `keybindings.enabled = true`.
+
+### New command: `orc status --json`
+
+**What it does:** Outputs machine-readable JSON of all project/goal/bead state. For editor extensions and CI consumers.
+
+**Usage:** `orc status --json | jq '.projects[].goals'`
+
+### New: TUI Dashboard (`orc-tui` binary)
+
+**What it does:** Interactive BubbleTea dashboard launched as tmux popup via `Prefix+d`. Five views: Dashboard, Timeline, Agent Focus, Git Topology, Search. Plus interactive approval modals and agent controls (message, halt, take over).
+
+**Setup:** Build with `cd packages/tui && go build -o orc-tui ./cmd/orc-tui/` and place on PATH.
+
+---
+
 ## v0.2.11 — TUI Navigation Layer (2026-03-26)
 
 ### New Capabilities

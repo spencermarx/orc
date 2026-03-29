@@ -15,6 +15,10 @@ type View int
 const (
 	ViewDashboard View = iota
 	ViewTimeline
+	ViewAgentFocus
+	ViewGit
+	ViewSearch
+	ViewApproval
 	ViewHelp
 )
 
@@ -23,18 +27,40 @@ type Model struct {
 	// State
 	projects  []ProjectState
 	attention []AttentionItem
+	approvals []ApprovalRequest
 	timeline  []events.Event
 	width     int
 	height    int
 
 	// Navigation
 	activeView    View
-	cursor        int // cursor position in the active list
+	previousView  View
+	cursor        int
 	expandedGoals map[string]bool
 
+	// Agent Focus state
+	focusedAgent AgentFocusState
+
+	// Git view state
+	gitProject  string // which project to show git for
+	gitBranches []GitBranch
+
+	// Search state
+	searchQuery   string
+	searchResults []SearchResult
+	searchCursor  int
+
+	// Approval state
+	approvalCursor int
+
+	// Text input mode
+	inputMode    bool
+	inputBuffer  string
+	inputAction  string // "search", "send_message"
+
 	// Config
-	theme  Theme
-	orcRoot string
+	theme       Theme
+	orcRoot     string
 	rawProjects []config.Project
 }
 

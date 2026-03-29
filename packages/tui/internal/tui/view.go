@@ -19,6 +19,14 @@ func (m Model) View() string {
 		return m.viewDashboard()
 	case ViewTimeline:
 		return m.viewTimeline()
+	case ViewAgentFocus:
+		return m.viewAgentFocus()
+	case ViewGit:
+		return m.viewGit()
+	case ViewSearch:
+		return m.viewSearch()
+	case ViewApproval:
+		return m.viewApproval()
 	case ViewHelp:
 		return m.viewHelp()
 	default:
@@ -26,49 +34,48 @@ func (m Model) View() string {
 	}
 }
 
-func (m Model) viewDashboard() string {
+// ─── STYLES ──────────────────────────────────────────────────────────────────
+
+func (m Model) styles() viewStyles {
 	t := m.theme
-	w := m.width
-	if w < 20 {
-		w = 80
+	return viewStyles{
+		title: lipgloss.NewStyle().Bold(true).Foreground(t.Accent).PaddingLeft(1),
+		section: lipgloss.NewStyle().Bold(true).Foreground(t.FG).PaddingLeft(1).PaddingTop(1),
+		muted:    lipgloss.NewStyle().Foreground(t.Muted),
+		error:    lipgloss.NewStyle().Foreground(t.Error),
+		accent:   lipgloss.NewStyle().Foreground(t.Accent),
+		activity: lipgloss.NewStyle().Foreground(t.Activity),
+		bold:     lipgloss.NewStyle().Bold(true).Foreground(t.FG),
+		frame: lipgloss.NewStyle().
+			Width(m.width - 2).Height(m.height - 2).
+			Border(lipgloss.RoundedBorder()).BorderForeground(t.Border).
+			Padding(0, 1),
 	}
+}
 
-	// Styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		PaddingLeft(1)
+type viewStyles struct {
+	title, section, muted, error, accent, activity, bold, frame lipgloss.Style
+}
 
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.FG).
-		PaddingLeft(1).
-		PaddingTop(1)
+// ─── DASHBOARD ──────────────────────────────────────────────────────────────
 
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(t.Muted)
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(t.Error)
-
-	accentStyle := lipgloss.NewStyle().
-		Foreground(t.Accent)
-
-	activityStyle := lipgloss.NewStyle().
-		Foreground(t.Activity)
-
+func (m Model) viewDashboard() string {
+	s := m.styles()
 	var b strings.Builder
 
-	// Header
-	header := titleStyle.Render("⚔ Orc Dashboard")
+	// Header with approval badge
+	header := s.title.Render("⚔ Orc Dashboard")
+	if len(m.approvals) > 0 {
+		header += "  " + s.activity.Render(fmt.Sprintf("⚑ %d approvals", len(m.approvals)))
+	}
 	b.WriteString(header + "\n")
 
-	// Projects section
+	// Projects
 	if len(m.projects) == 0 {
-		b.WriteString(sectionStyle.Render("PROJECTS") + "\n")
-		b.WriteString(mutedStyle.Render("  (no projects registered — run 'orc add <key> <path>')") + "\n")
+		b.WriteString(s.section.Render("PROJECTS") + "\n")
+		b.WriteString(s.muted.Render("  (no projects registered — run 'orc add <key> <path>')") + "\n")
 	} else {
-		b.WriteString(sectionStyle.Render("ACTIVE WORK") + "\n")
+		b.WriteString(s.section.Render("ACTIVE WORK") + "\n")
 
 		cursorPos := 0
 		for _, proj := range m.projects {
@@ -76,41 +83,33 @@ func (m Model) viewDashboard() string {
 			for _, g := range proj.Goals {
 				workerCount += len(g.Beads)
 			}
-
 			b.WriteString(fmt.Sprintf("  %s %s\n",
-				accentStyle.Render(proj.Key),
-				mutedStyle.Render(fmt.Sprintf("(%d goals, %d workers)", len(proj.Goals), workerCount))))
+				s.accent.Render(proj.Key),
+				s.muted.Render(fmt.Sprintf("(%d goals, %d workers)", len(proj.Goals), workerCount))))
 
 			for _, goal := range proj.Goals {
 				goalKey := proj.Key + "/" + goal.Name
 				expanded := m.expandedGoals[goalKey]
 				isCursor := cursorPos == m.cursor
 
-				// Goal row
-				indicator := m.statusIndicator(goal.Status)
 				expandIcon := "▸"
 				if expanded {
 					expandIcon = "▾"
 				}
-
 				prefix := "  "
 				if isCursor {
 					prefix = "▶ "
 				}
 
-				elapsed := formatElapsed(goal.Elapsed)
-				goalLine := fmt.Sprintf("%s%s %s (%s) %s %s %s",
+				b.WriteString(fmt.Sprintf("%s%s %s %s %s %s\n",
 					prefix,
-					mutedStyle.Render(expandIcon),
-					accentStyle.Render(goal.Name),
-					mutedStyle.Render(goal.Branch),
-					indicator,
-					mutedStyle.Render(fmt.Sprintf("%d beads", len(goal.Beads))),
-					mutedStyle.Render(elapsed))
-				b.WriteString(goalLine + "\n")
+					s.muted.Render(expandIcon),
+					s.accent.Render(goal.Name),
+					m.statusIndicator(goal.Status),
+					s.muted.Render(fmt.Sprintf("%d beads", len(goal.Beads))),
+					s.muted.Render(formatElapsed(goal.Elapsed))))
 				cursorPos++
 
-				// Bead rows (when expanded)
 				if expanded {
 					for _, bead := range goal.Beads {
 						beadCursor := cursorPos == m.cursor
@@ -118,15 +117,11 @@ func (m Model) viewDashboard() string {
 						if beadCursor {
 							beadPrefix = "   ▶ "
 						}
-
-						beadIndicator := m.statusIndicator(bead.Status)
-						beadElapsed := formatElapsed(bead.Elapsed)
-						beadLine := fmt.Sprintf("%s%s  %s  %s",
+						b.WriteString(fmt.Sprintf("%s%s  %s  %s\n",
 							beadPrefix,
 							bead.Name,
-							beadIndicator,
-							mutedStyle.Render(beadElapsed))
-						b.WriteString(beadLine + "\n")
+							m.statusIndicator(bead.Status),
+							s.muted.Render(formatElapsed(bead.Elapsed))))
 						cursorPos++
 					}
 				}
@@ -134,65 +129,50 @@ func (m Model) viewDashboard() string {
 		}
 	}
 
-	// Attention section
+	// Attention
 	if len(m.attention) > 0 {
-		b.WriteString(sectionStyle.Render(
+		b.WriteString(s.section.Render(
 			fmt.Sprintf("NEEDS ATTENTION %s",
-				errorStyle.Render(fmt.Sprintf("● %d", len(m.attention))))) + "\n")
-
+				s.error.Render(fmt.Sprintf("● %d", len(m.attention))))) + "\n")
 		for _, item := range m.attention {
 			icon := "!"
-			style := errorStyle
-			switch item.Level {
-			case "QUESTION":
+			style := s.error
+			if item.Level == "QUESTION" {
 				icon = "?"
-				style = activityStyle
-			case "DEAD":
+				style = s.activity
+			} else if item.Level == "DEAD" {
 				icon = "✗"
 			}
-
 			b.WriteString(fmt.Sprintf("  %s %s  %s\n",
 				style.Render(icon+" "+item.Level),
-				accentStyle.Render(item.Scope),
-				mutedStyle.Render(truncate(item.Message, 50))))
+				s.accent.Render(item.Scope),
+				s.muted.Render(truncate(item.Message, 50))))
 		}
 	}
 
-	// Footer
 	b.WriteString("\n")
-	footer := m.renderFooter()
-	b.WriteString(footer)
-
-	// Frame it
-	frame := lipgloss.NewStyle().
-		Width(w - 2).
-		Height(m.height - 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Border).
-		Padding(0, 1)
-
-	return frame.Render(b.String())
+	b.WriteString(m.renderFooter())
+	return s.frame.Render(b.String())
 }
 
+// ─── TIMELINE ───────────────────────────────────────────────────────────────
+
 func (m Model) viewTimeline() string {
-	t := m.theme
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		PaddingLeft(1)
-
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(t.Muted)
-
+	s := m.styles()
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("⚔ Timeline") + "\n\n")
+
+	b.WriteString(s.title.Render("⚔ Timeline") + "\n\n")
 
 	if len(m.timeline) == 0 {
-		b.WriteString(mutedStyle.Render("  No events yet. Events will appear here as agents work.") + "\n")
-		b.WriteString(mutedStyle.Render("  Start agents with `orc <project>` to see activity.") + "\n")
+		b.WriteString(s.muted.Render("  No events yet. Events will appear here as agents work.") + "\n")
+		b.WriteString(s.muted.Render("  Start agents with `orc <project>` to see activity.") + "\n")
 	} else {
-		for _, ev := range m.timeline {
+		for i, ev := range m.timeline {
+			isCursor := i == m.cursor
+			prefix := "  "
+			if isCursor {
+				prefix = "▶ "
+			}
 			ts := ev.Timestamp.Format("15:04:05")
 			scope := ev.Project
 			if ev.Goal != "" {
@@ -201,132 +181,403 @@ func (m Model) viewTimeline() string {
 			if ev.Bead != "" {
 				scope += "/" + ev.Bead
 			}
-			b.WriteString(fmt.Sprintf("  %s  %s  %s\n",
-				mutedStyle.Render(ts),
-				lipgloss.NewStyle().Foreground(t.Accent).Render(scope),
-				ev.Type))
+			b.WriteString(fmt.Sprintf("%s%s  %s  %s\n",
+				prefix, s.muted.Render(ts), s.accent.Render(scope), ev.Type))
 		}
 	}
 
 	b.WriteString("\n")
 	b.WriteString(m.renderFooter())
-
-	frame := lipgloss.NewStyle().
-		Width(m.width - 2).
-		Height(m.height - 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Border).
-		Padding(0, 1)
-
-	return frame.Render(b.String())
+	return s.frame.Render(b.String())
 }
 
+// ─── AGENT FOCUS ────────────────────────────────────────────────────────────
+
+func (m Model) viewAgentFocus() string {
+	s := m.styles()
+	af := m.focusedAgent
+	var b strings.Builder
+
+	// Header
+	title := fmt.Sprintf("⚔ Agent: %s", af.BeadName)
+	b.WriteString(s.title.Render(title) + "\n\n")
+
+	// Status bar
+	b.WriteString(fmt.Sprintf("  Status: %s %s    Branch: %s\n",
+		m.statusIndicator(af.Status),
+		s.muted.Render(formatElapsed(af.Elapsed)),
+		s.accent.Render(af.Branch)))
+	b.WriteString(fmt.Sprintf("  Goal: %s    Project: %s\n",
+		s.accent.Render(af.GoalName),
+		s.accent.Render(af.ProjectKey)))
+
+	if af.DiffStat != "" {
+		b.WriteString(fmt.Sprintf("  Diff: %s\n", s.muted.Render(af.DiffStat)))
+	}
+
+	// Live output
+	b.WriteString(s.section.Render("LIVE OUTPUT") + "\n")
+	outputBox := lipgloss.NewStyle().
+		Width(m.width - 8).
+		MaxHeight(m.height / 2).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(m.theme.Border).
+		Padding(0, 1)
+
+	outputLines := af.Output
+	// Show last N lines that fit
+	maxLines := (m.height / 2) - 4
+	if maxLines < 5 {
+		maxLines = 5
+	}
+	if len(outputLines) > maxLines {
+		outputLines = outputLines[len(outputLines)-maxLines:]
+	}
+	outputContent := strings.Join(outputLines, "\n")
+	if outputContent == "" {
+		outputContent = s.muted.Render("(no output captured)")
+	}
+	b.WriteString(outputBox.Render(outputContent) + "\n")
+
+	// Assignment (condensed)
+	if af.Assignment != "" {
+		b.WriteString(s.section.Render("ASSIGNMENT") + "\n")
+		lines := strings.Split(af.Assignment, "\n")
+		for i, line := range lines {
+			if i >= 5 {
+				b.WriteString(s.muted.Render("  ...") + "\n")
+				break
+			}
+			b.WriteString(s.muted.Render("  "+line) + "\n")
+		}
+	}
+
+	// Feedback (if any)
+	if af.Feedback != "" {
+		b.WriteString(s.section.Render("REVIEW FEEDBACK") + "\n")
+		lines := strings.Split(af.Feedback, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "VERDICT:") {
+				if strings.Contains(trimmed, "approved") {
+					b.WriteString("  " + s.accent.Render(trimmed) + "\n")
+				} else {
+					b.WriteString("  " + s.error.Render(trimmed) + "\n")
+				}
+			} else {
+				b.WriteString(s.muted.Render("  "+line) + "\n")
+			}
+		}
+	}
+
+	// Input line
+	if m.inputMode && m.inputAction == "send_message" {
+		b.WriteString("\n")
+		b.WriteString(s.accent.Render("  Send: ") + m.inputBuffer + s.accent.Render("█"))
+	}
+
+	// Footer
+	b.WriteString("\n")
+	footer := m.renderAgentFooter()
+	b.WriteString(footer)
+
+	return s.frame.Render(b.String())
+}
+
+func (m Model) renderAgentFooter() string {
+	keys := []struct{ key, label string }{
+		{"m", "message"},
+		{"T", "take over"},
+		{"x", "halt"},
+		{"Esc", "back"},
+		{"?", "help"},
+		{"q", "quit"},
+	}
+	return m.renderKeybar(keys)
+}
+
+// ─── GIT VIEW ───────────────────────────────────────────────────────────────
+
+func (m Model) viewGit() string {
+	s := m.styles()
+	var b strings.Builder
+
+	b.WriteString(s.title.Render(fmt.Sprintf("⚔ Git: %s", m.gitProject)) + "\n\n")
+
+	if len(m.gitBranches) == 0 {
+		b.WriteString(s.muted.Render("  No goal or work branches found.") + "\n")
+		b.WriteString(s.muted.Render("  Branches appear when goals are created.") + "\n")
+	} else {
+		// Render main line
+		b.WriteString(s.muted.Render("  main ") + s.muted.Render(strings.Repeat("─", 50)) + "\n")
+
+		// Group by goal
+		goalBranches := make(map[string][]GitBranch)
+		var goals []GitBranch
+		for _, br := range m.gitBranches {
+			if br.IsGoal {
+				goals = append(goals, br)
+			} else if br.ParentGoal != "" {
+				goalBranches[br.ParentGoal] = append(goalBranches[br.ParentGoal], br)
+			}
+		}
+
+		for _, goal := range goals {
+			b.WriteString(fmt.Sprintf("    └── %s", s.accent.Render(goal.Name)))
+			if goal.Commits > 0 {
+				b.WriteString(s.muted.Render(fmt.Sprintf(" ── %d commits", goal.Commits)))
+			}
+			b.WriteString("\n")
+
+			// Extract goal name without prefix for lookup
+			goalKey := goal.Name
+			for _, prefix := range []string{"feat/", "fix/", "task/"} {
+				goalKey = strings.TrimPrefix(goalKey, prefix)
+			}
+
+			beadBranches := goalBranches[goalKey]
+			for i, br := range beadBranches {
+				connector := "├"
+				if i == len(beadBranches)-1 {
+					connector = "└"
+				}
+
+				status := s.accent.Render("● active")
+				if br.Status == "merged" {
+					status = s.accent.Render("✓ merged")
+				}
+
+				b.WriteString(fmt.Sprintf("          %s── %s %s %s\n",
+					connector,
+					s.muted.Render(br.Name),
+					s.muted.Render(fmt.Sprintf("%d commits", br.Commits)),
+					status))
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(m.renderFooter())
+	return s.frame.Render(b.String())
+}
+
+// ─── SEARCH ─────────────────────────────────────────────────────────────────
+
+func (m Model) viewSearch() string {
+	s := m.styles()
+	var b strings.Builder
+
+	b.WriteString(s.title.Render("⚔ Search") + "\n\n")
+
+	// Search input
+	cursor := ""
+	if m.inputMode {
+		cursor = s.accent.Render("█")
+	}
+	b.WriteString(fmt.Sprintf("  %s %s%s\n\n",
+		s.accent.Render(">"),
+		m.searchQuery,
+		cursor))
+
+	if len(m.searchResults) == 0 {
+		if m.searchQuery != "" {
+			b.WriteString(s.muted.Render("  No results found.") + "\n")
+		} else {
+			b.WriteString(s.muted.Render("  Type to search across projects, goals, beads, and events.") + "\n")
+		}
+	} else {
+		// Group by category
+		categories := []string{"Project", "Goal", "Bead", "Attention"}
+		for _, cat := range categories {
+			var catResults []SearchResult
+			for _, r := range m.searchResults {
+				if r.Category == cat {
+					catResults = append(catResults, r)
+				}
+			}
+			if len(catResults) == 0 {
+				continue
+			}
+
+			b.WriteString(s.section.Render(fmt.Sprintf("%s (%d)", cat, len(catResults))) + "\n")
+			for _, r := range catResults {
+				b.WriteString(fmt.Sprintf("    %s  %s\n",
+					s.accent.Render(r.Scope),
+					s.muted.Render(r.Text)))
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	keys := []struct{ key, label string }{
+		{"Enter", "select"},
+		{"Esc", "back"},
+		{"q", "quit"},
+	}
+	b.WriteString(m.renderKeybar(keys))
+
+	return s.frame.Render(b.String())
+}
+
+// ─── APPROVAL ───────────────────────────────────────────────────────────────
+
+func (m Model) viewApproval() string {
+	s := m.styles()
+	var b strings.Builder
+
+	b.WriteString(s.title.Render("⚔ Pending Approvals") + "\n\n")
+
+	if len(m.approvals) == 0 {
+		b.WriteString(s.muted.Render("  No pending approvals.") + "\n")
+	} else {
+		for i, req := range m.approvals {
+			isCursor := i == m.approvalCursor
+			prefix := "  "
+			if isCursor {
+				prefix = "▶ "
+			}
+
+			gateStyle := s.activity
+			if req.Gate == "merge" || req.Gate == "delivery" {
+				gateStyle = s.error
+			}
+
+			b.WriteString(fmt.Sprintf("%s%s  %s/%s\n",
+				prefix,
+				gateStyle.Render(strings.ToUpper(req.Gate)),
+				s.accent.Render(req.Project),
+				s.accent.Render(req.Goal)))
+
+			if req.Message != "" {
+				b.WriteString(fmt.Sprintf("    %s\n", s.muted.Render(req.Message)))
+			}
+
+			if len(req.Beads) > 0 {
+				b.WriteString(fmt.Sprintf("    Beads: %s\n",
+					s.muted.Render(strings.Join(req.Beads, ", "))))
+			}
+
+			b.WriteString("\n")
+		}
+	}
+
+	keys := []struct{ key, label string }{
+		{"a", "approve"},
+		{"r", "reject"},
+		{"Esc", "back"},
+	}
+	b.WriteString(m.renderKeybar(keys))
+
+	return s.frame.Render(b.String())
+}
+
+// ─── HELP ───────────────────────────────────────────────────────────────────
+
 func (m Model) viewHelp() string {
-	t := m.theme
+	s := m.styles()
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		PaddingLeft(1)
-
-	keyStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Width(12)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(t.FG)
-
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Activity).
-		PaddingTop(1).
-		PaddingLeft(1)
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent).Width(14)
+	descStyle := lipgloss.NewStyle().Foreground(m.theme.FG)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("⚔ Orc Help") + "\n")
+	b.WriteString(s.title.Render("⚔ Orc Help") + "\n")
 
-	b.WriteString(sectionStyle.Render("Views") + "\n")
+	b.WriteString(s.section.Render("Views") + "\n")
 	for _, kv := range []struct{ key, desc string }{
 		{"d", "Dashboard (home)"},
 		{"t", "Timeline (activity feed)"},
+		{"g", "Git branch topology"},
+		{"/", "Search across all data"},
+		{"a", "Pending approvals"},
 		{"?", "Toggle this help"},
-		{"Esc", "Back to dashboard"},
+		{"Esc", "Back to previous view"},
 		{"q", "Quit TUI (agents keep running)"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
 
-	b.WriteString(sectionStyle.Render("Navigation") + "\n")
+	b.WriteString(s.section.Render("Navigation") + "\n")
 	for _, kv := range []struct{ key, desc string }{
 		{"j / ↓", "Move down"},
 		{"k / ↑", "Move up"},
 		{"Space", "Expand / collapse goal"},
-		{"Enter", "Expand / collapse goal"},
-		{"T", "Take over — drop into raw tmux pane"},
+		{"Enter", "Drill into selected item"},
+		{"T", "Take over — switch to raw tmux pane"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
 
-	b.WriteString(sectionStyle.Render("Quick Reference") + "\n")
-	b.WriteString(descStyle.Render("  The dashboard shows all active work across projects.\n"))
-	b.WriteString(descStyle.Render("  Goals expand to show individual beads (engineers).\n"))
-	b.WriteString(descStyle.Render("  The NEEDS ATTENTION section shows blocked/dead agents.\n"))
-	b.WriteString(descStyle.Render("  Press T to drop into the raw tmux pane for any agent.\n"))
-	b.WriteString(descStyle.Render("  Agents continue running when you quit the TUI.\n"))
+	b.WriteString(s.section.Render("Agent Controls (Agent Focus view)") + "\n")
+	for _, kv := range []struct{ key, desc string }{
+		{"m", "Send message to agent"},
+		{"x", "Halt agent (with confirmation)"},
+		{"T", "Take over — switch to raw tmux pane"},
+	} {
+		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
+	}
 
-	frame := lipgloss.NewStyle().
-		Width(m.width - 2).
-		Height(m.height - 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Border).
-		Padding(0, 1)
+	b.WriteString(s.section.Render("Approvals") + "\n")
+	for _, kv := range []struct{ key, desc string }{
+		{"a", "Approve selected / show approvals"},
+		{"r", "Reject selected"},
+	} {
+		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
+	}
 
-	return frame.Render(b.String())
+	b.WriteString("\n")
+	b.WriteString(descStyle.Render("  Agents continue running when you quit the TUI.") + "\n")
+	b.WriteString(descStyle.Render("  Press T to take over any agent in its raw tmux pane.") + "\n")
+
+	return s.frame.Render(b.String())
 }
 
-func (m Model) renderFooter() string {
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Muted)
-	accentStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Accent)
+// ─── FOOTER / KEY BAR ───────────────────────────────────────────────────────
 
+func (m Model) renderFooter() string {
 	keys := []struct{ key, label string }{
 		{"d", "dashboard"},
 		{"t", "timeline"},
-		{"Space", "expand"},
-		{"T", "tmux"},
-		{"?", "help"},
-		{"q", "quit"},
+		{"g", "git"},
+		{"/", "search"},
 	}
+	if len(m.approvals) > 0 {
+		keys = append(keys, struct{ key, label string }{"a", fmt.Sprintf("approvals(%d)", len(m.approvals))})
+	}
+	keys = append(keys,
+		struct{ key, label string }{"T", "tmux"},
+		struct{ key, label string }{"?", "help"},
+		struct{ key, label string }{"q", "quit"},
+	)
+	return m.renderKeybar(keys)
+}
+
+func (m Model) renderKeybar(keys []struct{ key, label string }) string {
+	accentStyle := lipgloss.NewStyle().Foreground(m.theme.Accent)
+	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
 
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, accentStyle.Render(k.key)+" "+mutedStyle.Render(k.label))
 	}
-
 	return mutedStyle.Render("  ") + strings.Join(parts, mutedStyle.Render("  "))
 }
 
-func (m Model) statusIndicator(status string) string {
-	accentStyle := lipgloss.NewStyle().Foreground(m.theme.Accent)
-	activityStyle := lipgloss.NewStyle().Foreground(m.theme.Activity)
-	errorStyle := lipgloss.NewStyle().Foreground(m.theme.Error)
-	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
+// ─── HELPERS ────────────────────────────────────────────────────────────────
 
+func (m Model) statusIndicator(status string) string {
 	switch {
 	case strings.HasPrefix(status, "working"):
-		return accentStyle.Render("● working")
+		return lipgloss.NewStyle().Foreground(m.theme.Accent).Render("● working")
 	case strings.HasPrefix(status, "review"):
-		return activityStyle.Render("✓ review")
+		return lipgloss.NewStyle().Foreground(m.theme.Activity).Render("✓ review")
 	case strings.HasPrefix(status, "blocked"):
-		return errorStyle.Render("✗ blocked")
+		return lipgloss.NewStyle().Foreground(m.theme.Error).Render("✗ blocked")
 	case strings.HasPrefix(status, "done"):
-		return accentStyle.Render("✓ done")
+		return lipgloss.NewStyle().Foreground(m.theme.Accent).Render("✓ done")
 	case status == "unknown" || status == "":
-		return errorStyle.Render("✗ dead")
+		return lipgloss.NewStyle().Foreground(m.theme.Error).Render("✗ dead")
 	default:
-		return mutedStyle.Render("? " + status)
+		return lipgloss.NewStyle().Foreground(m.theme.Muted).Render("? " + status)
 	}
 }
 

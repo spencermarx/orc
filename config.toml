@@ -171,6 +171,30 @@ strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrator
                              # e.g., "Move Jira tickets to In Development when goals start"
                              # empty = do not touch tickets
 
+# ─── CONTROL SPECTRUM ─────────────────────────────────────────────────────────
+# Single dial controlling the autonomy level. Maps to specific gate behaviors.
+# Per-gate overrides in [approval] take precedence when set.
+#
+#   1 = YOLO           Full autopilot. No approvals, no notifications.
+#   2 = Notify         Auto-proceed with notifications.
+#   3 = Approve Major  Pause for goals + delivery. Auto for beads. (DEFAULT)
+#   4 = Approve All    Pause at every gate. Human confirms each step.
+#   5 = Step-Through   Debug mode. Pause after every agent action.
+
+[control]
+level = 3
+
+# ─── EVENT HOOKS ──────────────────────────────────────────────────────────────
+# Shell commands triggered by events. Placeholders: {project}, {goal}, {bead},
+# {status}, {message}. Commands run asynchronously. Empty = disabled.
+
+[hooks]
+on_bead_complete = ""            # e.g., "notify-send 'Bead complete: {bead}'"
+on_goal_delivered = ""           # e.g., "slack-notify '#eng' 'Goal: {goal}'"
+on_approval_needed = ""          # e.g., "say 'Approval needed for {goal}'"
+on_blocked = ""                  # e.g., "notify-send 'BLOCKED: {bead} — {message}'"
+on_review_complete = ""          # e.g., "echo '{bead} review done' >> ~/orc.log"
+
 # ─── TUI NAVIGATION LAYER ────────────────────────────────────────────────────
 # Controls the navigation overlay on top of tmux: breadcrumbs, context menus,
 # command palette, and help hints. All features are additive — they enhance

@@ -9,6 +9,51 @@ fi
 
 set -euo pipefail
 
+# ── JSON mode (for machine consumers) ─────────────────────────────────────
+
+if [[ "${1:-}" == "--json" ]]; then
+  keys="$(_project_keys)"
+  printf '{"projects":['
+  first_proj=true
+  for key in $keys; do
+    path="$(_project_path "$key")"
+    $first_proj || printf ','
+    first_proj=false
+
+    printf '{"key":"%s","path":"%s","goals":[' "$key" "$path"
+    # Scan goals
+    first_goal=true
+    if [[ -d "$path/.worktrees/.orc-state/goals" ]]; then
+      for gd in "$path/.worktrees/.orc-state/goals"/*/; do
+        [[ -d "$gd" ]] || continue
+        goal_name="$(basename "$gd")"
+        gs="$(head -1 "$gd/.worker-status" 2>/dev/null || echo "unknown")"
+        $first_goal || printf ','
+        first_goal=false
+        printf '{"name":"%s","status":"%s","beads":[' "$goal_name" "$gs"
+        # Scan beads for this goal
+        first_bead=true
+        for d in "$path/.worktrees"/*/; do
+          [[ -d "$d" ]] || continue
+          bead_name="$(basename "$d")"
+          [[ "$bead_name" == .* ]] && continue
+          wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+          if [[ "$wt_branch" == work/"$goal_name"/* ]]; then
+            status="$(_worker_status "$d")"
+            $first_bead || printf ','
+            first_bead=false
+            printf '{"name":"%s","status":"%s","branch":"%s"}' "$bead_name" "$status" "$wt_branch"
+          fi
+        done
+        printf ']}'
+      done
+    fi
+    printf ']}'
+  done
+  printf ']}\n'
+  exit 0
+fi
+
 # ── Breadcrumb mode (for tmux status-left) ────────────────────────────────
 
 if [[ "${1:-}" == "--breadcrumb" ]]; then
