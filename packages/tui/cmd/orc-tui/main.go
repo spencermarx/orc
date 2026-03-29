@@ -1,13 +1,13 @@
-// orc-tui is the terminal dashboard for orc.
+// orc-tui is the terminal dashboard for orc — the default experience when
+// users run `orc` with no arguments.
 //
-// This is the PRIMARY user interface for orc. It owns the terminal completely
-// (like lazygit/k9s/htop) — no tmux knowledge required. Agents run as
-// background processes managed by the orc CLI; this TUI reads their state
+// It owns the terminal completely (like lazygit/k9s/htop) — no tmux knowledge
+// required. Agents run as background processes; this TUI reads their state
 // from the filesystem and presents a unified view.
 //
 // Modes:
 //
-//	orc-tui              Launch full-screen TUI dashboard (DEFAULT)
+//	orc-tui              Launch full-screen TUI dashboard (DEFAULT via `orc`)
 //	orc-tui --daemon     Headless mode: watch files, emit events to socket
 //	orc-tui --events     Stream events to stdout (for debugging/scripting)
 //	orc-tui --status     Print one-line status summary (for shell prompts)
@@ -48,13 +48,13 @@ func main() {
 	case "--status":
 		runStatusLine()
 	case "--help", "-h":
-		fmt.Println("orc-tui — Terminal dashboard for orc agent orchestration")
+		fmt.Println("orc — Terminal dashboard for agent orchestration")
 		fmt.Println()
 		fmt.Println("Usage:")
-		fmt.Println("  orc-tui              Launch full-screen dashboard")
-		fmt.Println("  orc-tui --daemon     Run headless event daemon")
-		fmt.Println("  orc-tui --events     Stream events to stdout")
-		fmt.Println("  orc-tui --status     One-line status (for shell prompts)")
+		fmt.Println("  orc                  Launch full-screen dashboard (default)")
+		fmt.Println("  orc --daemon         Run headless event daemon")
+		fmt.Println("  orc --events         Stream events to stdout")
+		fmt.Println("  orc --status         One-line status (for shell prompts)")
 		fmt.Println()
 		fmt.Println("The TUI is the primary interface for orc. It shows all agent")
 		fmt.Println("activity, handles approvals, and provides full control over")
@@ -158,7 +158,7 @@ func runEvents() {
 	conn, err := net.Dial("unix", sock)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot connect to event daemon at %s: %v\n", sock, err)
-		fmt.Fprintln(os.Stderr, "is the daemon running? start it with: orc-tui --daemon")
+		fmt.Fprintln(os.Stderr, "is the daemon running? the TUI starts one automatically")
 		os.Exit(1)
 	}
 	defer conn.Close()

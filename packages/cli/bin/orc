@@ -22,7 +22,7 @@ _show_help() {
 orc v${ORC_VERSION} — Multi-project agent orchestration
 
 Usage:
-  orc                             Root orchestrator (create or attach)
+  orc                             Launch TUI dashboard (default)
   orc <project>                   Project orchestrator (create or attach)
   orc <project> <bead>            Attach to worktree (engineering plane)
 
@@ -32,6 +32,7 @@ Admin:
   remove <key>                    Unregister a project
   list                            Show registered projects
   status                          Dashboard: all projects, all workers
+  start [project]                 Launch orchestrator session (root or project)
   halt <project> <bead>           Stop an engineer
   teardown [project] [bead]       Hierarchical cleanup
   config [project]                Open config in \$EDITOR
@@ -74,33 +75,18 @@ for arg in "$@"; do
 done
 set -- "${args[@]+"${args[@]}"}"
 
-# ── No arguments → root orchestrator (with CWD detection) ──────────────────
+# ── No arguments → launch TUI dashboard ────────────────────────────────────
 
 if [[ $# -eq 0 ]]; then
-  # CWD-aware: if inside a registered project, offer to open it
-  detected="$(_detect_project_from_cwd)"
-  if [[ -n "$detected" ]]; then
-    while true; do
-      printf '%s' "[orc] You're inside project '$detected'. Start at project level? (n = root orchestrator) [Y/n] "
-      read -r answer
-      case "$answer" in
-        [Yy]|"")
-          source "$LIB_DIR/start.sh"
-          orc_start "$detected"
-          exit "$EXIT_OK"
-          ;;
-        [Nn])
-          break
-          ;;
-        *)
-          echo "[orc] Please enter Y or N."
-          ;;
-      esac
-    done
-  fi
-  source "$LIB_DIR/start.sh"
-  orc_start
-  exit "$EXIT_OK"
+  bin="$(_orc_tui_bin 2>/dev/null)" || {
+    _error "TUI binary not found. Build it with:"
+    _error "  cd $ORC_ROOT/packages/tui && go build -o orc-tui ./cmd/orc-tui/"
+    _info "Falling back to root orchestrator..."
+    source "$LIB_DIR/start.sh"
+    orc_start
+    exit "$EXIT_OK"
+  }
+  ORC_ROOT="$ORC_ROOT" exec "$bin"
 fi
 
 # ── Flags ───────────────────────────────────────────────────────────────────

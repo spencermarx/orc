@@ -28,6 +28,20 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ## v0.3.0 — Reimagined TUI Dashboard (2026-03-29)
 
+### BREAKING CHANGES
+
+### `orc` (no args) → TUI dashboard — Semantic Migration
+
+**Removed:** `orc` with no arguments no longer launches the root orchestrator tmux session.
+
+**Replacement:** `orc` now launches the full-screen TUI dashboard. To launch the root orchestrator session directly, use `orc start`.
+
+**Why:** The TUI is now the primary interface — users should never need tmux expertise.
+
+**Migration:** Replace `orc` (when used to start root orchestrator) with `orc start`. If the TUI binary is not built yet, `orc` falls back to the old behavior automatically.
+
+**Classification:** Semantic — workflow change.
+
 ### New: `[control]` — Autonomy Spectrum
 
 **Fields:**
