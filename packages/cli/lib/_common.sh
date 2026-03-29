@@ -309,15 +309,16 @@ _tmux_ensure_session() {
   tui_enabled="$(_config_get "tui.enabled" "true")"
 
   if [[ "$theme_enabled" == "true" ]]; then
-    local accent bg fg border muted activity
+    local accent secondary bg fg border muted activity error
     accent="$(_config_get "theme.accent" "#00ff88")"
+    secondary="$(_config_get "theme.secondary" "#00cc6a")"
     bg="$(_config_get "theme.bg" "#0d1117")"
-    fg="$(_config_get "theme.fg" "#8b949e")"
-    border="$(_config_get "theme.border" "#30363d")"
-    muted="$(_config_get "theme.muted" "#6e7681")"
-    activity="$(_config_get "theme.activity" "#d29922")"
+    fg="$(_config_get "theme.fg" "#e6edf3")"
+    border="$(_config_get "theme.border" "#1a3a2a")"
+    muted="$(_config_get "theme.muted" "#3b5249")"
+    activity="$(_config_get "theme.activity" "#d4a017")"
+    error="$(_config_get "theme.error" "#f85149")"
     local tab_bg="#161b22"
-    local error="#f85149"
 
     # Status bar
     tmux set-option -t "$ORC_TMUX_SESSION" status-style "bg=${bg},fg=${fg}"
@@ -352,8 +353,15 @@ _tmux_ensure_session() {
     fi
     tmux set-option -t "$ORC_TMUX_SESSION" status-left "$status_left"
 
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 100
+    # Status-right: health summary + optional hub hint + version
+    local hub_hint=""
+    if [[ "$(_config_get "hub.enabled" "false")" == "true" ]]; then
+      local hub_key_display
+      hub_key_display="$(_config_get "hub.keybinding" "C-o" | sed 's/C-/^/')"
+      hub_hint=" #[fg=${border}]│ #[fg=${accent}]${hub_key_display} hub"
+    fi
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null)${hub_hint} #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 120
 
     # ── Window tabs ──
     if [[ "$tui_enabled" == "true" ]]; then
@@ -371,10 +379,10 @@ _tmux_ensure_session() {
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-separator "#[fg=${border}]│"
     tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-activity-style "fg=${activity}"
 
-    # Pane borders — role-aware icons and colors
+    # Pane borders — role-aware icons and colors (green design system)
     tmux set-option -t "$ORC_TMUX_SESSION" pane-border-style "fg=${border}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-active-border-style "fg=${accent}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#{pane_title} "
+    tmux set-option -t "$ORC_TMUX_SESSION" pane-active-border-style "fg=${secondary}"
+    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${accent}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#{pane_title} "
 
     # Message bar
     tmux set-option -t "$ORC_TMUX_SESSION" message-style "bg=${accent},fg=${bg},bold"
@@ -426,6 +434,19 @@ _tmux_ensure_session() {
       # Click the help hint in status-right opens help
       if [[ "$mouse_enabled" == "true" ]]; then
         tmux bind-key -n MouseUp1StatusRight display-popup -E -w 60% -h 75% -T ' ⚔ Orc Help ' "${ORC_ROOT}/packages/cli/lib/help.sh"
+      fi
+
+      # Hub keybinding: Ctrl-o to return to Hub pane (when hub enabled)
+      local hub_enabled
+      hub_enabled="$(_config_get "hub.enabled" "false")"
+      if [[ "$hub_enabled" == "true" ]]; then
+        local hub_key
+        hub_key="$(_config_get "hub.keybinding" "C-o")"
+        # Find the Hub pane (pane with @orc_id starting with "hub:")
+        # and bind the key to select it. Falls back to pane 0 of the orc window.
+        tmux bind-key -n "$hub_key" run-shell \
+          "tmux select-pane -t \$(tmux list-panes -s -t ${ORC_TMUX_SESSION} -F '#{pane_id}:#{@orc_id}' 2>/dev/null | grep ':hub:' | head -1 | cut -d: -f1) 2>/dev/null || tmux select-window -t ${ORC_TMUX_SESSION}:orc" \
+          2>/dev/null || true
       fi
 
       # Keybindings: Alt+ shortcuts (opt-in)
@@ -1083,6 +1104,34 @@ _tmux_split_with_agent() {
   min_w="$(_pane_overflow_min_width "$project_path")"
   min_h="$(_pane_overflow_min_height "$project_path")"
   _pane_registry_add "$window" "$new_pane" "$pane_title" "$min_w" "$min_h"
+
+  # ── Agent header pane (optional chrome) ────────────────────────────────────
+  local hub_headers
+  hub_headers="$(_config_get "hub.agent_headers" "true" "$project_path")"
+  if [[ "$hub_headers" == "true" ]]; then
+    # Extract bead ID and title from pane_title ("eng: bd-a1b2 — Some Title")
+    local header_bead header_title header_role
+    header_role="${pane_title%%:*}"
+    header_bead="$(echo "$pane_title" | sed -n 's/^[^:]*: *\([^ ]*\).*/\1/p')"
+    header_title="$(echo "$pane_title" | sed -n 's/^[^—]*— *//p')"
+
+    # Split vertically above the agent pane to create a 2-row header
+    local header_pane_target
+    header_pane_target="$(_tmux_target "$window" "$new_pane")"
+    tmux split-window -vb -l 2 -t "$header_pane_target" \
+      "${ORC_ROOT}/packages/cli/lib/header.sh \
+        --bead=${header_bead:-unknown} \
+        --worktree=${working_dir} \
+        --role=${header_role:-eng} \
+        --title='${header_title:-}'" 2>/dev/null || true
+
+    # Lock the header pane so it persists even if the script exits
+    local header_idx
+    header_idx="$(tmux display-message -t "$header_pane_target" -p '#{pane_index}' 2>/dev/null || true)"
+    if [[ -n "$header_idx" ]]; then
+      tmux set-option -p -t "$(_tmux_target "$window" "$header_idx")" remain-on-exit on 2>/dev/null || true
+    fi
+  fi
 
   # Apply goal-window layout (main-vertical with 60% pane 0) and check constraints
   _tmux_apply_goal_layout "$window"

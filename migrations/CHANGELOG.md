@@ -26,6 +26,47 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.12 — Hub + Agent Chrome + Green Design System (2026-03-29)
+
+### New: `[hub]` — Hub Sidebar Configuration
+
+**Fields:**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Hub sidebar in all tmux windows |
+| `width` | integer | `30` | Hub sidebar width in columns |
+| `keybinding` | string | `"C-o"` | Universal key to return focus to Hub |
+| `agent_headers` | boolean | `true` | Show 2-row header panes above agent panes |
+| `auto_sidebar` | boolean | `true` | Auto-create Hub sidebar in new windows |
+
+**What it does:** Enables a rich TUI sidebar companion pane in every tmux window. Provides hierarchical navigation, real-time status, hub-level actions (approve/dispatch/reject), and copilot chat. `Ctrl-o` (configurable) returns focus to the Hub from any pane.
+
+**Default (unconfigured):** Hub is disabled. Existing TUI layer (palette, menu, breadcrumbs) continues working.
+
+**Setup:** Set `hub.enabled = true` in `config.local.toml` to opt in.
+
+### New: `[theme]` fields — Green Design System
+
+**New fields:**
+| Field | Default | Description |
+|-------|---------|-------------|
+| `secondary` | `"#00cc6a"` | Muted green for chrome and borders |
+| `error` | `"#f85149"` | Red for blocked/failed states |
+
+**Updated defaults:**
+| Field | Old Default | New Default |
+|-------|-------------|-------------|
+| `fg` | `"#8b949e"` | `"#e6edf3"` (higher contrast) |
+| `border` | `"#30363d"` | `"#1a3a2a"` (green-tinted) |
+| `muted` | `"#6e7681"` | `"#3b5249"` (dim green) |
+| `activity` | `"#d29922"` | `"#d4a017"` (amber, slight adjustment) |
+
+**Why:** Unified green design system for visual cohesion across Hub, header panes, borders, and status bar.
+
+**Migration:** Run `orc doctor --fix` to add new fields. Existing custom theme values are preserved.
+
+---
+
 ## v0.2.11 — TUI Navigation Layer (2026-03-26)
 
 ### New Capabilities

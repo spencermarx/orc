@@ -171,6 +171,18 @@ strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrator
                              # e.g., "Move Jira tickets to In Development when goals start"
                              # empty = do not touch tickets
 
+# ─── HUB ─────────────────────────────────────────────────────────────────────
+# The Hub is a companion sidebar TUI that provides hierarchical navigation,
+# real-time status, hub-level actions, and copilot chat. It runs in a tmux
+# pane alongside agent panes — never intercepts or bridges agent I/O.
+
+[hub]
+enabled = false                  # Master toggle — true enables Hub sidebar in all windows
+width = 30                       # Hub sidebar width in columns
+keybinding = "C-o"               # Universal key to return focus to Hub (shown in status bar)
+agent_headers = true             # Show 2-row header panes above each agent pane
+auto_sidebar = true              # Auto-create Hub sidebar in new windows (companion pane)
+
 # ─── TUI NAVIGATION LAYER ────────────────────────────────────────────────────
 # Controls the navigation overlay on top of tmux: breadcrumbs, context menus,
 # command palette, and help hints. All features are additive — they enhance
@@ -215,9 +227,11 @@ command = ""                 # empty = built-in fallback (watch bd list)
 [theme]
 enabled = true               # false = respect user's tmux theme, only set functional options
 mouse = true                 # false = don't override mouse setting (only applies when themed)
-accent = "#00ff88"            # primary accent (status bar, active borders, current window)
-bg = "#0d1117"                # status bar background
-fg = "#8b949e"                # status bar text
-border = "#30363d"            # inactive pane/window borders
-muted = "#6e7681"             # de-emphasized text (version, separators)
-activity = "#d29922"          # window activity highlight
+accent = "#00ff88"            # primary accent (neon green — active, healthy, current)
+secondary = "#00cc6a"         # secondary accent (muted green — chrome, borders)
+bg = "#0d1117"                # surface background (dark)
+fg = "#e6edf3"               # primary text (high contrast)
+border = "#1a3a2a"            # pane/window borders (dark green)
+muted = "#3b5249"             # de-emphasized text (dim green — inactive, done)
+activity = "#d4a017"          # attention needed (amber — review, question)
+error = "#f85149"             # blocked, failed, error (red)

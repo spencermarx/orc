@@ -54,14 +54,21 @@ keybindings.next
 keybindings.palette
 keybindings.menu
 keybindings.help
+hub.enabled
+hub.width
+hub.keybinding
+hub.agent_headers
+hub.auto_sidebar
 theme.enabled
 theme.mouse
 theme.accent
+theme.secondary
 theme.bg
 theme.fg
 theme.border
 theme.muted
 theme.activity
+theme.error
 "
 
 # Migration mapping: old_field=new_field|classification (one per line)
