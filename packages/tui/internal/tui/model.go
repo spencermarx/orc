@@ -42,9 +42,6 @@ type Model struct {
 	gitProject  string // which project to show git for
 	gitBranches []GitBranch
 
-	// Approval state
-	approvalCursor int
-
 	// Control level (session override)
 	controlLevel ControlLevel
 
@@ -54,6 +51,10 @@ type Model struct {
 
 	// Notification dedup (scope -> true for items already notified)
 	notifiedItems map[string]bool
+
+	// Cached view data (computed in Update, read in View)
+	beadSnippets map[string][]string  // "project/bead" -> last 2 lines
+	goalSummaries map[string]*GoalSummary // "project/goal" -> summary or nil
 
 	// Session recovery
 	recoveryAgentCount int  // agents found on startup
@@ -132,6 +133,8 @@ func NewModel(projects []config.Project, theme Theme, orcRoot string) Model {
 		expandedGoals: make(map[string]bool),
 		controlLevel:  ControlApproveAll, // default: Level 4
 		notifiedItems: make(map[string]bool),
+		beadSnippets:  make(map[string][]string),
+		goalSummaries: make(map[string]*GoalSummary),
 		theme:         theme,
 		orcRoot:       orcRoot,
 		rawProjects:   projects,

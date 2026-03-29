@@ -3,6 +3,7 @@ package tui
 import (
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // sendDesktopNotification sends a native desktop notification.
@@ -13,8 +14,10 @@ func sendDesktopNotification(title, body string) {
 		// Try notify-send (most Linux desktops)
 		exec.Command("notify-send", "-a", "Orc", title, body).Run()
 	case "darwin":
-		// macOS native notification via osascript
-		script := `display notification "` + body + `" with title "` + title + `"`
+		// Escape double quotes and backslashes to prevent AppleScript injection
+		safeBody := strings.ReplaceAll(strings.ReplaceAll(body, `\`, `\\`), `"`, `\"`)
+		safeTitle := strings.ReplaceAll(strings.ReplaceAll(title, `\`, `\\`), `"`, `\"`)
+		script := `display notification "` + safeBody + `" with title "` + safeTitle + `"`
 		exec.Command("osascript", "-e", script).Run()
 	}
 	// Windows/other: silently skip

@@ -140,8 +140,8 @@ func (m Model) viewDashboard() string {
 					s.muted.Render(fmt.Sprintf("%d beads", len(goal.Beads))),
 					s.muted.Render(formatElapsed(goal.Elapsed))))
 
-				// Goal completion summary
-				if summary := ComputeGoalSummary(proj, goal); summary != nil {
+				// Goal completion summary (cached from tick)
+				if summary := m.goalSummaries[goalKey]; summary != nil {
 					b.WriteString(fmt.Sprintf("      %s\n", s.accent.Render(summary.FormatSummary())))
 				}
 				cursorPos++
@@ -164,11 +164,9 @@ func (m Model) viewDashboard() string {
 							m.statusIndicator(bead.Status),
 							s.muted.Render(formatElapsed(bead.Elapsed))))
 
-						// Live output snippet (2 lines)
-						snippet := readAgentLog(proj.Path, bead.Name)
-						if len(snippet) > 2 {
-							snippet = snippet[len(snippet)-2:]
-						}
+						// Live output snippet (cached from tick)
+						beadKey := proj.Key + "/" + bead.Name
+						snippet := m.beadSnippets[beadKey]
 						for _, line := range snippet {
 							trimmed := strings.TrimSpace(line)
 							if trimmed == "" || trimmed == "(no agent output available yet)" {
@@ -436,7 +434,7 @@ func (m Model) viewApproval() string {
 		b.WriteString(s.muted.Render("  No pending approvals.") + "\n")
 	} else {
 		for i, req := range m.approvals {
-			isCursor := i == m.approvalCursor
+			isCursor := i == m.cursor
 			prefix := "  "
 			if isCursor {
 				prefix = "▶ "
@@ -691,8 +689,14 @@ func formatElapsed(d time.Duration) string {
 }
 
 func truncate(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
 	if len(s) <= max {
 		return s
+	}
+	if max == 1 {
+		return "…"
 	}
 	return s[:max-1] + "…"
 }

@@ -33,6 +33,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.approvals = scanApprovals(projects)
 		enrichApprovalDiffs(m.approvals, m.projects)
 
+		// Cache output snippets and goal summaries (avoid I/O in View)
+		for _, proj := range m.projects {
+			for _, goal := range proj.Goals {
+				goalKey := proj.Key + "/" + goal.Name
+				m.goalSummaries[goalKey] = ComputeGoalSummary(proj, goal)
+				for _, bead := range goal.Beads {
+					beadKey := proj.Key + "/" + bead.Name
+					snippet := readAgentLog(proj.Path, bead.Name)
+					if len(snippet) > 2 {
+						snippet = snippet[len(snippet)-2:]
+					}
+					m.beadSnippets[beadKey] = snippet
+				}
+			}
+		}
+
 		// Session recovery: detect orphaned agents on first tick
 		if !m.recoveryDismissed && m.recoveryAgentCount == 0 {
 			if _, count := HasExistingSession(); count > 0 {
@@ -243,6 +259,7 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 	case ViewAgentFocus:
 		m.activeView = ViewDashboard
 		m.focusedAgent = AgentFocusState{}
+		m.cursor = 0
 	case ViewGit, ViewApproval, ViewControl:
 		m.activeView = ViewDashboard
 		m.cursor = 0
@@ -260,12 +277,12 @@ func (m Model) handleApprove() (tea.Model, tea.Cmd) {
 	if m.activeView != ViewApproval {
 		m.previousView = m.activeView
 		m.activeView = ViewApproval
-		m.approvalCursor = 0
+		m.cursor = 0
 		return m, nil
 	}
 
-	if m.approvalCursor < len(m.approvals) {
-		req := m.approvals[m.approvalCursor]
+	if m.cursor < len(m.approvals) {
+		req := m.approvals[m.cursor]
 		for _, p := range m.projects {
 			if p.Key == req.Project {
 				writeApprovalResponse(p.Path, ApprovalResponse{
@@ -275,9 +292,9 @@ func (m Model) handleApprove() (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		m.approvals = append(m.approvals[:m.approvalCursor], m.approvals[m.approvalCursor+1:]...)
-		if m.approvalCursor >= len(m.approvals) && m.approvalCursor > 0 {
-			m.approvalCursor--
+		m.approvals = append(m.approvals[:m.cursor], m.approvals[m.cursor+1:]...)
+		if m.cursor >= len(m.approvals) && m.cursor > 0 {
+			m.cursor--
 		}
 		if len(m.approvals) == 0 {
 			m.activeView = ViewDashboard
@@ -291,8 +308,8 @@ func (m Model) handleReject() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.approvalCursor < len(m.approvals) {
-		req := m.approvals[m.approvalCursor]
+	if m.cursor < len(m.approvals) {
+		req := m.approvals[m.cursor]
 		for _, p := range m.projects {
 			if p.Key == req.Project {
 				writeApprovalResponse(p.Path, ApprovalResponse{
@@ -303,9 +320,9 @@ func (m Model) handleReject() (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		m.approvals = append(m.approvals[:m.approvalCursor], m.approvals[m.approvalCursor+1:]...)
-		if m.approvalCursor >= len(m.approvals) && m.approvalCursor > 0 {
-			m.approvalCursor--
+		m.approvals = append(m.approvals[:m.cursor], m.approvals[m.cursor+1:]...)
+		if m.cursor >= len(m.approvals) && m.cursor > 0 {
+			m.cursor--
 		}
 		if len(m.approvals) == 0 {
 			m.activeView = ViewDashboard
