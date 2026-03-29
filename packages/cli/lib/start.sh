@@ -69,6 +69,34 @@ orc_start() {
     fi
 
     _tmux_new_window "orc" "$ORC_ROOT"
+
+    # ── Hub sidebar (when enabled) ────────────────────────────────────
+    local hub_enabled
+    hub_enabled="$(_config_get "hub.enabled" "false")"
+    if [[ "$hub_enabled" == "true" ]]; then
+      local hub_width
+      hub_width="$(_config_get "hub.width" "30")"
+      # Split left for Hub sidebar, launch the Hub TUI
+      tmux split-window -hb -l "$hub_width" \
+        -t "$(_tmux_target "orc")" \
+        -c "$ORC_ROOT" \
+        "node ${ORC_ROOT}/packages/hub/bin/orc-hub.js --window=orc" 2>/dev/null || true
+      # Set Hub pane ID for Ctrl-o discovery
+      local hub_pane
+      hub_pane="$(tmux display-message -t "$(_tmux_target "orc")" -p '#{pane_index}' 2>/dev/null || echo "0")"
+      _tmux_set_pane_id "orc" "$hub_pane" "hub: orc"
+      tmux set-option -p -t "$(_tmux_target "orc" "$hub_pane")" remain-on-exit on 2>/dev/null || true
+
+      # Register companion sidebar hook for new windows
+      local auto_sidebar
+      auto_sidebar="$(_config_get "hub.auto_sidebar" "true")"
+      if [[ "$auto_sidebar" == "true" ]]; then
+        tmux set-hook -t "$ORC_TMUX_SESSION" after-new-window \
+          "split-window -hb -l ${hub_width} -c '#{pane_current_path}' 'node ${ORC_ROOT}/packages/hub/bin/orc-hub.js --window=#{window_name}'" \
+          2>/dev/null || true
+      fi
+    fi
+
     _launch_agent_in_window "orc" "$persona" "" "$init_prompt"
     _orc_goto "orc"
   else

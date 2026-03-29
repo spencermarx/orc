@@ -1,0 +1,27 @@
+{
+  "name": "@orc/hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "orc-hub": "./bin/orc-hub.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node bin/orc-hub.js",
+    "test": "node --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "ink": "^6.8.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.1.0",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.1.0",
+    "typescript": "^5.5.0"
+  }
+}
