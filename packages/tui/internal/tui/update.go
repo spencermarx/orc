@@ -26,6 +26,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.splashDone = true
 			return m, nil
 		}
+		// Copilot passthrough: forward every key directly to tmux
+		if m.copilotFocused {
+			return m.handleCopilotKey(msg)
+		}
 		if m.inputMode {
 			return m.handleInputKey(msg)
 		}
@@ -145,20 +149,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Toggle copilot panel: off → visible → focused(input) → off
+	// Toggle copilot panel: off → visible → focused(passthrough) → off
 	case "tab":
 		if !m.copilotVisible {
 			m.copilotVisible = true
 			m.copilotFocused = false
 		} else if !m.copilotFocused {
 			m.copilotFocused = true
-			m.inputMode = true
-			m.inputAction = "copilot_message"
-			m.inputBuffer = ""
 		} else {
 			m.copilotVisible = false
 			m.copilotFocused = false
-			m.inputMode = false
 		}
 		return m, nil
 
@@ -208,25 +208,66 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleCopilotKey forwards keystrokes to the root orchestrator's tmux pane.
+// This is passthrough mode — every key goes directly to the agent CLI.
+func (m Model) handleCopilotKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	// Tab or Esc exit copilot focus
+	switch key {
+	case "tab":
+		m.copilotFocused = false
+		m.copilotVisible = false
+		return m, nil
+	case "esc":
+		m.copilotFocused = false
+		return m, nil
+	}
+
+	// Map BubbleTea keys to tmux send-keys format
+	tmuxKey := ""
+	switch msg.Type {
+	case tea.KeyEnter:
+		tmuxKey = "Enter"
+	case tea.KeyBackspace:
+		tmuxKey = "BSpace"
+	case tea.KeyUp:
+		tmuxKey = "Up"
+	case tea.KeyDown:
+		tmuxKey = "Down"
+	case tea.KeyLeft:
+		tmuxKey = "Left"
+	case tea.KeyRight:
+		tmuxKey = "Right"
+	case tea.KeySpace:
+		tmuxKey = "Space"
+	case tea.KeyCtrlC:
+		tmuxKey = "C-c"
+	case tea.KeyCtrlD:
+		tmuxKey = "C-d"
+	case tea.KeyCtrlL:
+		tmuxKey = "C-l"
+	case tea.KeyRunes:
+		// Regular typed characters — send as literal text
+		if len(msg.Runes) > 0 {
+			sendRawKeyToRoot(string(msg.Runes))
+			return m, nil
+		}
+	}
+
+	if tmuxKey != "" {
+		sendRawKeyToRoot(tmuxKey)
+	}
+
+	return m, nil
+}
+
 func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	switch key {
-	case "tab":
-		// Tab while in copilot input → close copilot entirely
-		if m.inputAction == "copilot_message" {
-			m.inputMode = false
-			m.copilotFocused = false
-			m.copilotVisible = false
-			return m, nil
-		}
-		return m, nil
-
 	case "esc":
 		m.inputMode = false
-		if m.inputAction == "copilot_message" {
-			m.copilotFocused = false
-		}
 		return m, nil
 
 	case "enter":
@@ -245,15 +286,6 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.inputBuffer = ""
 			m.focusedAgent = AgentFocusState{}
-		case "copilot_message":
-			if m.inputBuffer != "" {
-				sendMessageToAgent("orc", "", "", m.inputBuffer)
-			}
-			m.inputBuffer = ""
-			// Stay focused on copilot after sending
-			m.inputMode = true
-			m.inputAction = "copilot_message"
-			return m, nil
 		}
 		return m, nil
 

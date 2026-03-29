@@ -359,12 +359,7 @@ func (m Model) renderCopilotPanel(s viewStyles, width int) string {
 	cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
 
 	copilotLines := m.copilotOutput
-	// Reserve space for input line when focused
-	reserveInput := 0
-	if m.copilotFocused {
-		reserveInput = 3
-	}
-	maxLines := m.height - 8 - reserveInput
+	maxLines := m.height - 8
 	if maxLines < 5 {
 		maxLines = 5
 	}
@@ -380,11 +375,11 @@ func (m Model) renderCopilotPanel(s viewStyles, width int) string {
 		}
 	}
 
-	// Input line when focused
+	// Passthrough indicator when focused
 	if m.copilotFocused {
 		cb.WriteString("\n")
 		cb.WriteString(s.muted.Render(strings.Repeat("─", width-4)) + "\n")
-		cb.WriteString(s.accent.Render("> ") + m.inputBuffer + s.accent.Render("█"))
+		cb.WriteString(s.accent.Render("● LIVE") + "  " + s.muted.Render("keystrokes → agent  ") + s.muted.Render("Esc unfocus  Tab close"))
 	}
 
 	return cb.String()

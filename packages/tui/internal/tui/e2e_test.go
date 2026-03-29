@@ -101,20 +101,17 @@ func TestE2E_CopilotInput(t *testing.T) {
 		t.Fatal("first Tab: visible=true, focused=false")
 	}
 
-	// Tab 2: focus copilot (input mode)
+	// Tab 2: focus copilot (passthrough mode)
 	m = sendSpecialKey(m, tea.KeyTab)
-	if !m.copilotFocused || !m.inputMode {
-		t.Fatal("second Tab: focused=true, inputMode=true")
-	}
-	if m.inputAction != "copilot_message" {
-		t.Errorf("input action should be copilot_message, got %s", m.inputAction)
+	if !m.copilotFocused {
+		t.Fatal("second Tab: focused=true")
 	}
 
-	// Type a message
+	// Keys go to tmux (sendRawKeyToRoot) — we can't verify tmux delivery
+	// in unit tests, but we can verify the model state stays focused
 	m = sendKey(m, "h")
-	m = sendKey(m, "i")
-	if m.inputBuffer != "hi" {
-		t.Errorf("input buffer should be 'hi', got '%s'", m.inputBuffer)
+	if !m.copilotFocused {
+		t.Error("typing should keep copilot focused")
 	}
 
 	// Esc unfocuses but keeps visible
@@ -125,9 +122,6 @@ func TestE2E_CopilotInput(t *testing.T) {
 	if !m.copilotVisible {
 		t.Error("Esc should keep copilot visible")
 	}
-	if m.inputMode {
-		t.Error("Esc should exit input mode")
-	}
 
 	// Re-focus and Tab to close entirely
 	m = sendSpecialKey(m, tea.KeyTab) // focus again
@@ -135,7 +129,7 @@ func TestE2E_CopilotInput(t *testing.T) {
 		t.Fatal("Tab should re-focus copilot")
 	}
 	m = sendSpecialKey(m, tea.KeyTab) // close
-	if m.copilotVisible || m.copilotFocused || m.inputMode {
+	if m.copilotVisible || m.copilotFocused {
 		t.Error("Tab from focused should close everything")
 	}
 }
@@ -340,13 +334,10 @@ func TestE2E_CopilotPanel(t *testing.T) {
 		t.Error("copilot panel should show 'Not running' when no tmux session")
 	}
 
-	// Second Tab: focus copilot (input mode)
+	// Second Tab: focus copilot (passthrough mode)
 	m = sendSpecialKey(m, tea.KeyTab)
 	if !m.copilotFocused {
 		t.Error("second Tab should focus copilot")
-	}
-	if !m.inputMode {
-		t.Error("focused copilot should enable input mode")
 	}
 
 	// Third Tab: close copilot entirely

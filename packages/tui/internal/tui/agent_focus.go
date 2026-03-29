@@ -269,6 +269,18 @@ func capturePaneOutput(projectKey, goalName, beadName string) []string {
 	return lines
 }
 
+// sendRawKeyToPane sends a single key event to a tmux pane without appending Enter.
+// Used for passthrough mode where every keystroke is forwarded in real-time.
+func sendRawKeyToPane(sessionWindow, paneIdx, key string) error {
+	target := fmt.Sprintf("%s.%s", sessionWindow, paneIdx)
+	return exec.Command("tmux", "send-keys", "-t", target, key).Run()
+}
+
+// sendRawKeyToRoot sends a raw key to the root orchestrator's tmux pane.
+func sendRawKeyToRoot(key string) error {
+	return sendRawKeyToPane("orc:orc", "0", key)
+}
+
 // haltAgent runs `orc halt` for a specific bead.
 func haltAgent(orcRoot, projectKey, beadName string) error {
 	cmd := exec.Command(filepath.Join(orcRoot, "packages", "cli", "bin", "orc"),
