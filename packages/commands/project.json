@@ -1,0 +1,9 @@
+{
+  "name": "@orc/commands",
+  "targets": {
+    "lint": {
+      "command": "test -d packages/commands/_canonical && echo 'Commands OK'",
+      "inputs": ["{projectRoot}/**/*.md"]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@orc/cli",
+  "targets": {
+    "test": {
+      "command": "command -v bats >/dev/null && cd packages/cli && bats tests/ || echo 'SKIP: bats not installed (install via: brew install bats-core or apt install bats)'",
+      "inputs": [
+        "{projectRoot}/lib/**/*.sh",
+        "{projectRoot}/bin/**",
+        "{projectRoot}/tests/**/*.bats"
+      ]
+    },
+    "lint": {
+      "command": "bash -n packages/cli/lib/_common.sh && bash -n packages/cli/bin/orc && echo 'Syntax OK'",
+      "inputs": [
+        "{projectRoot}/lib/**/*.sh",
+        "{projectRoot}/bin/**"
+      ]
+    }
+  }
+}

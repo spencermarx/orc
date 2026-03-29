@@ -1,0 +1,6 @@
+{
+  "name": "@orc/tui",
+  "version": "0.2.10",
+  "private": true,
+  "description": "Full-screen TUI dashboard for orc agent orchestration (Go/BubbleTea)"
+}

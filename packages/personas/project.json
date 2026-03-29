@@ -1,0 +1,9 @@
+{
+  "name": "@orc/personas",
+  "targets": {
+    "lint": {
+      "command": "test -d packages/personas && echo 'Personas OK'",
+      "inputs": ["{projectRoot}/**/*.md"]
+    }
+  }
+}

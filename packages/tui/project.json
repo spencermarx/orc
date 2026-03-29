@@ -1,0 +1,30 @@
+{
+  "name": "@orc/tui",
+  "targets": {
+    "build": {
+      "command": "cd packages/tui && go build -o orc-tui ./cmd/orc-tui/",
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ],
+      "outputs": ["{projectRoot}/orc-tui"]
+    },
+    "test": {
+      "command": "cd packages/tui && go test ./...",
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ]
+    },
+    "lint": {
+      "command": "cd packages/tui && go vet ./...",
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ]
+    }
+  }
+}
