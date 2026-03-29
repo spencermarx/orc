@@ -103,9 +103,29 @@ if (( missing > 0 )); then
   _warn "$missing prerequisite(s) missing — some orc commands may not work."
 fi
 
+# ── Build TUI binary ──────────────────────────────────────────────────────
+
+echo ""
+_info "Building TUI dashboard..."
+tui_dir="$ORC_ROOT/packages/tui"
+tui_bin="$tui_dir/orc-tui"
+
+if command -v go &>/dev/null; then
+  if (cd "$tui_dir" && go build -o orc-tui ./cmd/orc-tui/) 2>&1; then
+    _info "  ✓ TUI binary built: $tui_bin"
+  else
+    _warn "  ✗ TUI build failed. You can build manually:"
+    _warn "    cd $tui_dir && go build -o orc-tui ./cmd/orc-tui/"
+  fi
+else
+  _warn "  ✗ Go not installed — TUI binary not built."
+  _warn "    Install Go (https://go.dev/dl/) then run:"
+  _warn "    cd $tui_dir && go build -o orc-tui ./cmd/orc-tui/"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 
 echo ""
 _info "Setup complete!"
 _info "  orc add <key> <path>   Register a project"
-_info "  orc                     Start orchestrating"
+_info "  orc                    Launch the dashboard"

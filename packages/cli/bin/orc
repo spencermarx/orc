@@ -79,8 +79,7 @@ set -- "${args[@]+"${args[@]}"}"
 
 if [[ $# -eq 0 ]]; then
   bin="$(_orc_tui_bin 2>/dev/null)" || {
-    _error "TUI binary not found. Build it with:"
-    _error "  cd $ORC_ROOT/packages/tui && go build -o orc-tui ./cmd/orc-tui/"
+    _warn "TUI binary not found. Run 'orc init' to build it."
     _info "Falling back to root orchestrator..."
     source "$LIB_DIR/start.sh"
     orc_start
