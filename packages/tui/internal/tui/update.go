@@ -108,11 +108,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		return m.handleEsc()
 
+	// Start project orchestrator
+	case "s":
+		return m.handleStartProject()
+
+	// Request input (send to orchestrator)
+	case "r":
+		if m.activeView == ViewDashboard {
+			return m.handleRequestWork()
+		}
+		return m.handleReject()
+
 	// Agent actions (context-dependent)
 	case "a":
 		return m.handleApprove()
-	case "r":
-		return m.handleReject()
 	case "x":
 		return m.handleHalt()
 	case "m":
@@ -142,12 +151,19 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchCursor = 0
 		case "send_message":
 			if m.focusedAgent.BeadName != "" && m.inputBuffer != "" {
-				projPath := resolveProjectPath(m.projects, m.focusedAgent.ProjectKey)
-				if projPath != "" {
-					sendMessageToAgent(projPath, m.focusedAgent.BeadName, m.inputBuffer)
-				}
+				sendMessageToAgent(m.focusedAgent.ProjectKey,
+					m.focusedAgent.GoalName, m.focusedAgent.BeadName, m.inputBuffer)
 			}
 			m.inputBuffer = ""
+		case "request_work":
+			if m.focusedAgent.ProjectKey != "" && m.inputBuffer != "" {
+				// Ensure orchestrator is running, then send the request
+				startProject(m.orcRoot, m.focusedAgent.ProjectKey)
+				// Send the request to the orchestrator via tmux send-keys
+				sendMessageToAgent(m.focusedAgent.ProjectKey, "", "", m.inputBuffer)
+			}
+			m.inputBuffer = ""
+			m.focusedAgent = AgentFocusState{}
 		}
 		return m, nil
 
@@ -186,7 +202,15 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			m.activeView = ViewAgentFocus
 			return m, nil
 		}
-		m = m.toggleExpand()
+		if goal != "" {
+			m = m.toggleExpand()
+			return m, nil
+		}
+		// Cursor on project header with no goals — start orchestrator
+		if proj != "" {
+			startProject(m.orcRoot, proj)
+			return m, nil
+		}
 		return m, nil
 
 	case ViewSearch:
@@ -307,6 +331,36 @@ func (m Model) handleSendMessage() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleStartProject() (tea.Model, tea.Cmd) {
+	if m.activeView != ViewDashboard {
+		return m, nil
+	}
+	proj, _, _ := m.resolveSelection()
+	if proj != "" {
+		startProject(m.orcRoot, proj)
+	}
+	return m, nil
+}
+
+func (m Model) handleRequestWork() (tea.Model, tea.Cmd) {
+	if m.activeView != ViewDashboard {
+		return m, nil
+	}
+	proj, _, _ := m.resolveSelection()
+	if proj == "" && len(m.projects) > 0 {
+		proj = m.projects[0].Key
+	}
+	if proj == "" {
+		return m, nil
+	}
+	m.inputMode = true
+	m.inputAction = "request_work"
+	m.inputBuffer = ""
+	// Store which project we're requesting work for
+	m.focusedAgent.ProjectKey = proj
+	return m, nil
+}
+
 func (m Model) enterGitView() Model {
 	for _, proj := range m.projects {
 		if len(proj.Goals) > 0 {
@@ -332,6 +386,12 @@ func (m Model) resolveSelection() (project, goal, bead string) {
 
 	pos := 0
 	for _, proj := range m.projects {
+		// Project header is a selectable item
+		if pos == m.cursor {
+			return proj.Key, "", ""
+		}
+		pos++
+
 		for _, g := range proj.Goals {
 			if pos == m.cursor {
 				return proj.Key, g.Name, ""
@@ -384,6 +444,7 @@ func (m Model) maxCursorPos() int {
 func (m Model) dashboardItemCount() int {
 	count := 0
 	for _, proj := range m.projects {
+		count++ // project header
 		for _, goal := range proj.Goals {
 			count++
 			key := proj.Key + "/" + goal.Name
@@ -398,6 +459,8 @@ func (m Model) dashboardItemCount() int {
 func (m Model) toggleExpand() Model {
 	pos := 0
 	for _, proj := range m.projects {
+		// Skip project header
+		pos++
 		for _, goal := range proj.Goals {
 			if pos == m.cursor {
 				key := proj.Key + "/" + goal.Name

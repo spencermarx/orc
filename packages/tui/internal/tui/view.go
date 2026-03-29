@@ -72,10 +72,22 @@ func (m Model) viewDashboard() string {
 
 	// Projects
 	if len(m.projects) == 0 {
-		b.WriteString(s.section.Render("PROJECTS") + "\n")
-		b.WriteString(s.muted.Render("  (no projects registered — run 'orc add <key> <path>')") + "\n")
+		b.WriteString(s.section.Render("GETTING STARTED") + "\n\n")
+		b.WriteString(s.muted.Render("  No projects registered yet.") + "\n\n")
+		b.WriteString(s.bold.Render("  1. ") + s.muted.Render("Register a project:") + "\n")
+		b.WriteString(s.accent.Render("     orc add <key> <path>") + "\n\n")
+		b.WriteString(s.bold.Render("  2. ") + s.muted.Render("Start working:") + "\n")
+		b.WriteString(s.accent.Render("     orc <project>") + " " + s.muted.Render("or press Enter on a project here") + "\n\n")
+		b.WriteString(s.muted.Render("  Example: orc add myapp ~/code/myapp") + "\n")
 	} else {
-		b.WriteString(s.section.Render("ACTIVE WORK") + "\n")
+		b.WriteString(s.section.Render("PROJECTS") + "\n")
+
+		// Input mode for request_work
+		if m.inputMode && m.inputAction == "request_work" {
+			b.WriteString("\n")
+			b.WriteString(s.accent.Render(fmt.Sprintf("  [%s] What should we work on? ", m.focusedAgent.ProjectKey)))
+			b.WriteString(m.inputBuffer + s.accent.Render("█") + "\n\n")
+		}
 
 		cursorPos := 0
 		for _, proj := range m.projects {
@@ -83,9 +95,23 @@ func (m Model) viewDashboard() string {
 			for _, g := range proj.Goals {
 				workerCount += len(g.Beads)
 			}
-			b.WriteString(fmt.Sprintf("  %s %s\n",
+
+			// Project header (selectable)
+			projCursor := cursorPos == m.cursor
+			projPrefix := "  "
+			if projCursor {
+				projPrefix = "▶ "
+			}
+
+			status := s.muted.Render("idle")
+			if workerCount > 0 {
+				status = s.accent.Render(fmt.Sprintf("%d goals, %d workers", len(proj.Goals), workerCount))
+			}
+			b.WriteString(fmt.Sprintf("%s%s  %s\n",
+				projPrefix,
 				s.accent.Render(proj.Key),
-				s.muted.Render(fmt.Sprintf("(%d goals, %d workers)", len(proj.Goals), workerCount))))
+				status))
+			cursorPos++
 
 			for _, goal := range proj.Goals {
 				goalKey := proj.Key + "/" + goal.Name
@@ -96,9 +122,9 @@ func (m Model) viewDashboard() string {
 				if expanded {
 					expandIcon = "▾"
 				}
-				prefix := "  "
+				prefix := "    "
 				if isCursor {
-					prefix = "▶ "
+					prefix = "  ▶ "
 				}
 
 				b.WriteString(fmt.Sprintf("%s%s %s %s %s %s\n",
@@ -113,9 +139,9 @@ func (m Model) viewDashboard() string {
 				if expanded {
 					for _, bead := range goal.Beads {
 						beadCursor := cursorPos == m.cursor
-						beadPrefix := "     "
+						beadPrefix := "       "
 						if beadCursor {
-							beadPrefix = "   ▶ "
+							beadPrefix = "     ▶ "
 						}
 						title := bead.Name
 						if bead.Title != "" {
@@ -479,15 +505,15 @@ func (m Model) viewHelp() string {
 	var b strings.Builder
 	b.WriteString(s.title.Render("⚔ Orc Help") + "\n")
 
-	b.WriteString(s.section.Render("Views") + "\n")
+	b.WriteString(s.section.Render("Dashboard") + "\n")
 	for _, kv := range []struct{ key, desc string }{
-		{"d", "Dashboard (home)"},
-		{"t", "Timeline (activity feed)"},
+		{"Enter", "Start orchestrator / drill into item"},
+		{"s", "Start project orchestrator"},
+		{"r", "Request work (type what to build)"},
+		{"Space", "Expand / collapse goal"},
 		{"g", "Git branch topology"},
-		{"/", "Search across all data"},
 		{"a", "Pending approvals"},
 		{"?", "Toggle this help"},
-		{"Esc", "Back to previous view"},
 		{"q", "Quit (agents keep running)"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
@@ -497,15 +523,14 @@ func (m Model) viewHelp() string {
 	for _, kv := range []struct{ key, desc string }{
 		{"j / ↓", "Move down"},
 		{"k / ↑", "Move up"},
-		{"Space", "Expand / collapse goal"},
-		{"Enter", "Drill into selected item"},
+		{"Esc", "Back to previous view"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
 
 	b.WriteString(s.section.Render("Agent Controls (Agent Focus view)") + "\n")
 	for _, kv := range []struct{ key, desc string }{
-		{"m", "Send message to agent"},
+		{"m", "Send message to agent (via tmux)"},
 		{"x", "Halt agent"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
@@ -514,14 +539,14 @@ func (m Model) viewHelp() string {
 	b.WriteString(s.section.Render("Approvals") + "\n")
 	for _, kv := range []struct{ key, desc string }{
 		{"a", "Approve selected / show approvals"},
-		{"r", "Reject selected"},
+		{"r", "Reject selected (in approval view)"},
 	} {
 		b.WriteString(fmt.Sprintf("  %s %s\n", keyStyle.Render(kv.key), descStyle.Render(kv.desc)))
 	}
 
 	b.WriteString("\n")
 	b.WriteString(descStyle.Render("  Agents continue running when you quit the TUI.") + "\n")
-	b.WriteString(descStyle.Render("  All agent state is file-based — restart the TUI anytime.") + "\n")
+	b.WriteString(descStyle.Render("  Reopen anytime — agents persist in background tmux.") + "\n")
 
 	return s.frame.Render(b.String())
 }
@@ -530,10 +555,10 @@ func (m Model) viewHelp() string {
 
 func (m Model) renderFooter() string {
 	keys := []struct{ key, label string }{
-		{"d", "dashboard"},
-		{"t", "timeline"},
+		{"Enter", "start"},
+		{"r", "request"},
+		{"s", "start project"},
 		{"g", "git"},
-		{"/", "search"},
 	}
 	if len(m.approvals) > 0 {
 		keys = append(keys, struct{ key, label string }{"a", fmt.Sprintf("approvals(%d)", len(m.approvals))})

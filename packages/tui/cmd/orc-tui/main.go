@@ -71,6 +71,11 @@ func main() {
 func runTUI() {
 	orcRoot := resolveOrcRoot()
 
+	// Ensure background tmux session exists for agent processes
+	if err := tui.EnsureTmuxSession(); err != nil {
+		log.Printf("warning: could not ensure tmux session: %v", err)
+	}
+
 	projects, err := config.LoadProjects(orcRoot)
 	if err != nil {
 		log.Fatalf("loading projects: %v", err)

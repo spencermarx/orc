@@ -78,8 +78,13 @@ func loadAgentFocus(projects []ProjectState, projectKey, goalName, beadName, orc
 	// Detect branch
 	state.Branch = detectBranchFromWorktree(beadDir)
 
-	// Read agent output from log file (no tmux needed)
-	state.Output = readAgentLog(projectPath, beadName)
+	// Read agent output: prefer live tmux capture, fall back to log file
+	liveOutput := capturePaneOutput(projectKey, goalName, beadName)
+	if len(liveOutput) > 0 {
+		state.Output = liveOutput
+	} else {
+		state.Output = readAgentLog(projectPath, beadName)
+	}
 
 	// Git diff stat
 	state.DiffStat = gitDiffStat(beadDir)
@@ -174,21 +179,85 @@ func gitDiffStat(beadDir string) string {
 	return ""
 }
 
-// sendMessageToAgent writes a message to the agent's input signal file.
-// The agent monitors this file and processes incoming messages.
-func sendMessageToAgent(projectPath, beadName, message string) error {
-	beadDir := filepath.Join(projectPath, ".worktrees", beadName)
-	msgFile := filepath.Join(beadDir, ".worker-message")
-
-	// Append message with timestamp
-	entry := fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), message)
-	f, err := os.OpenFile(msgFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("writing message file: %w", err)
+// sendMessageToAgent sends a message to the agent's terminal via tmux send-keys.
+// This works immediately with every agent CLI — no persona changes needed.
+func sendMessageToAgent(projectKey, goalName, beadName, message string) error {
+	// Determine the tmux window name for this agent
+	// Engineers run in goal windows: {project}/{goal}
+	// Orchestrators run in project windows: {project}
+	var windowName string
+	if goalName != "" {
+		windowName = fmt.Sprintf("%s/%s", projectKey, goalName)
+	} else {
+		windowName = projectKey
 	}
-	defer f.Close()
-	_, err = f.WriteString(entry)
-	return err
+
+	// Find the agent's pane by title (engineer panes have title "eng: <bead>")
+	listCmd := exec.Command("tmux", "list-panes", "-t", fmt.Sprintf("orc:%s", windowName),
+		"-F", "#{pane_index}:#{pane_title}")
+	out, err := listCmd.Output()
+	if err != nil {
+		return fmt.Errorf("listing panes: %w", err)
+	}
+
+	var paneIdx string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
+			paneIdx = parts[0]
+			break
+		}
+	}
+
+	// If no pane found by title, default to pane 0 (single-pane windows)
+	if paneIdx == "" {
+		paneIdx = "0"
+	}
+
+	target := fmt.Sprintf("orc:%s.%s", windowName, paneIdx)
+	return exec.Command("tmux", "send-keys", "-t", target, message, "Enter").Run()
+}
+
+// capturePaneOutput reads live terminal content from a tmux pane.
+// Returns the current visible content of the agent's terminal.
+func capturePaneOutput(projectKey, goalName, beadName string) []string {
+	var windowName string
+	if goalName != "" {
+		windowName = fmt.Sprintf("%s/%s", projectKey, goalName)
+	} else {
+		windowName = projectKey
+	}
+
+	// Find pane by title
+	listCmd := exec.Command("tmux", "list-panes", "-t", fmt.Sprintf("orc:%s", windowName),
+		"-F", "#{pane_index}:#{pane_title}")
+	out, err := listCmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	paneIdx := "0"
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 && strings.Contains(parts[1], beadName) {
+			paneIdx = parts[0]
+			break
+		}
+	}
+
+	target := fmt.Sprintf("orc:%s.%s", windowName, paneIdx)
+	captureCmd := exec.Command("tmux", "capture-pane", "-p", "-t", target)
+	content, err := captureCmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
+	// Strip trailing empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 // haltAgent runs `orc halt` for a specific bead.
@@ -206,4 +275,26 @@ func resolveProjectPath(projects []ProjectState, projectKey string) string {
 		}
 	}
 	return ""
+}
+
+// startProject launches a project orchestrator via the orc CLI.
+// Runs in the background (ORC_BACKGROUND=1) so the TUI stays in control.
+func startProject(orcRoot, projectKey string) error {
+	cmd := exec.Command(filepath.Join(orcRoot, "packages", "cli", "bin", "orc"),
+		"start", projectKey)
+	cmd.Env = append(os.Environ(), "ORC_BACKGROUND=1", "ORC_ROOT="+orcRoot)
+	return cmd.Run()
+}
+
+// EnsureTmuxSession ensures the orc tmux session exists.
+// Called on TUI startup so agents have a session to run in.
+func EnsureTmuxSession() error {
+	// Check if session exists
+	check := exec.Command("tmux", "has-session", "-t", "orc")
+	if check.Run() == nil {
+		return nil // session exists
+	}
+	// Create detached session
+	create := exec.Command("tmux", "new-session", "-d", "-s", "orc")
+	return create.Run()
 }

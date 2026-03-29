@@ -1365,14 +1365,28 @@ _build_and_launch() {
   local cmd
   cmd="$(_adapter_build_launch_cmd "$persona_file" "$prompt_file" "$agent_flags" "$project_path")"
 
+  # Determine output capture path
+  local output_log=""
+  if [[ -n "$working_dir" ]]; then
+    output_log="$working_dir/.worker-output"
+  fi
+
   # Write launcher script for clean terminal output
   local launcher
   launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-  cat > "$launcher" <<LAUNCH_EOF
+  if [[ -n "$output_log" ]]; then
+    cat > "$launcher" <<LAUNCH_EOF
+#!/usr/bin/env bash
+clear
+$cmd 2>&1 | tee -a "$output_log"
+LAUNCH_EOF
+  else
+    cat > "$launcher" <<LAUNCH_EOF
 #!/usr/bin/env bash
 clear
 $cmd
 LAUNCH_EOF
+  fi
   chmod +x "$launcher"
 
   # Send to tmux via the provided function
@@ -1841,12 +1855,55 @@ _check_approval() {
   policy="$(_config_get "approval.${action}" "ask" "$project_path")"
 
   if [[ "$policy" == "ask" ]]; then
-    printf '%s' "Proceed with ${action}? [y/N] "
-    local answer
-    read -r answer
-    if [[ ! "$answer" =~ ^[Yy] ]]; then
-      _info "Cancelled."
-      return 1
+    if [[ -t 0 ]]; then
+      # Interactive terminal: use existing read -r prompt
+      printf '%s' "Proceed with ${action}? [y/N] "
+      local answer
+      read -r answer
+      if [[ ! "$answer" =~ ^[Yy] ]]; then
+        _info "Cancelled."
+        return 1
+      fi
+    else
+      # Non-interactive (agent calling CLI via slash command):
+      # Write request JSON, poll for response from TUI
+      local approval_dir=""
+      if [[ -n "$project_path" ]]; then
+        approval_dir="$project_path/.worktrees/.orc-state/approvals"
+      else
+        approval_dir="$(_orc_state_dir)/approvals"
+      fi
+      mkdir -p "$approval_dir"
+
+      local id="ap-$(date +%s)-$$"
+      local req_file="$approval_dir/${id}.json"
+      local resp_file="$approval_dir/${id}.response.json"
+
+      local proj_key=""
+      [[ -n "$project_path" ]] && proj_key="$(_project_key "$project_path" 2>/dev/null || echo "")"
+
+      cat > "$req_file" <<JSON
+{"id":"$id","gate":"$action","project":"$proj_key","timestamp":"$(date -Iseconds)"}
+JSON
+
+      _info "Waiting for approval: ${action} (id: $id)"
+
+      # Poll for response (timeout after 10 minutes)
+      local timeout=600 elapsed=0
+      while [[ ! -f "$resp_file" ]] && (( elapsed < timeout )); do
+        sleep 2
+        ((elapsed += 2))
+      done
+
+      if [[ ! -f "$resp_file" ]]; then
+        _warn "Approval timed out for ${action}."
+        return 1
+      fi
+
+      if ! grep -q '"approved"[[:space:]]*:[[:space:]]*true' "$resp_file"; then
+        _info "Approval rejected for ${action}."
+        return 1
+      fi
     fi
   fi
   return 0

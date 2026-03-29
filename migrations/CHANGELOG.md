@@ -78,9 +78,16 @@ Per-gate overrides in `[approval]` still take precedence when set.
 
 ### New: TUI Dashboard (`orc-tui` binary)
 
-**What it does:** Full-screen interactive terminal dashboard that **owns the terminal** (like lazygit/k9s). No tmux expertise required — the TUI is the primary interface. Seven views: Dashboard, Timeline, Agent Focus, Git Topology, Search, Approvals, Help. Agent output read from log files, messages sent via signal files.
+**What it does:** Full-screen interactive terminal dashboard that **owns the terminal** (like lazygit/k9s). No tmux expertise required — the TUI is the primary interface. Views: Dashboard, Agent Focus, Git Topology, Approvals, Help.
 
-**Architecture change:** The TUI no longer launches as a tmux popup. It runs as a standalone full-screen app. Tmux is used only as invisible infrastructure for agent process management — users never need to interact with tmux directly. The event daemon runs as a goroutine inside the TUI process.
+**Architecture change:** The TUI is the control surface over tmux. It manages an invisible tmux session underneath — launching agents, reading their live terminal output (via `tmux capture-pane`), sending input (via `tmux send-keys`), and handling approvals (via file protocol). The event daemon runs as a goroutine inside the TUI process.
+
+**Key integrations (Phase 1):**
+- **Output capture:** Agent output captured to `.worker-output` via `tee` in launch wrapper AND read live via `tmux capture-pane`
+- **Approval bridge:** CLI gates (`_check_approval`) write JSON requests when non-interactive, TUI writes responses — closing the approval loop
+- **Agent messaging:** Messages sent via `tmux send-keys` directly to agent terminals (replaces file-based `.worker-message`)
+- **Start controls:** Dashboard `Enter`/`s` starts project orchestrators, `r` sends work requests
+- **Empty-state onboarding:** New users see setup guide instead of empty dashboard
 
 **Modes:**
 - `orc-tui` — Launch full-screen dashboard (default)
@@ -88,7 +95,7 @@ Per-gate overrides in `[approval]` still take precedence when set.
 - `orc-tui --events` — Stream events to stdout
 - `orc-tui --status` — One-line status for shell prompts
 
-**Setup:** Build with `cd packages/tui && go build -o orc-tui ./cmd/orc-tui/` and place on PATH.
+**Setup:** Auto-built by `orc init`. Manual: `cd packages/tui && go build -o orc-tui ./cmd/orc-tui/`.
 
 ---
 
