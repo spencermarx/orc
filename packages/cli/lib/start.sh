@@ -46,6 +46,9 @@ orc_start() {
 
     _tmux_ensure_session
 
+    # ── Start event daemon (best-effort, non-blocking) ─────────────
+    _orc_tui_start_daemon 2>/dev/null || true
+
     local persona
     persona="$(_resolve_persona "root-orchestrator")"
     local init_prompt
@@ -81,6 +84,10 @@ orc_start() {
     _require "$agent_cmd" "Install your preferred agent CLI ($agent_cmd)"
 
     _tmux_ensure_session
+
+    # ── Start event daemon (best-effort, non-blocking) ─────────────
+    _orc_tui_start_daemon 2>/dev/null || true
+
     _detect_ruflo "$project_path"
 
     # ── Create or reuse project orchestrator worktree ───────────────

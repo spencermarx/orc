@@ -387,10 +387,13 @@ _teardown_all() {
     _teardown_project "$key" 2>/dev/null || _warn "Partial cleanup for '$key' — manual cleanup may be needed."
   done
 
+  # Stop event daemon
+  _orc_tui_stop_daemon 2>/dev/null || true
+
   # Kill the tmux session AFTER project cleanup is done
   tmux kill-session -t "$ORC_TMUX_SESSION" 2>/dev/null || true
 
-  # Clean up notification log
+  # Clean up notification log and event daemon state
   local state_dir="$(_orc_state_dir)"
   rm -rf "$state_dir" 2>/dev/null || true
 

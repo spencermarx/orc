@@ -66,7 +66,7 @@ _is_linux() { [[ "$OSTYPE" == linux* ]]; }
 # Reserved names — subcommands that can't be used as project keys
 # ─────────────────────────────────────────────────────────────────────────────
 
-ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave doctor notify setup send"
+ORC_RESERVED_NAMES="init add remove list start spawn spawn-goal review board status halt teardown config leave doctor notify setup send events"
 
 _is_reserved_name() {
   local name="$1"
@@ -352,7 +352,16 @@ _tmux_ensure_session() {
     fi
     tmux set-option -t "$ORC_TMUX_SESSION" status-left "$status_left"
 
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
+    # Status-right: prefer daemon-backed @orc_status when available, fallback to polling
+    local status_right_content
+    if _orc_tui_is_running 2>/dev/null; then
+      # Reactive: daemon pushes to @orc_status user option
+      status_right_content="#{@orc_status}"
+    else
+      # Polling fallback: shell out to status.sh every status-interval
+      status_right_content="#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null)"
+    fi
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]${status_right_content} #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
     tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 100
 
     # ── Window tabs ──
@@ -457,7 +466,13 @@ _tmux_ensure_session() {
     fi
   else
     # No theming — just functional status-right for health visibility
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right "#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) │ orc v${ORC_VERSION} "
+    local status_right_content_plain
+    if _orc_tui_is_running 2>/dev/null; then
+      status_right_content_plain="#{@orc_status}"
+    else
+      status_right_content_plain="#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null)"
+    fi
+    tmux set-option -t "$ORC_TMUX_SESSION" status-right "${status_right_content_plain} │ orc v${ORC_VERSION} "
     tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 80
   fi
 }
@@ -1592,6 +1607,58 @@ _orc_state_dir() {
 
 _orc_notify_log() {
   echo "$(_orc_state_dir)/notifications.log"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Event daemon (orc-tui --daemon) lifecycle
+# ─────────────────────────────────────────────────────────────────────────────
+
+_orc_tui_bin() {
+  local bin="$ORC_ROOT/packages/tui/orc-tui"
+  [[ -x "$bin" ]] && echo "$bin" && return 0
+  # Try go-built binary in PATH
+  command -v orc-tui 2>/dev/null && return 0
+  return 1
+}
+
+_orc_tui_pid_file() {
+  echo "$(_orc_state_dir)/orc-tui.pid"
+}
+
+_orc_tui_is_running() {
+  local pid_file
+  pid_file="$(_orc_tui_pid_file)"
+  [[ -f "$pid_file" ]] || return 1
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null)" || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+_orc_tui_start_daemon() {
+  _orc_tui_is_running && return 0
+
+  local bin
+  bin="$(_orc_tui_bin)" || return 1
+
+  local state_dir
+  state_dir="$(_orc_state_dir)"
+  mkdir -p "$state_dir"
+
+  ORC_ROOT="$ORC_ROOT" nohup "$bin" --daemon \
+    > "$state_dir/orc-tui-daemon.log" 2>&1 &
+  disown
+
+  _info "Event daemon started (pid $!)."
+}
+
+_orc_tui_stop_daemon() {
+  local pid_file
+  pid_file="$(_orc_tui_pid_file)"
+  [[ -f "$pid_file" ]] || return 0
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null)" || return 0
+  kill "$pid" 2>/dev/null || true
+  rm -f "$pid_file"
 }
 
 # Append a notification to the log. Optionally triggers OS notification.
