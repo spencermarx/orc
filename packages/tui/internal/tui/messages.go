@@ -17,6 +17,9 @@ type stateRefreshed struct {
 // tickMsg triggers periodic state refresh.
 type tickMsg time.Time
 
+// splashDoneMsg fires after the splash screen timeout.
+type splashDoneMsg struct{}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)

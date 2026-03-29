@@ -2,13 +2,17 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Init initializes the TUI model (BubbleTea v1 interface).
 func (m Model) Init() tea.Cmd {
-	return tickCmd()
+	return tea.Batch(
+		tickCmd(),
+		tea.Tick(2*time.Second, func(time.Time) tea.Msg { return splashDoneMsg{} }),
+	)
 }
 
 // Update handles messages (BubbleTea v1 interface).
@@ -16,6 +20,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
+		// Any key dismisses splash
+		if m.activeView == ViewSplash {
+			m.activeView = ViewDashboard
+			m.splashDone = true
+			return m, nil
+		}
 		if m.inputMode {
 			return m.handleInputKey(msg)
 		}
@@ -93,6 +103,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tickCmd()
 
+	case splashDoneMsg:
+		if m.activeView == ViewSplash {
+			m.activeView = ViewDashboard
+			m.splashDone = true
+		}
+		return m, nil
+
 	case stateRefreshed:
 		m.projects = msg.projects
 		m.attention = msg.attention
@@ -128,9 +145,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Toggle copilot panel (root orchestrator)
+	// Toggle copilot panel: off → visible → focused(input) → off
 	case "tab":
-		m.copilotVisible = !m.copilotVisible
+		if !m.copilotVisible {
+			m.copilotVisible = true
+			m.copilotFocused = false
+		} else if !m.copilotFocused {
+			m.copilotFocused = true
+			m.inputMode = true
+			m.inputAction = "copilot_message"
+			m.inputBuffer = ""
+		} else {
+			m.copilotVisible = false
+			m.copilotFocused = false
+			m.inputMode = false
+		}
 		return m, nil
 
 	// Navigation
@@ -183,8 +212,21 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	switch key {
+	case "tab":
+		// Tab while in copilot input → close copilot entirely
+		if m.inputAction == "copilot_message" {
+			m.inputMode = false
+			m.copilotFocused = false
+			m.copilotVisible = false
+			return m, nil
+		}
+		return m, nil
+
 	case "esc":
 		m.inputMode = false
+		if m.inputAction == "copilot_message" {
+			m.copilotFocused = false
+		}
 		return m, nil
 
 	case "enter":
@@ -203,6 +245,15 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.inputBuffer = ""
 			m.focusedAgent = AgentFocusState{}
+		case "copilot_message":
+			if m.inputBuffer != "" {
+				sendMessageToAgent("orc", "", "", m.inputBuffer)
+			}
+			m.inputBuffer = ""
+			// Stay focused on copilot after sending
+			m.inputMode = true
+			m.inputAction = "copilot_message"
+			return m, nil
 		}
 		return m, nil
 

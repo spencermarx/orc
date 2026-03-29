@@ -17,11 +17,14 @@ import (
 	"github.com/thefinalsource/orc/packages/tui/internal/config"
 )
 
-// helper: create a model, send a WindowSizeMsg so View() doesn't return "Loading..."
+// helper: create a model, send a WindowSizeMsg so View() doesn't return "Loading...",
+// and dismiss the splash screen so tests start on the dashboard.
 func newTestModel(projects []config.Project) Model {
 	m := NewModel(projects, DefaultTheme(), "/tmp/orc-test")
 	m.width = 120
 	m.height = 40
+	m.activeView = ViewDashboard
+	m.splashDone = true
 	return m
 }
 
@@ -43,6 +46,100 @@ func sendTick(m Model) Model {
 	return result.(Model)
 }
 
+// ─── SPLASH SCREEN ──────────────────────────────────────────────────────────
+
+func TestE2E_SplashScreen(t *testing.T) {
+	// New model starts on splash
+	m := NewModel(nil, DefaultTheme(), "/tmp/orc-test")
+	m.width = 120
+	m.height = 40
+
+	if m.activeView != ViewSplash {
+		t.Fatal("new model should start on splash screen")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "o r c") {
+		t.Error("splash should show 'o r c' title")
+	}
+	if !strings.Contains(view, "press any key") {
+		t.Error("splash should show 'press any key' prompt")
+	}
+
+	// Any key dismisses splash
+	m = sendKey(m, "x")
+	if m.activeView != ViewDashboard {
+		t.Error("any key should dismiss splash to dashboard")
+	}
+	if !m.splashDone {
+		t.Error("splashDone should be set after dismissal")
+	}
+}
+
+func TestE2E_SplashDismissOnTimer(t *testing.T) {
+	m := NewModel(nil, DefaultTheme(), "/tmp/orc-test")
+	m.width = 120
+	m.height = 40
+
+	// Simulate timer message
+	result, _ := m.Update(splashDoneMsg{})
+	m = result.(Model)
+
+	if m.activeView != ViewDashboard {
+		t.Error("splash timer should dismiss to dashboard")
+	}
+}
+
+// ─── COPILOT INPUT ──────────────────────────────────────────────────────────
+
+func TestE2E_CopilotInput(t *testing.T) {
+	m := newTestModel(nil)
+
+	// Tab 1: show copilot
+	m = sendSpecialKey(m, tea.KeyTab)
+	if !m.copilotVisible || m.copilotFocused {
+		t.Fatal("first Tab: visible=true, focused=false")
+	}
+
+	// Tab 2: focus copilot (input mode)
+	m = sendSpecialKey(m, tea.KeyTab)
+	if !m.copilotFocused || !m.inputMode {
+		t.Fatal("second Tab: focused=true, inputMode=true")
+	}
+	if m.inputAction != "copilot_message" {
+		t.Errorf("input action should be copilot_message, got %s", m.inputAction)
+	}
+
+	// Type a message
+	m = sendKey(m, "h")
+	m = sendKey(m, "i")
+	if m.inputBuffer != "hi" {
+		t.Errorf("input buffer should be 'hi', got '%s'", m.inputBuffer)
+	}
+
+	// Esc unfocuses but keeps visible
+	m = sendSpecialKey(m, tea.KeyEscape)
+	if m.copilotFocused {
+		t.Error("Esc should unfocus copilot")
+	}
+	if !m.copilotVisible {
+		t.Error("Esc should keep copilot visible")
+	}
+	if m.inputMode {
+		t.Error("Esc should exit input mode")
+	}
+
+	// Re-focus and Tab to close entirely
+	m = sendSpecialKey(m, tea.KeyTab) // focus again
+	if !m.copilotFocused {
+		t.Fatal("Tab should re-focus copilot")
+	}
+	m = sendSpecialKey(m, tea.KeyTab) // close
+	if m.copilotVisible || m.copilotFocused || m.inputMode {
+		t.Error("Tab from focused should close everything")
+	}
+}
+
 // ─── EMPTY STATE ─────────────────────────────────────────────────────────────
 
 func TestE2E_EmptyState(t *testing.T) {
@@ -50,14 +147,11 @@ func TestE2E_EmptyState(t *testing.T) {
 	view := m.View()
 
 	// Must show onboarding, not a blank screen
-	if !strings.Contains(view, "GETTING STARTED") {
-		t.Error("empty dashboard should show GETTING STARTED section")
+	if !strings.Contains(view, "No projects registered") {
+		t.Error("empty dashboard should say no projects registered")
 	}
 	if !strings.Contains(view, "orc add") {
 		t.Error("empty dashboard should show 'orc add' instruction")
-	}
-	if !strings.Contains(view, "No projects registered") {
-		t.Error("empty dashboard should say no projects registered")
 	}
 
 	// Footer should still render
@@ -87,12 +181,12 @@ func TestE2E_DashboardWithProjects(t *testing.T) {
 		t.Error("dashboard should show project key 'myapp'")
 	}
 	// Dashboard title
-	if !strings.Contains(view, "Orc Dashboard") {
+	if !strings.Contains(view, "orc") {
 		t.Error("dashboard should show title")
 	}
-	// Control level in footer
-	if !strings.Contains(view, "Approve All") {
-		t.Errorf("footer should show default control level 'Approve All', got:\n%s", view)
+	// Footer should show key hints
+	if !strings.Contains(view, "help") {
+		t.Error("footer should show help key")
 	}
 }
 
@@ -211,10 +305,9 @@ func TestE2E_ControlDial(t *testing.T) {
 		t.Error("after selecting control level, should return to dashboard")
 	}
 
-	// Verify footer shows new level
-	view = m.View()
-	if !strings.Contains(view, "YOLO") {
-		t.Error("footer should now show YOLO")
+	// Verify control level was set (footer shows dots)
+	if m.controlLevel != ControlYOLO {
+		t.Errorf("control level should be YOLO after selection, got %d", m.controlLevel)
 	}
 }
 
@@ -247,10 +340,22 @@ func TestE2E_CopilotPanel(t *testing.T) {
 		t.Error("copilot panel should show 'Not running' when no tmux session")
 	}
 
-	// Toggle off
+	// Second Tab: focus copilot (input mode)
+	m = sendSpecialKey(m, tea.KeyTab)
+	if !m.copilotFocused {
+		t.Error("second Tab should focus copilot")
+	}
+	if !m.inputMode {
+		t.Error("focused copilot should enable input mode")
+	}
+
+	// Third Tab: close copilot entirely
 	m = sendSpecialKey(m, tea.KeyTab)
 	if m.copilotVisible {
-		t.Error("second Tab should hide copilot")
+		t.Error("third Tab should hide copilot")
+	}
+	if m.copilotFocused {
+		t.Error("third Tab should unfocus copilot")
 	}
 
 	// Footer should reflect copilot state
@@ -377,9 +482,9 @@ func TestE2E_ApprovalView(t *testing.T) {
 	m := newTestModel(projects)
 	m = sendTick(m)
 
-	// Should show approval badge
+	// Should show approval badge (shows "pending" in header)
 	view := m.View()
-	if !strings.Contains(view, "approval") {
+	if !strings.Contains(view, "pending") {
 		t.Error("dashboard should show approval badge when approvals exist")
 	}
 

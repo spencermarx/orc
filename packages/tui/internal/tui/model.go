@@ -12,7 +12,8 @@ import (
 type View int
 
 const (
-	ViewDashboard View = iota
+	ViewSplash View = iota
+	ViewDashboard
 	ViewAgentFocus
 	ViewGit
 	ViewApproval
@@ -47,7 +48,11 @@ type Model struct {
 
 	// Copilot panel (root orchestrator)
 	copilotVisible bool
+	copilotFocused bool // true = input goes to copilot panel
 	copilotOutput  []string
+
+	// Splash screen
+	splashDone bool
 
 	// Notification dedup (scope -> true for items already notified)
 	notifiedItems map[string]bool
@@ -129,7 +134,7 @@ func DefaultTheme() Theme {
 // NewModel creates a new TUI model.
 func NewModel(projects []config.Project, theme Theme, orcRoot string) Model {
 	return Model{
-		activeView:    ViewDashboard,
+		activeView:    ViewSplash,
 		expandedGoals: make(map[string]bool),
 		controlLevel:  ControlApproveAll, // default: Level 4
 		notifiedItems: make(map[string]bool),

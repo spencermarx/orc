@@ -334,8 +334,8 @@ func TestModelInit(t *testing.T) {
 	}
 	model := NewModel(projects, DefaultTheme(), "/tmp")
 
-	if model.activeView != ViewDashboard {
-		t.Error("initial view should be Dashboard")
+	if model.activeView != ViewSplash {
+		t.Error("initial view should be Splash")
 	}
 	if model.expandedGoals == nil {
 		t.Error("expandedGoals should be initialized")
