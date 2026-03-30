@@ -11,21 +11,22 @@ G=$'\033[32m'       # green (accent)
 B=$'\033[1m'        # bold
 D=$'\033[2m'        # dim
 R=$'\033[0m'        # reset
+Y=$'\033[33m'       # yellow (activity)
 
 kb_enabled="$(_config_get "keybindings.enabled" "false")"
 
 cat <<EOF
 
-  ${G}${B}⚔ Orc${R}  ${D}v${ORC_VERSION:-}${R}
+  ${G}${B}⚔ Orc${R}  ${D}Agent Orchestration Framework${R}  ${D}v${ORC_VERSION:-}${R}
+  ${D}$(printf '%.0s─' {1..50})${R}
 
+  ${B}Navigation${R}
 
-  ${B}Getting Around${R}
-
-    ${G}^b Space${R}     Search windows, panes & actions
-    ${G}^b m${R}         Open context menu
-    ${G}^b ?${R}         This help
-    ${G}Click ⚔ orc${R}  Open context menu
-    ${G}Right-click${R}  Open context menu
+    ${G}^b Space${R}     Command palette (fuzzy search)
+    ${G}^b m${R}         Context menu (role-aware)
+    ${G}^b ?${R}         This help overlay
+    ${G}Click ⚔${R}      Context menu via status bar
+    ${G}Right-click${R}  Context menu on any pane
 
 EOF
 
@@ -51,6 +52,29 @@ else
 EOF
 fi
 
-echo "  ${D}Press any key to close${R}"
-echo ""
+cat <<EOF
+  ${B}tmux Basics${R}
+
+    ${G}^b c${R}         New window
+    ${G}^b n${R} / ${G}p${R}     Next / previous window
+    ${G}^b d${R}         Detach (orc keeps running)
+    ${G}^b [${R}         Scroll mode (${D}q${R} to exit)
+    ${G}^b z${R}         Zoom pane (toggle fullscreen)
+
+  ${B}Status Icons${R}
+
+    ${G}●${R} working    ${Y}✓${R} review    ${G}✓${R} done
+    ${D}✗${R} blocked    ${D}✗${R} dead
+
+  ${B}Roles${R}
+
+    ${G}⚔${R} Orchestrator — decomposes & coordinates
+    ${G}●${R} Engineer     — implements beads
+    ${Y}✓${R} Reviewer     — reviews completed work
+
+  ${D}$(printf '%.0s─' {1..50})${R}
+  ${D}Theme: ${G}orc config${R} ${D}→ [theme] section${R}
+  ${D}Press any key to close${R}
+
+EOF
 read -rsn1
