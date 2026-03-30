@@ -180,6 +180,7 @@ strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrator
 enabled = true                   # Master toggle — false disables all TUI enhancements
 breadcrumbs = true               # Hierarchy breadcrumb in status bar (⚔ orc ▸ myapp ▸ fix-auth)
 show_help_hint = true            # Subtle "^b ? help" hint in status bar for new users
+show_splash = true               # Branded welcome screen on new session creation
 
 [tui.palette]
 enabled = true                   # Command palette (Prefix+Space) — fuzzy search windows/panes
@@ -221,6 +222,11 @@ fg = "#8b949e"                # status bar text
 border = "#30363d"            # inactive pane/window borders
 muted = "#6e7681"             # de-emphasized text (version, separators)
 activity = "#d29922"          # window activity highlight
+error = "#f85149"             # error/blocked state color
+tab_bg = "#161b22"            # inactive tab background
+bg_highlight = "#1c2128"      # raised surface bg (palette, popups)
 border_style = "single"       # pane border lines: "single", "heavy", "double", "simple"
 pane_indicators = "colour"    # active pane indicator: "off", "colour", "arrows", "both"
 popup_border_style = "rounded" # popup border lines: "single", "rounded", "heavy", "double", "simple", "padded", "none"
+separator_style = "rounded"   # separator glyphs: "powerline", "rounded", "slant", "plain"
+nerd_font = "auto"            # Nerd Font glyphs: "auto" (off unless ORC_NERD_FONT=1), "on", "off"

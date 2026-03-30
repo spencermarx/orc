@@ -327,19 +327,54 @@ _tmux_ensure_session() {
   tui_enabled="$(_config_get "tui.enabled" "true")"
 
   if [[ "$theme_enabled" == "true" ]]; then
-    local accent bg fg border muted activity
+    local accent bg fg border muted activity error tab_bg bg_highlight
     accent="$(_config_get "theme.accent" "#00ff88")"
     bg="$(_config_get "theme.bg" "#0d1117")"
     fg="$(_config_get "theme.fg" "#8b949e")"
     border="$(_config_get "theme.border" "#30363d")"
     muted="$(_config_get "theme.muted" "#6e7681")"
     activity="$(_config_get "theme.activity" "#d29922")"
-    local tab_bg="#161b22"
-    local error="#f85149"
+    error="$(_config_get "theme.error" "#f85149")"
+    tab_bg="$(_config_get "theme.tab_bg" "#161b22")"
+    bg_highlight="$(_config_get "theme.bg_highlight" "#1c2128")"
 
-    # Status bar
-    tmux set-option -t "$ORC_TMUX_SESSION" status-style "bg=${bg},fg=${fg}"
-    tmux set-option -t "$ORC_TMUX_SESSION" status-position bottom
+    # ── Generate and source theme conf ──
+    # Nerd Font glyphs are written as literal UTF-8 via printf into the conf.
+    # tmux source-file reads the bytes directly — no shell escaping issues.
+    local _theme_conf
+    _theme_conf="$(mktemp "${TMPDIR:-/tmp}/orc-theme-XXXXXX.conf")"
+
+    # Rounded powerline separators (U+E0B4 right, U+E0B6 left)
+    local _gl_r _gl_l
+    _gl_r="$(printf '\ue0b4')"
+    _gl_l="$(printf '\ue0b6')"
+
+    cat > "$_theme_conf" << THEME_EOF
+# orc theme — auto-generated, do not edit
+set-option  -g status-style "bg=${bg},fg=${fg}"
+set-option  -g status-position bottom
+set-option  -g status-left-length 65
+set-option  -g status-right-length 120
+set-window-option -g window-status-format "#[fg=${tab_bg}]#[bg=${bg}]${_gl_l}#[fg=${muted}]#[bg=${tab_bg}] #{?#{==:#W,orc},root,#W} #{?@orc_status,#{@orc_status} ,}#[fg=${tab_bg}]#[bg=${bg}]${_gl_r}"
+set-window-option -g window-status-current-format "#[fg=${accent}]#[bg=${bg}]${_gl_l}#[fg=${bg}]#[bg=${accent}]#[bold] #{?#{==:#W,orc},root,#W} #{?@orc_status,#{@orc_status} ,}#[nobold]#[fg=${accent}]#[bg=${bg}]${_gl_r}"
+set-window-option -g window-status-separator " "
+set-window-option -g window-status-activity-style "fg=${activity}"
+set-option  -g pane-border-style "fg=${border}"
+set-option  -g pane-active-border-style "fg=${accent}"
+set-option  -g pane-border-status top
+set-option  -g pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]◆ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#[bold]#{pane_title}#[nobold] "
+set-option  -g pane-border-lines single
+set-option  -g pane-border-indicators colour
+set-option  -g popup-border-lines rounded
+set-option  -g popup-border-style "fg=${accent}"
+set-option  -g message-style "bg=${accent},fg=${bg},bold"
+set-option  -g message-command-style "bg=${border},fg=${fg}"
+set-option  -g mode-style "bg=${accent},fg=${bg}"
+set-option  -g clock-mode-colour "${accent}"
+THEME_EOF
+
+    tmux source-file "$_theme_conf"
+    rm -f "$_theme_conf"
 
     # ── Status-left: breadcrumbs + prefix indicator ──
     local status_left
@@ -347,73 +382,24 @@ _tmux_ensure_session() {
       local use_breadcrumbs
       use_breadcrumbs="$(_config_get "tui.breadcrumbs" "true")"
 
-      # Prefix indicator (always on when TUI enabled): reversed styling when
-      # prefix key is active. We avoid commas inside #[] by splitting into
-      # individual style tags — #{?} uses commas as delimiters, so
-      # #[bg=X,fg=Y] inside #{?...,...,...} would break parsing.
-      # Powerline orc segment with prefix indicator
+      # Prefix indicator: reversed styling when prefix key active.
+      # Split #[bg=X]#[fg=Y] to avoid comma issues inside #{?} conditionals.
       local orc_normal="#[bg=${accent}]#[fg=${bg}]#[bold] ⚔ orc #[nobold]#[fg=${accent}]#[bg=${bg}]"
       local orc_prefix="#[bg=white]#[fg=black]#[bold] ⚔ ORC #[nobold]#[fg=white]#[bg=${bg}]"
       local orc_segment="#{?client_prefix,${orc_prefix},${orc_normal}}"
 
       if [[ "$use_breadcrumbs" == "true" ]]; then
         status_left="${orc_segment}#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --breadcrumb 2>/dev/null) "
-        tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 60
       else
         status_left="${orc_segment} "
-        tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
       fi
     else
-      # TUI disabled — original static status-left
       status_left="#[bg=${accent},fg=${bg},bold] ⚔ orc #[fg=${accent},bg=${bg}]▸ "
-      tmux set-option -t "$ORC_TMUX_SESSION" status-left-length 20
     fi
     tmux set-option -t "$ORC_TMUX_SESSION" status-left "$status_left"
 
+    # ── Status-right: health line + version ──
     tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
-    tmux set-option -t "$ORC_TMUX_SESSION" status-right-length 100
-
-    # ── Window tabs ──
-    if [[ "$tui_enabled" == "true" ]]; then
-      # Inactive: plain text, no background — clean and light
-      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format \
-        "#[fg=${muted}] #W #{?@orc_status,#{@orc_status},}"
-
-      # Active: bold accent text
-      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format \
-        "#[fg=${accent},bold] #W #{?@orc_status, #{@orc_status},}#[default]"
-    else
-      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-format "#[fg=${muted}] #W #{?@orc_status,#{@orc_status} ,}"
-      tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-current-format "#[fg=${accent},bold] #W #{?@orc_status,#{@orc_status} ,}#[default]"
-    fi
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-separator "#[fg=${border}]│"
-    tmux set-window-option -t "$ORC_TMUX_SESSION" window-status-activity-style "fg=${activity}"
-
-    # Pane borders — role-aware icons and colors
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-style "fg=${border}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-active-border-style "fg=${accent}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#[bold]#{pane_title}#[nobold] "
-
-    # Border styling & indicators
-    local border_style pane_indicators popup_style
-    border_style="$(_config_get "theme.border_style" "heavy")"
-    pane_indicators="$(_config_get "theme.pane_indicators" "colour")"
-    popup_style="$(_config_get "theme.popup_border_style" "rounded")"
-
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-lines "$border_style"
-    if [[ "$pane_indicators" != "off" ]]; then
-      tmux set-option -t "$ORC_TMUX_SESSION" pane-border-indicators "$pane_indicators"
-    fi
-    tmux set-option -t "$ORC_TMUX_SESSION" popup-border-lines "$popup_style"
-    tmux set-option -t "$ORC_TMUX_SESSION" popup-border-style "fg=${accent}"
-
-    # Message bar
-    tmux set-option -t "$ORC_TMUX_SESSION" message-style "bg=${accent},fg=${bg},bold"
-    tmux set-option -t "$ORC_TMUX_SESSION" message-command-style "bg=${border},fg=${fg}"
-
-    # Copy/selection mode
-    tmux set-option -t "$ORC_TMUX_SESSION" mode-style "bg=${accent},fg=${bg}"
-    tmux set-option -t "$ORC_TMUX_SESSION" clock-mode-colour "${accent}"
 
     # Mouse (configurable — only when themed so custom tmux users aren't affected)
     local mouse_enabled
@@ -1395,11 +1381,20 @@ ${initial_prompt}"
   # Write launcher script for clean terminal output
   local launcher
   launcher="$(mktemp "${TMPDIR:-/tmp}/orc-launch-XXXXXX")"
-  cat > "$launcher" <<LAUNCH_EOF
+  if [[ "${ORC_SPLASH:-}" == "1" ]]; then
+    cat > "$launcher" <<LAUNCH_EOF
+#!/usr/bin/env bash
+${ORC_ROOT}/packages/cli/lib/splash.sh
+clear
+$cmd
+LAUNCH_EOF
+  else
+    cat > "$launcher" <<LAUNCH_EOF
 #!/usr/bin/env bash
 clear
 $cmd
 LAUNCH_EOF
+  fi
   chmod +x "$launcher"
 
   # Send to tmux via the provided function

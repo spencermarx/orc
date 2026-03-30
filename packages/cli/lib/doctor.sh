@@ -43,6 +43,7 @@ board.command
 tui.enabled
 tui.breadcrumbs
 tui.show_help_hint
+tui.show_splash
 tui.palette.enabled
 tui.palette.show_preview
 tui.menu.enabled
@@ -62,6 +63,14 @@ theme.fg
 theme.border
 theme.muted
 theme.activity
+theme.error
+theme.tab_bg
+theme.bg_highlight
+theme.border_style
+theme.pane_indicators
+theme.popup_border_style
+theme.separator_style
+theme.nerd_font
 "
 
 # Migration mapping: old_field=new_field|classification (one per line)
