@@ -46,6 +46,9 @@ orc_start() {
 
     _tmux_ensure_session
 
+    # Remember if this is a fresh session (for splash screen)
+    local _is_new_session="${ORC_TMUX_NEEDS_CLEANUP:-0}"
+
     local persona
     persona="$(_resolve_persona "root-orchestrator")"
     local init_prompt
@@ -55,6 +58,7 @@ orc_start() {
       if _tmux_is_dead_window "orc"; then
         # Agent exited — relaunch in the existing window
         _info "Root orchestrator session ended. Relaunching."
+        _tmux_set_pane_title "orc" "0" "root orchestrator"
         _launch_agent_in_window "orc" "$persona" "" "$init_prompt"
       else
         _info "Root orchestrator running. Attaching."
@@ -69,7 +73,17 @@ orc_start() {
     fi
 
     _tmux_new_window "orc" "$ORC_ROOT"
-    _launch_agent_in_window "orc" "$persona" "" "$init_prompt"
+    _tmux_set_pane_title "orc" "0" "root orchestrator"
+
+    # On fresh session: show splash in the pane before launching the agent.
+    # The launcher script sequences: splash → clear → agent.
+    local show_splash
+    show_splash="$(_config_get "tui.show_splash" "true")"
+    if [[ "$_is_new_session" == "1" && "$show_splash" == "true" ]]; then
+      ORC_SPLASH=1 _launch_agent_in_window "orc" "$persona" "" "$init_prompt"
+    else
+      _launch_agent_in_window "orc" "$persona" "" "$init_prompt"
+    fi
     _orc_goto "orc"
   else
     # ── Project orchestrator ───────────────────────────────────────────
@@ -124,6 +138,7 @@ Start by investigating the codebase to understand its structure and current stat
     local after
     after="$(_last_project_window "$project")"
     _tmux_new_window "$project" "$proj_worktree" "$after"
+    _tmux_set_pane_title "$project" "0" "${project} orchestrator"
     _launch_agent_in_window "$project" "$persona" "$project_path" "$init_prompt"
 
     # --background: don't switch to the window
