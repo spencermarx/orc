@@ -276,10 +276,28 @@ _detect_project_from_cwd() {
 
 readonly ORC_TMUX_SESSION="orc"
 
+# Check if the running tmux version is >= the required version.
+# Usage: _tmux_version_gte "3.5" && echo "new enough"
+_tmux_version_gte() {
+  local required="$1"
+  local current
+  current="$(tmux -V 2>/dev/null | sed 's/[^0-9.]//g')"
+  [[ -z "$current" ]] && return 1
+  printf '%s\n%s\n' "$required" "$current" | sort -V | head -1 | grep -qF "$required"
+}
+
 _tmux_ensure_session() {
   if ! tmux has-session -t "$ORC_TMUX_SESSION" 2>/dev/null; then
     tmux new-session -d -s "$ORC_TMUX_SESSION" -n "_orc_init"
     ORC_TMUX_NEEDS_CLEANUP=1
+  else
+    # Clean up stale _orc_init window from a prior session — but only if other
+    # windows exist (killing the last window destroys the session and server).
+    local _win_count
+    _win_count="$(tmux list-windows -t "$ORC_TMUX_SESSION" 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$_win_count" -gt 1 ]]; then
+      tmux kill-window -t "${ORC_TMUX_SESSION}:_orc_init" 2>/dev/null || true
+    fi
   fi
 
   # ── Propagate ORC_YOLO into the tmux environment ──────────────────
@@ -374,7 +392,20 @@ _tmux_ensure_session() {
     # Pane borders — role-aware icons and colors
     tmux set-option -t "$ORC_TMUX_SESSION" pane-border-style "fg=${border}"
     tmux set-option -t "$ORC_TMUX_SESSION" pane-active-border-style "fg=${accent}"
-    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#{pane_title} "
+    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-format " #{?#{m:goal:*,#{pane_title}},#[fg=${accent}]⚔ ,#{?#{m:eng:*,#{pane_title}},#[fg=${fg}]● ,#{?#{m:review:*,#{pane_title}},#[fg=${activity}]✓ ,#[fg=${muted}]}}}#[bold]#{pane_title}#[nobold] "
+
+    # Border styling & indicators
+    local border_style pane_indicators popup_style
+    border_style="$(_config_get "theme.border_style" "heavy")"
+    pane_indicators="$(_config_get "theme.pane_indicators" "colour")"
+    popup_style="$(_config_get "theme.popup_border_style" "rounded")"
+
+    tmux set-option -t "$ORC_TMUX_SESSION" pane-border-lines "$border_style"
+    if [[ "$pane_indicators" != "off" ]]; then
+      tmux set-option -t "$ORC_TMUX_SESSION" pane-border-indicators "$pane_indicators"
+    fi
+    tmux set-option -t "$ORC_TMUX_SESSION" popup-border-lines "$popup_style"
+    tmux set-option -t "$ORC_TMUX_SESSION" popup-border-style "fg=${accent}"
 
     # Message bar
     tmux set-option -t "$ORC_TMUX_SESSION" message-style "bg=${accent},fg=${bg},bold"
@@ -1318,6 +1349,18 @@ _build_and_launch() {
   ruflo_block="$(_ruflo_persona_block)"
   [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
 
+  # Merge initial_prompt into the system prompt so startup instructions are
+  # invisible to the user. A minimal "Begin." kickoff triggers execution.
+  if [[ -n "$initial_prompt" ]]; then
+    persona="${persona}
+
+---
+
+## Initial Task
+
+${initial_prompt}"
+  fi
+
   # Inject persona into worktree (for file-based CLIs like OpenCode, Gemini)
   if [[ -n "$working_dir" ]]; then
     _adapter_inject_persona "$persona" "$working_dir" "$role"
@@ -1337,10 +1380,12 @@ _build_and_launch() {
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"
 
+  # Kickoff: "Begin." as user message to trigger execution. The actual task
+  # instructions live in the system prompt above.
   local prompt_file=""
   if [[ -n "$initial_prompt" ]]; then
     prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-    printf '%s' "$initial_prompt" > "$prompt_file"
+    printf '%s' "Begin." > "$prompt_file"
   fi
 
   # Build the command via adapter
