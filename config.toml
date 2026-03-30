@@ -221,3 +221,6 @@ fg = "#8b949e"                # status bar text
 border = "#30363d"            # inactive pane/window borders
 muted = "#6e7681"             # de-emphasized text (version, separators)
 activity = "#d29922"          # window activity highlight
+border_style = "single"       # pane border lines: "single", "heavy", "double", "simple"
+pane_indicators = "colour"    # active pane indicator: "off", "colour", "arrows", "both"
+popup_border_style = "rounded" # popup border lines: "single", "rounded", "heavy", "double", "simple", "padded", "none"
