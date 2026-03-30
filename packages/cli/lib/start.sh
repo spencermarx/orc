@@ -77,10 +77,11 @@ orc_start() {
       local hub_width
       hub_width="$(_config_get "hub.width" "30")"
       # Split left for Hub sidebar, launch the Hub TUI
+      # Pass ORC_ROOT explicitly since tmux pane won't inherit shell env
       tmux split-window -hb -l "$hub_width" \
         -t "$(_tmux_target "orc")" \
         -c "$ORC_ROOT" \
-        "node ${ORC_ROOT}/packages/hub/bin/orc-hub.js --window=orc" 2>/dev/null || true
+        "ORC_ROOT='${ORC_ROOT}' node '${ORC_ROOT}/packages/hub/bin/orc-hub.js' --window=orc" 2>/dev/null || true
       # Set Hub pane ID for Ctrl-o discovery
       local hub_pane
       hub_pane="$(tmux display-message -t "$(_tmux_target "orc")" -p '#{pane_index}' 2>/dev/null || echo "0")"
@@ -96,7 +97,7 @@ orc_start() {
       auto_sidebar="$(_config_get "hub.auto_sidebar" "true")"
       if [[ "$auto_sidebar" == "true" ]]; then
         tmux set-hook -t "$ORC_TMUX_SESSION" after-new-window \
-          "split-window -hb -l ${hub_width} -c '#{pane_current_path}' 'node ${ORC_ROOT}/packages/hub/bin/orc-hub.js --window=#{window_name}'" \
+          "split-window -hb -l ${hub_width} -c '#{pane_current_path}' 'ORC_ROOT=${ORC_ROOT} node ${ORC_ROOT}/packages/hub/bin/orc-hub.js --window=#{window_name}'" \
           2>/dev/null || true
       fi
     fi

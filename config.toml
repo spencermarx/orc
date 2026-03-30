@@ -178,7 +178,7 @@ strategy = ""                # WHO: interpreted by GOAL and PROJECT orchestrator
 
 [hub]
 enabled = false                  # Master toggle — true enables Hub sidebar in all windows
-width = 30                       # Hub sidebar width in columns
+width = 24                       # Hub sidebar width in columns
 keybinding = "C-o"               # Universal key to return focus to Hub (shown in status bar)
 agent_headers = true             # Show 2-row header panes above each agent pane
 auto_sidebar = true              # Auto-create Hub sidebar in new windows (companion pane)
