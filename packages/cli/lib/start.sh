@@ -87,6 +87,10 @@ orc_start() {
       _tmux_set_pane_id "orc" "$hub_pane" "hub: orc"
       tmux set-option -p -t "$(_tmux_target "orc" "$hub_pane")" remain-on-exit on 2>/dev/null || true
 
+      # Select the agent pane (right side) so _launch_agent_in_window targets it
+      # Hub split-left creates Hub as pane 0, shell shifts to pane 1
+      tmux select-pane -t "$(_tmux_target "orc" "1")" 2>/dev/null || true
+
       # Register companion sidebar hook for new windows
       local auto_sidebar
       auto_sidebar="$(_config_get "hub.auto_sidebar" "true")"

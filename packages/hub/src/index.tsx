@@ -15,7 +15,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const orcRoot = join(__dirname, "..", "..", "..");
+// Prefer ORC_ROOT env var (set by the orc CLI) over computed path
+const orcRoot = process.env["ORC_ROOT"] || join(__dirname, "..", "..", "..");
 
 // Parse CLI args
 const args = process.argv.slice(2);
