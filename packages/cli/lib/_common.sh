@@ -186,13 +186,43 @@ _config_get() {
 # Returns the CLI name or exits 1 if none found.
 _auto_detect_agent_cmd() {
   local candidate
+  local found=()
   for candidate in claude opencode codex gemini; do
     if command -v "$candidate" &>/dev/null; then
-      echo "$candidate"
-      return 0
+      found+=("$candidate")
     fi
   done
-  return 1
+  if [[ ${#found[@]} -eq 0 ]]; then
+    return 1
+  fi
+  if [[ ${#found[@]} -eq 1 ]]; then
+    echo "${found[0]}"
+    return 0
+  fi
+  # Multiple CLIs found — check if we've already cached a choice
+  local cache_file="${TMPDIR:-/tmp}/.orc-auto-cli-choice-$$"
+  if [[ -f "$cache_file" ]]; then
+    cat "$cache_file"
+    return 0
+  fi
+  # Prompt user and cache their choice
+  printf '\033[0;34m[orc]\033[0m Multiple agent CLIs detected: %s\n' "${found[*]}" >&2
+  local i
+  for i in "${!found[@]}"; do
+    printf '  %d) %s\n' "$((i+1))" "${found[$i]}" >&2
+  done
+  local choice
+  while true; do
+    printf '\033[0;34m[orc]\033[0m Choose a CLI [1-%d]: ' "${#found[@]}" >&2
+    read -r choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#found[@]} )); then
+      local selected="${found[$((choice-1))]}"
+      echo "$selected" > "$cache_file"
+      echo "$selected"
+      return 0
+    fi
+    printf '\033[0;33m[orc]\033[0m Invalid choice. Enter a number between 1 and %d.\n' "${#found[@]}" >&2
+  done
 }
 
 # Resolve the effective agent CLI for this session.
