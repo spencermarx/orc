@@ -26,6 +26,39 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.13 — Theme Redesign & Splash Screen (2026-03-30)
+
+### New Capabilities
+
+#### New: Theme engine with Nerd Font support
+
+Pill-shaped window tabs using powerline glyphs (auto-detected via `fc-list`). Theme is generated as a temp `.conf` and sourced by tmux — Nerd Font glyphs embedded as literal UTF-8, no shell escaping. Falls back to plain text tabs without Nerd Font.
+
+**New fields:**
+- `theme.error` — error/blocked state color (default `#f85149`)
+- `theme.tab_bg` — inactive tab background (default `#161b22`)
+- `theme.bg_highlight` — raised surface bg for palette/popups (default `#1c2128`)
+- `theme.separator_style` — separator glyphs: `powerline`, `rounded`, `slant`, `plain` (default `rounded`)
+- `theme.nerd_font` — Nerd Font detection: `auto`, `on`, `off` (default `auto`)
+
+#### New: Branded splash screen
+
+ASCII orc face + ORC logo displayed on first session creation. Centered, green-tinted, dismissed on keypress. Controlled by `tui.show_splash` (default `true`).
+
+#### Changed: Help overlay
+
+Added tmux basics reference, status icons legend, and roles section.
+
+#### Changed: Command palette
+
+fzf colors now use hex theme values for full theme awareness.
+
+#### Changed: Status bar
+
+Health groups separated by `│` dividers. Error color config-driven.
+
+---
+
 ## v0.2.12 — Border Styling & System Prompt Delivery (2026-03-30)
 
 ### New Capabilities
