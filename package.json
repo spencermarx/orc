@@ -4,6 +4,11 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
+    "build": "nx run-many --target=build",
+    "test": "nx run-many --target=test",
+    "typecheck": "nx run-many --target=typecheck",
+    "test:hub": "nx test @orc/hub",
+    "build:hub": "nx build @orc/hub",
     "orc:install": "bash packages/cli/lib/init.sh"
   },
   "devDependencies": {

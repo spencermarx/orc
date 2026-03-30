@@ -8,9 +8,10 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "node --test dist/__tests__/*.test.js",
+    "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
-    "start": "node bin/orc-hub.js",
-    "test": "node --test src/**/*.test.ts"
+    "start": "node bin/orc-hub.js"
   },
   "dependencies": {
     "chokidar": "^4.0.0",

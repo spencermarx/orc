@@ -1,8 +1,29 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "!{projectRoot}/dist/**", "!{projectRoot}/node_modules/**"],
+    "production": ["default", "!{projectRoot}/**/*.test.ts", "!{projectRoot}/**/*.test.js"]
+  },
+  "targetDefaults": {
+    "build": {
+      "inputs": ["production", "^production"],
+      "outputs": ["{projectRoot}/dist"],
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "test": {
+      "inputs": ["default", "^production"],
+      "dependsOn": ["build"],
+      "cache": true
+    },
+    "typecheck": {
+      "inputs": ["default", "^production"],
+      "cache": true
+    }
+  },
   "release": {
-    "projects": ["@orc/cli", "@orc/commands", "@orc/personas"],
+    "projects": ["@orc/cli", "@orc/commands", "@orc/personas", "@orc/hub"],
     "projectsRelationship": "fixed",
     "version": {
       "generatorOptions": {
