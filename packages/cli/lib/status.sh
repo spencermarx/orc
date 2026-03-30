@@ -108,7 +108,8 @@ if [[ "${1:-}" == "--line" ]]; then
   c_accent="$(_config_get "theme.accent" "#00ff88")"
   c_fg="$(_config_get "theme.fg" "#8b949e")"
   c_activity="$(_config_get "theme.activity" "#d29922")"
-  c_error="#f85149"
+  c_error="$(_config_get "theme.error" "#f85149")"
+  c_border="$(_config_get "theme.border" "#30363d")"
 
   parts=()
   # Notification count
@@ -133,7 +134,11 @@ if [[ "${1:-}" == "--line" ]]; then
   (( dead > 0 ))    && parts+=("#[fg=${c_error}]${dead} ✗ dead#[fg=${c_fg}]")
   line_out=""
   if (( ${#parts[@]} > 0 )); then
-    line_out="${parts[*]}"
+    # Join with thin separators between health groups
+    line_out="${parts[0]}"
+    for (( i=1; i<${#parts[@]}; i++ )); do
+      line_out+=" #[fg=${c_border}]│#[fg=${c_fg}] ${parts[$i]}"
+    done
   else
     line_out="idle"
   fi

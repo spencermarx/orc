@@ -99,6 +99,12 @@ trap 'rm -f "$tmpfile" "$outfile"' EXIT
 
 echo "$entries" | grep -v '^$' > "$tmpfile"
 
+# Theme-aware fzf colors
+bg="$(_config_get "theme.bg" "#0d1117")"
+fg="$(_config_get "theme.fg" "#8b949e")"
+bg_hl="$(_config_get "theme.bg_highlight" "#1c2128")"
+muted_hex="$(_config_get "theme.muted" "#6e7681")"
+
 fzf_args=(
   --ansi
   --delimiter='	'
@@ -110,9 +116,15 @@ fzf_args=(
   --border=rounded
   --border-label=" ⚔ Command Palette "
   --border-label-pos=2
-  --prompt="  "
+  --prompt=" ⚔ "
   --pointer="▸"
-  --color="border:green,label:green,header:grey,prompt:green,pointer:green"
+  --marker="●"
+  --color="bg:${bg},fg:${fg},hl:${accent}"
+  --color="bg+:${bg_hl},fg+:white,hl+:${accent}"
+  --color="border:${accent},label:${accent}"
+  --color="header:${muted_hex},prompt:${accent},pointer:${accent}"
+  --color="info:${muted_hex},spinner:${accent},marker:${accent}"
+  --color="gutter:${bg}"
 )
 
 if [[ "$show_preview" == "true" ]]; then
