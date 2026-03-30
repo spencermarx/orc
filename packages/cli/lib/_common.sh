@@ -1318,6 +1318,18 @@ _build_and_launch() {
   ruflo_block="$(_ruflo_persona_block)"
   [[ -n "$ruflo_block" ]] && persona="${persona}${ruflo_block}"
 
+  # Merge initial_prompt into the system prompt so startup instructions are
+  # invisible to the user. A minimal "Begin." kickoff triggers execution.
+  if [[ -n "$initial_prompt" ]]; then
+    persona="${persona}
+
+---
+
+## Initial Task
+
+${initial_prompt}"
+  fi
+
   # Inject persona into worktree (for file-based CLIs like OpenCode, Gemini)
   if [[ -n "$working_dir" ]]; then
     _adapter_inject_persona "$persona" "$working_dir" "$role"
@@ -1337,10 +1349,12 @@ _build_and_launch() {
   persona_file="$(mktemp "${TMPDIR:-/tmp}/orc-persona-XXXXXX")"
   printf '%s' "$persona" > "$persona_file"
 
+  # Kickoff: "Begin." as user message to trigger execution. The actual task
+  # instructions live in the system prompt above.
   local prompt_file=""
   if [[ -n "$initial_prompt" ]]; then
     prompt_file="$(mktemp "${TMPDIR:-/tmp}/orc-prompt-XXXXXX")"
-    printf '%s' "$initial_prompt" > "$prompt_file"
+    printf '%s' "Begin." > "$prompt_file"
   fi
 
   # Build the command via adapter
