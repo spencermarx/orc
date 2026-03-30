@@ -128,6 +128,19 @@ orc_review() {
   # Set review pane title (used for discovery)
   _tmux_set_pane_title "$window_name" "$review_pane" "$review_label"
 
+  # ── Agent header pane for reviewer (when enabled) ──────────────────────
+  local agent_headers
+  agent_headers="$(_config_get "hub.agent_headers" "true" "$project_path")"
+  if [[ "$agent_headers" == "true" ]]; then
+    local header_cmd="${ORC_ROOT}/packages/cli/lib/header.sh --role=review --bead=${bead} --worktree=${worktree_dir} --title='R${round}' --goal=${goal:-}"
+    tmux split-window -vb -l 2 -t "$(_tmux_target "$window_name" "$review_pane")" -c "$worktree_dir" "$header_cmd" 2>/dev/null || true
+    # Header inserts above the review pane — update review_pane index
+    local new_review_pane
+    new_review_pane="$(tmux display-message -t "$(_tmux_target "$window_name")" -p '#{pane_index}' 2>/dev/null)"
+    # Find the review pane by title since indices shifted
+    review_pane="$(_tmux_find_pane "$window_name" "$review_label" 2>/dev/null | head -1 || echo "$review_pane")"
+  fi
+
   # Launch review process BEFORE renaming the window
   # (renaming changes $window_name which breaks subsequent tmux targeting)
 

@@ -261,18 +261,36 @@ Controls when orc creates overflow windows instead of adding more panes.
 
 ---
 
+### `[hub]` — Hub Sidebar TUI
+
+The Hub is a rich sidebar TUI that provides hierarchical navigation, real-time status, actions, and copilot chat. It runs in a dedicated tmux pane alongside agent panes.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | `true` = launch Hub sidebar in every window. |
+| `width` | `30` | Hub sidebar width in columns. |
+| `keybinding` | `"C-o"` | tmux key to return focus to Hub from any pane. Uses tmux notation (`C-` = Ctrl, `M-` = Alt). |
+| `agent_headers` | `true` | `true` = create 2-row header panes above each agent showing status, elapsed time, and metadata. |
+| `auto_sidebar` | `true` | `true` = auto-create Hub sidebar in every new tmux window via `after-new-window` hook. |
+
+When enabled, the Hub replaces the command palette, context menu, and status window with a unified interface. The `^O hub` hint appears in the status bar showing how to return to the Hub.
+
+---
+
 ### `[theme]` — tmux Visual Theme
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `true` | `false` = respect your existing tmux theme; only set functional options. |
 | `mouse` | `true` | `false` = do not override mouse setting (only applies when theme is enabled). |
-| `accent` | `"#00ff88"` | Primary accent color — status bar, active borders, current window. |
-| `bg` | `"#0d1117"` | Status bar background. |
-| `fg` | `"#8b949e"` | Status bar text. |
-| `border` | `"#30363d"` | Inactive pane and window borders. |
-| `muted` | `"#6e7681"` | De-emphasized text (version info, separators). |
-| `activity` | `"#d29922"` | Window activity highlight color. |
+| `accent` | `"#00ff88"` | Primary accent (neon green) — active elements, working status. |
+| `secondary` | `"#00cc6a"` | Secondary accent (muted green) — chrome, section headers. |
+| `bg` | `"#0d1117"` | Status bar background, surface color. |
+| `fg` | `"#e6edf3"` | Primary text (high contrast). |
+| `border` | `"#1a3a2a"` | Inactive pane borders (dark green). |
+| `muted` | `"#3b5249"` | De-emphasized text, inactive elements (dim green). |
+| `activity` | `"#d4a017"` | Attention/warning color (amber) — review, questions. |
+| `error` | `"#f85149"` | Error/blocked color (red). |
 
 ---
 

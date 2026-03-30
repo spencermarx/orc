@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { Box, Text, useInput, useApp } from "ink";
 import type { OrcConfig } from "./lib/config.js";
 import { createStateWatcher, type OrcState, type AgentStatus } from "./lib/state.js";
@@ -173,6 +174,16 @@ export function App({ config, windowName }: AppProps) {
       handlePeek(items[selectedIndex]);
     }
 
+    // Message — send text to agent's pane
+    if (input === "m" && items[selectedIndex]) {
+      setCopilotActive(true); // Reuse copilot input for messaging
+    }
+
+    // Teardown
+    if (input === "x" && items[selectedIndex]) {
+      handleTeardown(items[selectedIndex]);
+    }
+
     // Density toggle
     if (input === "z") {
       setDensity((d) => {
@@ -207,21 +218,89 @@ export function App({ config, windowName }: AppProps) {
     } catch { /* ignore */ }
   }, []);
 
-  const handleReject = useCallback((_item: TreeItem) => {
-    // TODO: mini-editor for rejection feedback
-    setEvents((prev) => [
-      ...prev,
-      { timestamp: Date.now(), scope: "", message: "Reject: use 'r' in full view (coming soon)", level: "warn" },
-    ]);
+  const handleReject = useCallback((item: TreeItem) => {
+    if (item.type !== "bead" || item.status !== "review") return;
+    const bead = item.data as { worktreePath: string };
+    const feedbackPath = `${bead.worktreePath}/.worker-feedback`;
+    // Write rejection with a generic message — user can edit via agent pane
+    const feedback = "VERDICT: not-approved\n## Issues\n- Rejected via Hub. Navigate to the review pane for detailed feedback.\n";
+    try {
+      writeFileSync(feedbackPath, feedback);
+      setEvents((prev) => [
+        ...prev,
+        { timestamp: Date.now(), scope: item.key, message: `${item.label} rejected`, level: "error" },
+      ]);
+    } catch { /* ignore */ }
   }, []);
 
   const handleDispatch = useCallback((item: TreeItem) => {
-    // TODO: shell out to orc spawn-goal / orc spawn
-    setEvents((prev) => [
-      ...prev,
-      { timestamp: Date.now(), scope: item.key, message: `Dispatch: coming soon`, level: "warn" },
-    ]);
-  }, []);
+    try {
+      if (item.type === "goal") {
+        const goal = item.data as { goalName: string };
+        const projectKey = item.key.split("/")[0];
+        execSync(`orc spawn-goal ${projectKey} ${goal.goalName}`, {
+          encoding: "utf-8",
+          timeout: 30000,
+          cwd: config.orcRoot,
+        });
+        setEvents((prev) => [
+          ...prev,
+          { timestamp: Date.now(), scope: item.key, message: `Dispatched goal ${goal.goalName}`, level: "success" },
+        ]);
+      } else if (item.type === "bead") {
+        const bead = item.data as { beadId: string; goalName: string };
+        const projectKey = item.key.split("/")[0];
+        execSync(`orc spawn ${projectKey} ${bead.beadId} ${bead.goalName}`, {
+          encoding: "utf-8",
+          timeout: 30000,
+          cwd: config.orcRoot,
+        });
+        setEvents((prev) => [
+          ...prev,
+          { timestamp: Date.now(), scope: item.key, message: `Dispatched ${bead.beadId}`, level: "success" },
+        ]);
+      }
+    } catch (err) {
+      setEvents((prev) => [
+        ...prev,
+        { timestamp: Date.now(), scope: item.key, message: `Dispatch failed: ${err}`, level: "error" },
+      ]);
+    }
+  }, [config.orcRoot]);
+
+  const handleTeardown = useCallback((item: TreeItem) => {
+    try {
+      const projectKey = item.key.split("/")[0];
+      if (item.type === "bead") {
+        const bead = item.data as { beadId: string };
+        execSync(`orc teardown ${projectKey} ${bead.beadId}`, {
+          encoding: "utf-8",
+          timeout: 30000,
+          cwd: config.orcRoot,
+        });
+        setEvents((prev) => [
+          ...prev,
+          { timestamp: Date.now(), scope: item.key, message: `Torn down ${bead.beadId}`, level: "info" },
+        ]);
+      } else if (item.type === "goal") {
+        const goal = item.data as { goalName: string };
+        execSync(`orc teardown ${projectKey} ${goal.goalName}`, {
+          encoding: "utf-8",
+          timeout: 30000,
+          cwd: config.orcRoot,
+        });
+        setEvents((prev) => [
+          ...prev,
+          { timestamp: Date.now(), scope: item.key, message: `Torn down goal ${goal.goalName}`, level: "info" },
+        ]);
+      }
+    } catch (err) {
+      setEvents((prev) => [
+        ...prev,
+        { timestamp: Date.now(), scope: item.key, message: `Teardown failed: ${err}`, level: "error" },
+      ]);
+    }
+  }, [config.orcRoot]);
 
   const handlePeek = useCallback((item: TreeItem) => {
     if (item.type === "bead") {

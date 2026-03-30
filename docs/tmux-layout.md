@@ -19,6 +19,39 @@ Session: orc
 
 Window names are stable identifiers. Orc never renames them during a session, so tmux keybindings and scripts can target them reliably.
 
+## Hub Sidebar
+
+When `[hub] enabled = true`, every window includes a **Hub sidebar pane** on the left. The Hub is a TypeScript TUI (Ink/React) that provides hierarchical navigation, real-time status, and one-key actions — replacing the command palette, context menu, and status window.
+
+```
+Session: orc
+├── orc                          <- Hub sidebar + Root orchestrator
+├── myapp                        <- Hub sidebar + Project orchestrator
+├── myapp/fix-auth               <- Hub sidebar + Goal orchestrator + engineers
+└── ...
+```
+
+Each Hub sidebar instance adapts to its window context:
+- **Root window**: Shows all projects with goals/beads tree
+- **Project window**: Shows goals for this project
+- **Goal window**: Shows beads for this goal
+
+The Hub is created automatically via a tmux `after-new-window` hook. See [Hub documentation](hub.md) for keyboard shortcuts and actions.
+
+### Header Panes
+
+When `[hub] agent_headers = true` (default), each agent pane gets a 2-row header pane above it showing role, bead ID, title, status, and elapsed time. Headers are state-aware — green for working, amber for review, red for blocked.
+
+```
++------ header: 2 rows --------+
+| ● eng: bd-a1b2 │ working 8m  |
++-------------------------------+
+|                               |
+|  [Agent CLI — full screen]    |
+|                               |
++-------------------------------+
+```
+
 ## Inside a Goal Window
 
 Each goal window uses a `main-vertical` layout. The goal orchestrator occupies the left pane (persistent, roughly 60% width). Engineers stack on the right, each in its own pane.

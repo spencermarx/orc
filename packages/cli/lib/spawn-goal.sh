@@ -79,6 +79,22 @@ orc_spawn_goal() {
   # Set window status indicator
   _tmux_set_window_status "$goal_window" "●"
 
+  # ── Agent header pane (when enabled) ───────────────────────────────────
+  local agent_headers
+  agent_headers="$(_config_get "hub.agent_headers" "true" "$project_path")"
+  if [[ "$agent_headers" == "true" ]]; then
+    # Create 2-row header pane above goal orch (pane 0)
+    local header_cmd="${ORC_ROOT}/packages/cli/lib/header.sh --role=goal --bead=${goal} --worktree=${goal_worktree} --title='${goal}' --goal=${goal}"
+    tmux split-window -vb -l 2 -t "$(_tmux_target "$goal_window" "0")" -c "$goal_worktree" "$header_cmd" 2>/dev/null || true
+    # Header becomes pane 0, goal orch shifts to pane 1
+    local header_pane="0"
+    tmux set-option -p -t "$(_tmux_target "$goal_window" "$header_pane")" remain-on-exit on 2>/dev/null || true
+    _tmux_set_pane_id "$goal_window" "$header_pane" "header: goal: ${goal}"
+    # Re-set goal orch identifiers on the shifted pane
+    _tmux_set_pane_title "$goal_window" "1" "$pane_title"
+    _tmux_set_pane_id "$goal_window" "1" "$pane_title"
+  fi
+
   # Set layout hook — re-apply main-vertical after any pane split to prevent tiling
   local layout_cmd="select-layout -t ${ORC_TMUX_SESSION}:${goal_window} main-vertical"
   tmux set-hook -t "${ORC_TMUX_SESSION}:${goal_window}" after-split-window "$layout_cmd" 2>/dev/null || true

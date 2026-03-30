@@ -350,8 +350,10 @@ Check `packages/cli/lib/adapters/generic.sh` for the full template placeholder r
 | Project setup & config doctor | [docs/setup.md](docs/setup.md) |
 | Supported agent CLIs | [docs/agent-clis.md](docs/agent-clis.md) |
 | tmux layout & navigation | [docs/tmux-layout.md](docs/tmux-layout.md) |
+| Hub sidebar TUI | [docs/hub.md](docs/hub.md) |
 | Customizing personas | [docs/personas.md](docs/personas.md) |
 | YOLO mode | [docs/yolo-mode.md](docs/yolo-mode.md) |
+| Development guide | [docs/development.md](docs/development.md) |
 
 ---
 
