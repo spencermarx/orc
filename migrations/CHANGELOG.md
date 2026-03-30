@@ -26,6 +26,27 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.12 — Border Styling & System Prompt Delivery (2026-03-30)
+
+### New Capabilities
+
+#### New: `[theme]` border styling fields
+
+**Fields:**
+- `theme.border_style` (string, default `"single"`) — pane border line style: `"single"`, `"heavy"`, `"double"`, `"simple"`
+- `theme.pane_indicators` (string, default `"colour"`) — active pane indicator: `"off"`, `"colour"`, `"arrows"`, `"both"`
+- `theme.popup_border_style` (string, default `"rounded"`) — popup border line style: `"single"`, `"rounded"`, `"heavy"`, `"double"`, `"simple"`, `"padded"`, `"none"`
+
+**What it does:** Configures tmux pane and popup border appearance. Pane borders get bold title labels. Active pane uses colour indicators by default. Popups (help overlay, command palette) use rounded corners.
+
+**Default (unconfigured):** Single pane borders with colour indicators, rounded popup borders. No action needed.
+
+#### Changed: Agent prompt delivery
+
+Task instructions (initial_prompt) are now merged into the system prompt instead of appearing as a visible user message. Agents see a minimal "Begin." kickoff message. No config changes required — this is an internal behavioral change.
+
+---
+
 ## v0.2.11 — TUI Navigation Layer (2026-03-26)
 
 ### New Capabilities
