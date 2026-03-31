@@ -94,6 +94,9 @@ if [[ "${1:-}" == "--line" ]]; then
     for d in "$path/.worktrees"/*/; do
       [[ -d "$d" ]] || continue
       [[ "$(basename "$d")" == .* ]] && continue
+      # Skip goal orchestrator worktrees — their status is tracked via
+      # .orc-state/goals/ and counted in the goals section above.
+      [[ "$(basename "$d")" == goal-* ]] && continue
       status="$(_worker_status "$d")"
       case "$status" in
         working*)  ((working++)) || true ;;
@@ -173,6 +176,7 @@ for key in $keys; do
   for d in "$path/.worktrees"/*/; do
     [[ -d "$d" ]] || continue
     [[ "$(basename "$d")" == .* ]] && continue
+    [[ "$(basename "$d")" == goal-* ]] && continue
     ((total_workers++)) || true
     status="$(_worker_status "$d")"
     case "$status" in
@@ -259,6 +263,8 @@ for key in $keys; do
     bead_name="$(basename "$d")"
     # Skip internal state directories (not worktrees)
     [[ "$bead_name" == .* ]] && continue
+    # Skip goal orchestrator worktrees — shown in goal headers via .orc-state
+    [[ "$bead_name" == goal-* ]] && continue
     wt_branch="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     status="$(_worker_status "$d")"
     elapsed="$(_format_elapsed "$d/.worker-status")"
