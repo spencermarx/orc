@@ -82,6 +82,81 @@ else
   _info "✓ Projects: projects.toml exists"
 fi
 
+# ── Agent CLI selection ─────────────────────────────────────────────────────
+# If multiple CLIs are available and no explicit choice exists, ask the user.
+# Uses _config_get (which parses TOML structurally) to detect existing config,
+# avoiding grep-based heuristics that can't distinguish sections.
+
+_init_existing_agent_cmd="$(_config_get "defaults.agent_cmd" "auto")"
+
+if [[ "$_init_existing_agent_cmd" == "auto" ]]; then
+  local_detected=""
+  local_detected="$(_auto_detect_agent_cmd 2>/dev/null)" || true
+
+  if [[ -n "$local_detected" ]]; then
+    # Count CLIs (space-separated)
+    local_count=0
+    for _ in $local_detected; do ((local_count++)) || true; done
+
+    if [[ "$local_count" -gt 1 ]]; then
+      # Multiple CLIs — prompt user to choose
+      echo ""
+      _info "Multiple agent CLIs detected:"
+      local_i=0
+      for cli in $local_detected; do
+        ((local_i++)) || true
+        _info "  $local_i) $cli"
+      done
+
+      local_choice=""
+      while true; do
+        printf '\033[0;34m[orc]\033[0m Choose your default CLI [1-%d]: ' "$local_count"
+        read -r local_choice
+        if [[ "$local_choice" =~ ^[0-9]+$ ]] && (( local_choice >= 1 && local_choice <= local_count )); then
+          break
+        fi
+        _warn "Invalid choice. Enter a number between 1 and $local_count."
+      done
+
+      # Pick the Nth CLI from the space-separated list
+      local_selected=""
+      local_j=0
+      for cli in $local_detected; do
+        ((local_j++)) || true
+        if [[ "$local_j" -eq "$local_choice" ]]; then
+          local_selected="$cli"
+          break
+        fi
+      done
+    else
+      # Single CLI — use it directly
+      local_selected="$local_detected"
+    fi
+
+    # Write the selection into config.local.toml.
+    # Always write as a clean [defaults] block — avoids sed fragility with
+    # commented templates. If [defaults] already exists uncommented, append
+    # the key under it; otherwise append a new section.
+    if [[ -n "$local_selected" ]]; then
+      if grep -q '^\[defaults\]' "$local_config" 2>/dev/null; then
+        # [defaults] section exists — append agent_cmd after it
+        case "$OSTYPE" in
+          darwin*) sed -i '' '/^\[defaults\]/a\
+agent_cmd = "'"$local_selected"'"
+' "$local_config" ;;
+          *)       sed -i '/^\[defaults\]/a agent_cmd = "'"$local_selected"'"' "$local_config" ;;
+        esac
+      else
+        # No uncommented [defaults] — append a new section
+        printf '\n[defaults]\nagent_cmd = "%s"\n' "$local_selected" >> "$local_config"
+      fi
+      _info "✓ Default CLI: $local_selected (saved to config.local.toml)"
+    fi
+  fi
+else
+  _info "✓ Agent CLI: $_init_existing_agent_cmd (configured in config)"
+fi
+
 # ── Install slash commands ──────────────────────────────────────────────────
 
 _install_commands "$ORC_ROOT"
