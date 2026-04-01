@@ -70,6 +70,42 @@ Suggest next actions if any items need attention.
 
 ## Instructions (Goal Orchestrator)
 
+### Step 0 — Clean Up Orphan Panes
+
+Before checking statuses, clean up any orphan panes in the goal window. Orphan panes are those without a recognized `@orc_id` (e.g., leftover sub-agent sessions, dead reviewers that weren't torn down).
+
+First, list panes to detect orphans — any pane (except pane 0) without `@orc_id` starting with `goal:`, `eng:`, or `review:`:
+```bash
+tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}' | while read idx; do
+  [[ "$idx" == "0" ]] && continue
+  orc_id=$(tmux show-option -t "orc:<project>/<goal>.$idx" -p -v @orc_id 2>/dev/null || echo "")
+  case "$orc_id" in
+    goal:*|eng:*|review:*) ;;
+    *) echo "Orphan pane $idx (orc_id='$orc_id')" ;;
+  esac
+done
+```
+
+Kill orphan panes in **reverse index order** (highest first, so indices don't shift), then re-apply the main-vertical layout:
+```bash
+# Kill orphans (reverse order to preserve indices)
+for idx in $(tmux list-panes -t "orc:<project>/<goal>" -F '#{pane_index}' | sort -rn); do
+  [[ "$idx" == "0" ]] && continue
+  orc_id=$(tmux show-option -t "orc:<project>/<goal>.$idx" -p -v @orc_id 2>/dev/null || echo "")
+  case "$orc_id" in
+    goal:*|eng:*|review:*) continue ;;
+  esac
+  tmux kill-pane -t "orc:<project>/<goal>.$idx"
+done
+
+# Re-apply goal layout
+tmux select-layout -t "orc:<project>/<goal>" main-vertical
+win_width=$(tmux display-message -t "orc:<project>/<goal>" -p '#{window_width}')
+tmux resize-pane -t "orc:<project>/<goal>.0" -x $((win_width * 60 / 100))
+```
+
+Also check overflow windows (`<project>/<goal>:2`, etc.) for orphans.
+
 ### Step 1 — List Active Worktrees
 
 Find all active engineer panes in the goal window (and any overflow windows like `<project>/<goal>:2`). Engineer panes have titles matching `"eng: <bead>"`. Also scan the `.worktrees/` directory for worktree paths.
