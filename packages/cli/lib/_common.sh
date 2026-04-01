@@ -355,8 +355,8 @@ set-option  -g status-style "bg=${bg},fg=${fg}"
 set-option  -g status-position bottom
 set-option  -g status-left-length 65
 set-option  -g status-right-length 120
-set-window-option -g window-status-format "#[fg=${tab_bg}]#[bg=${bg}]${_gl_l}#[fg=${muted}]#[bg=${tab_bg}] #{?#{==:#W,orc},root,#W} #{?@orc_status,#{@orc_status} ,}#[fg=${tab_bg}]#[bg=${bg}]${_gl_r}"
-set-window-option -g window-status-current-format "#[fg=${accent}]#[bg=${bg}]${_gl_l}#[fg=${bg}]#[bg=${accent}]#[bold] #{?#{==:#W,orc},root,#W} #{?@orc_status,#{@orc_status} ,}#[nobold]#[fg=${accent}]#[bg=${bg}]${_gl_r}"
+set-window-option -g window-status-format "#[fg=${tab_bg}]#[bg=${bg}]${_gl_l}#[fg=${muted}]#[bg=${tab_bg}] #{?@orc_short,#{@orc_short},#W} #{?@orc_status,#{@orc_status} ,}#[fg=${tab_bg}]#[bg=${bg}]${_gl_r}"
+set-window-option -g window-status-current-format "#[fg=${accent}]#[bg=${bg}]${_gl_l}#[fg=${bg}]#[bg=${accent}]#[bold] #{?@orc_short,#{@orc_short},#W} #{?@orc_status,#{@orc_status} ,}#[nobold]#[fg=${accent}]#[bg=${bg}]${_gl_r}"
 set-window-option -g window-status-separator " "
 set-window-option -g window-status-activity-style "fg=${activity}"
 set-option  -g pane-border-style "fg=${border}"
@@ -401,6 +401,19 @@ THEME_EOF
     # ── Status-right: health line + version ──
     tmux set-option -t "$ORC_TMUX_SESSION" status-right "#[fg=${fg}]#(${ORC_ROOT}/packages/cli/lib/status.sh --line 2>/dev/null) #[fg=${border}]│ #[fg=${muted}]v${ORC_VERSION} "
 
+    # ── Backfill @orc_short for existing windows missing it ──
+    local _bf_win
+    while IFS= read -r _bf_win; do
+      [[ -z "$_bf_win" ]] && continue
+      local _bf_existing
+      _bf_existing="$(tmux show-option -w -t "${ORC_TMUX_SESSION}:${_bf_win}" -v @orc_short 2>/dev/null || true)"
+      if [[ -z "$_bf_existing" ]]; then
+        local _bf_short
+        _bf_short="$(_window_short_name "$_bf_win")"
+        tmux set-option -w -t "${ORC_TMUX_SESSION}:${_bf_win}" @orc_short "$_bf_short" 2>/dev/null || true
+      fi
+    done < <(tmux list-windows -t "$ORC_TMUX_SESSION" -F '#{window_name}' 2>/dev/null)
+
     # Mouse (configurable — only when themed so custom tmux users aren't affected)
     local mouse_enabled
     mouse_enabled="$(_config_get "theme.mouse" "true")"
@@ -412,6 +425,7 @@ THEME_EOF
     # Always unbind first so disabling a feature actually removes its binding
     tmux unbind-key -T prefix Space 2>/dev/null || true
     tmux unbind-key -T prefix m 2>/dev/null || true
+    tmux unbind-key -T prefix w 2>/dev/null || true
     tmux unbind-key -T prefix '?' 2>/dev/null || true
     tmux unbind-key -n MouseDown3Pane 2>/dev/null || true
     tmux unbind-key -n MouseUp1StatusLeft 2>/dev/null || true
@@ -445,22 +459,26 @@ THEME_EOF
         tmux bind-key -n MouseUp1StatusRight display-popup -E -w 60% -h 75% -T ' ⚔ Orc Help ' "${ORC_ROOT}/packages/cli/lib/help.sh"
       fi
 
+      # Window chooser: Prefix+w (always when TUI enabled)
+      tmux bind-key -T prefix w run-shell "${ORC_ROOT}/packages/cli/lib/chooser.sh"
+
       # Keybindings: Alt+ shortcuts (opt-in)
       # Unbind defaults first (in case user changed keys or disabled)
-      for _def_key in "M-[" "M-]" "M-0" "M-s" "M-p" "M-m" "M-?"; do
+      for _def_key in "M-[" "M-]" "M-0" "M-s" "M-p" "M-m" "M-w" "M-?"; do
         tmux unbind-key -n "$_def_key" 2>/dev/null || true
       done
 
       local kb_enabled
       kb_enabled="$(_config_get "keybindings.enabled" "false")"
       if [[ "$kb_enabled" == "true" ]]; then
-        local kb_prev kb_next kb_project kb_dashboard kb_palette kb_menu kb_help
+        local kb_prev kb_next kb_project kb_dashboard kb_palette kb_menu kb_chooser kb_help
         kb_prev="$(_config_get "keybindings.prev" "M-[")"
         kb_next="$(_config_get "keybindings.next" "M-]")"
         kb_project="$(_config_get "keybindings.project" "M-0")"
         kb_dashboard="$(_config_get "keybindings.dashboard" "M-s")"
         kb_palette="$(_config_get "keybindings.palette" "M-p")"
         kb_menu="$(_config_get "keybindings.menu" "M-m")"
+        kb_chooser="$(_config_get "keybindings.chooser" "M-w")"
         kb_help="$(_config_get "keybindings.help" "M-?")"
 
         [[ -n "$kb_prev" ]]      && tmux bind-key -n "$kb_prev" select-window -t :-
@@ -469,6 +487,7 @@ THEME_EOF
         [[ -n "$kb_dashboard" ]] && tmux bind-key -n "$kb_dashboard" select-window -t "${ORC_TMUX_SESSION}:status"
         [[ -n "$kb_palette" ]]   && tmux bind-key -n "$kb_palette" run-shell "${ORC_ROOT}/packages/cli/lib/palette.sh"
         [[ -n "$kb_menu" ]]      && tmux bind-key -n "$kb_menu" run-shell "${ORC_ROOT}/packages/cli/lib/menu.sh '#{pane_id}'"
+        [[ -n "$kb_chooser" ]]   && tmux bind-key -n "$kb_chooser" run-shell "${ORC_ROOT}/packages/cli/lib/chooser.sh"
         [[ -n "$kb_help" ]]      && tmux bind-key -n "$kb_help" display-popup -E -w 60% -h 75% -T "' ⚔ Orc Help '" "${ORC_ROOT}/packages/cli/lib/help.sh"
       fi
     fi
@@ -502,6 +521,10 @@ _tmux_new_window() {
   else
     tmux new-window -a -t "$ORC_TMUX_SESSION" -n "$name" -c "$dir"
   fi
+  # Set compact display name for the tab strip
+  local short
+  short="$(_window_short_name "$name")"
+  tmux set-option -w -t "$(_tmux_target "$name")" @orc_short "$short" 2>/dev/null || true
   _tmux_cleanup_init
 }
 
@@ -568,6 +591,38 @@ _tmux_target() {
   else
     echo "${ORC_TMUX_SESSION}:${window}"
   fi
+}
+
+# Derive a compact display name from a window name.
+# Goal windows get ticket prefix extraction or truncation; others pass through.
+_window_short_name() {
+  local win_name="$1"
+  case "$win_name" in
+    orc)          echo "root" ;;
+    status)       echo "status" ;;
+    */board)      echo "board" ;;
+    */*)
+      local goal_part="${win_name#*/}"
+      local suffix=""
+      # Handle overflow suffix (:N where N is digits only)
+      if [[ "$goal_part" =~ :[0-9]+$ ]]; then
+        suffix=":${goal_part##*:}"
+        goal_part="${goal_part%:*}"
+      fi
+      # Try ticket prefix extraction (JIRA-style: ABC-123)
+      if [[ "$goal_part" =~ ^([A-Z]+-[0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}${suffix}"
+      else
+        local max_len=12
+        if (( ${#goal_part} > max_len )); then
+          echo "${goal_part:0:$((max_len-1))}…${suffix}"
+        else
+          echo "${goal_part}${suffix}"
+        fi
+      fi
+      ;;
+    *) echo "$win_name" ;;
+  esac
 }
 
 # Set the status indicator for a window (displayed in status bar, not in the name).
@@ -742,6 +797,51 @@ _tmux_is_dead_window() {
   return 0    # dead
 }
 
+# Clean up orphan panes in a goal window and re-apply layout.
+# Orphan panes are those without a recognized @orc_id (goal:*, eng:*, review:*).
+# These are typically leftover sub-agent panes or dead reviewers that weren't
+# properly torn down.
+# Usage: _tmux_cleanup_goal_window "window-name"
+_tmux_cleanup_goal_window() {
+  local window="$1"
+  local target
+  target="$(_tmux_target "$window")"
+  local pane_count
+  pane_count="$(_tmux_pane_count "$window" 2>/dev/null || echo 0)"
+  [[ "$pane_count" -le 1 ]] && return 0
+
+  local killed=0
+  # Iterate panes in reverse order (highest index first) so killing
+  # a pane doesn't shift the indices of panes we haven't checked yet.
+  local pane_indices
+  pane_indices="$(tmux list-panes -t "$target" -F '#{pane_index}' 2>/dev/null | sort -rn || true)"
+
+  local idx
+  for idx in $pane_indices; do
+    # Never kill pane 0 — that's the goal orchestrator
+    [[ "$idx" == "0" ]] && continue
+
+    local orc_id
+    orc_id="$(tmux show-option -t "${target}.${idx}" -p -v @orc_id 2>/dev/null || true)"
+
+    # Recognized panes have @orc_id starting with goal:, eng:, or review:
+    case "$orc_id" in
+      goal:*|eng:*|review:*) continue ;;
+    esac
+
+    # This pane has no recognized @orc_id — it's an orphan. Kill it.
+    # Orphan panes are never managed by orc (no worktree, no status file,
+    # no teardown path). They are safe to remove regardless of state.
+    tmux kill-pane -t "${target}.${idx}" 2>/dev/null || true
+    ((killed++)) || true
+  done
+
+  # Re-apply main-vertical layout if we cleaned anything up
+  if (( killed > 0 )); then
+    _tmux_apply_goal_layout "$window"
+  fi
+}
+
 # Set a pane title using tmux's select-pane -T (no shell input needed).
 _tmux_set_pane_title() {
   local window="$1"
@@ -861,10 +961,10 @@ _tmux_tile_panes() {
   elif [[ "$hint" == "main-vertical" ]]; then
     layout="main-vertical"
   else
-    # Auto: detect goal windows (pane 0 title starts with "goal:") → always main-vertical
-    local pane0_title
-    pane0_title="$(tmux display-message -t "${target}.0" -p '#{pane_title}' 2>/dev/null || echo "")"
-    if [[ "$pane0_title" == goal:* ]]; then
+    # Auto: detect goal windows via @orc_id on pane 0 (stable — agent CLIs can't override)
+    local pane0_orc_id
+    pane0_orc_id="$(tmux show-option -t "${target}.0" -p -v @orc_id 2>/dev/null || true)"
+    if [[ "$pane0_orc_id" == goal:* ]]; then
       layout="main-vertical"
     else
       # Non-goal windows: pick layout based on pane count and window aspect ratio
@@ -894,6 +994,19 @@ _tmux_tile_panes() {
 _tmux_rebalance() {
   local window="$1"
   local hint="${2:-auto}"
+
+  # For goal windows, always use the canonical goal layout
+  if [[ "$hint" == "auto" ]]; then
+    local target
+    target="$(_tmux_target "$window")"
+    local pane0_orc_id
+    pane0_orc_id="$(tmux show-option -t "${target}.0" -p -v @orc_id 2>/dev/null || true)"
+    if [[ "$pane0_orc_id" == goal:* ]]; then
+      _tmux_apply_goal_layout "$window"
+      _pane_min_size_check "$window" || true
+      return
+    fi
+  fi
 
   # Re-tile
   _tmux_tile_panes "$window" "$hint"
