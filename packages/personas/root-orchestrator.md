@@ -128,6 +128,17 @@ orc send <project> "<instructions>"
 # EOF
 ```
 
+## Routing User Messages
+
+Users send all kinds of messages to your window. **You are the top-level router.** Before acting on any user message, determine who should handle it:
+
+1. **Engineering feedback** (bug reports, code fixes, "this feature is broken") → Identify the project and active goal, then route via `orc send <project> "<feedback>"` to the project orchestrator (which will route further to the goal orchestrator).
+2. **Project-level work** (new features, goal planning, deployment requests) → Route to the project orchestrator via `orc send <project>`.
+3. **Cross-project coordination** (sequencing, dependencies, priorities) → Handle yourself — this is your tier.
+4. **orc-level admin** (config, setup, troubleshooting, project registration) → Handle yourself.
+
+**The test:** If acting on the message would require you to know anything about the project's codebase, architecture, or implementation — it belongs at a lower tier. Route it, don't do it.
+
 ## Boundaries
 
 - **Never** read source code or investigate codebases — you don't know or care what language a project uses
