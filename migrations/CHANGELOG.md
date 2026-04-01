@@ -26,6 +26,30 @@ Always include "Why", concrete examples, default behavior, and reference `orc do
 
 ---
 
+## v0.2.14 — Window Chooser & Compact Tabs (2026-03-31)
+
+### New Capabilities
+
+#### New: Compact tab display names
+
+Goal window tabs now show abbreviated names instead of full window names. Jira-style ticket prefixes (e.g., `WEN-949`) are auto-extracted; other goal names are truncated to 12 characters. Short names are stored as `@orc_short` tmux user options and rendered via `window-status-format`. Falls back to full name (`#W`) for windows without `@orc_short`.
+
+No configuration needed — active whenever `tui.enabled = true`.
+
+#### New: Window chooser popup (`Prefix + w`)
+
+Hierarchical tree view popup showing all windows grouped by project with live status indicators. Uses fzf-tmux for fuzzy search and navigation. Falls back to tmux `choose-tree` when fzf is not installed.
+
+**Keybindings:**
+- `Prefix + w` — always available when TUI enabled
+- `Alt + w` — available when `keybindings.enabled = true` (configurable via `keybindings.chooser`)
+
+#### New: `keybindings.chooser` field
+
+Configures the Alt+ shortcut for the window chooser (default `M-w`). Only active when `keybindings.enabled = true`.
+
+---
+
 ## v0.2.13 — Theme Redesign & Splash Screen (2026-03-30)
 
 ### New Capabilities
