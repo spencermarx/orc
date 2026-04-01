@@ -184,6 +184,8 @@ _config_get() {
 # Detect all available agent CLIs on PATH (space-separated).
 # Order follows adapter integration depth: claude (deepest) → gemini (newest).
 # Returns 0 if any found, 1 if none.
+# NOTE: Candidates are hardcoded alphanumeric names, safe for sed interpolation.
+# If adding candidates with special characters, update init.sh's sed patterns.
 _auto_detect_agent_cmd() {
   local candidate
   local found=""
@@ -218,7 +220,7 @@ _resolve_agent_cmd() {
         if [[ "$result" == *" "* ]]; then
           local rest="${result#* }"
           _info "Using $first (also found: ${rest// /, })" >&2
-          _info "Tip: Set defaults.agent_cmd in config.local.toml to change" >&2
+          _info "Tip: Run 'orc config' or set defaults.agent_cmd in config.local.toml to change" >&2
         else
           _info "Auto-detected agent CLI: $first" >&2
         fi

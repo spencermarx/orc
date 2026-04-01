@@ -304,6 +304,7 @@ _doctor_validate() {
       _info "    To choose explicitly, set in config.local.toml:"
       _info "      [defaults]"
       _info "      agent_cmd = \"<pick one: ${detected_clis// /, }>\""
+      _info "    Or run 'orc init' to choose interactively."
     fi
   fi
 
