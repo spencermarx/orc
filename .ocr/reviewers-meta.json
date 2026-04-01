@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-18T15:25:44.937Z",
+  "generated_at": "2026-04-01T17:09:42.816Z",
   "reviewers": [
     {
       "id": "accessibility",
@@ -336,7 +336,7 @@
         "Documentation",
         "Error Handling"
       ],
-      "is_default": true,
+      "is_default": false,
       "is_builtin": true
     },
     {

@@ -82,6 +82,94 @@ else
   _info "✓ Projects: projects.toml exists"
 fi
 
+# ── Agent CLI selection ─────────────────────────────────────────────────────
+# If multiple CLIs are available and no explicit choice exists, ask the user.
+# Uses _config_get (which parses TOML structurally) to detect existing config,
+# avoiding grep-based heuristics that can't distinguish sections.
+
+existing_agent_cmd="$(_config_get "defaults.agent_cmd" "auto")"
+
+if [[ "$existing_agent_cmd" == "auto" ]]; then
+  detected_clis=""
+  detected_clis="$(_auto_detect_agent_cmd 2>/dev/null)" || true
+
+  if [[ -n "$detected_clis" ]]; then
+    # Count CLIs (space-separated)
+    cli_count=0
+    for _ in $detected_clis; do ((cli_count++)) || true; done
+
+    selected_cli=""
+    if [[ "$cli_count" -gt 1 ]] && [[ -t 0 ]]; then
+      # Multiple CLIs + interactive TTY — prompt user to choose
+      echo ""
+      _info "Multiple agent CLIs detected:"
+      n=0
+      for cli in $detected_clis; do
+        ((n++)) || true
+        _info "  $n) $cli"
+      done
+
+      choice=""
+      while true; do
+        printf '\033[0;34m[orc]\033[0m Choose your default CLI [1-%d]: ' "$cli_count"
+        read -r choice || break
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= cli_count )); then
+          break
+        fi
+        _warn "Invalid choice. Enter a number between 1 and $cli_count."
+      done
+
+      # Pick the Nth CLI from the space-separated list
+      selected_cli=""
+      n=0
+      for cli in $detected_clis; do
+        ((n++)) || true
+        if [[ "$n" -eq "$choice" ]]; then
+          selected_cli="$cli"
+          break
+        fi
+      done
+    elif [[ "$cli_count" -gt 1 ]]; then
+      # Multiple CLIs + non-interactive — auto-select first
+      selected_cli="${detected_clis%% *}"
+      _info "Multiple CLIs available (${detected_clis// /, }); using $selected_cli (non-interactive)."
+      _info "Run 'orc init' interactively or set defaults.agent_cmd to choose."
+    else
+      # Single CLI — use it directly
+      selected_cli="$detected_clis"
+    fi
+
+    # Write the selection into config.local.toml.
+    # CLI names come from hardcoded candidates (claude opencode codex gemini),
+    # so they are safe to interpolate into sed patterns without escaping.
+    if [[ -n "$selected_cli" ]]; then
+      # agent_cmd only exists under [defaults] today; grep is safe.
+      # If schema adds agent_cmd elsewhere, scope this to the [defaults] section.
+      if grep -q '^agent_cmd[[:space:]]*=' "$local_config" 2>/dev/null; then
+        # Replace existing agent_cmd line (avoids duplicates on re-run)
+        case "$OSTYPE" in
+          darwin*) sed -i '' 's|^agent_cmd[[:space:]]*=.*|agent_cmd = "'"$selected_cli"'"|' "$local_config" ;;
+          *)       sed -i  's|^agent_cmd[[:space:]]*=.*|agent_cmd = "'"$selected_cli"'"|' "$local_config" ;;
+        esac
+      elif grep -q '^\[defaults\]' "$local_config" 2>/dev/null; then
+        # [defaults] section exists but no agent_cmd — append after header
+        case "$OSTYPE" in
+          darwin*) sed -i '' '/^\[defaults\]/a\
+agent_cmd = "'"$selected_cli"'"
+' "$local_config" ;;
+          *)       sed -i '/^\[defaults\]/a agent_cmd = "'"$selected_cli"'"' "$local_config" ;;
+        esac
+      else
+        # No uncommented [defaults] — append a new section
+        printf '\n[defaults]\nagent_cmd = "%s"\n' "$selected_cli" >> "$local_config"
+      fi
+      _info "✓ Default CLI: $selected_cli (saved to config.local.toml)"
+    fi
+  fi
+else
+  _info "✓ Agent CLI: $existing_agent_cmd (configured in config)"
+fi
+
 # ── Install slash commands ──────────────────────────────────────────────────
 
 _install_commands "$ORC_ROOT"

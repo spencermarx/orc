@@ -181,18 +181,24 @@ _config_get() {
 # Agent CLI resolution
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Detect the first available agent CLI on PATH.
+# Detect all available agent CLIs on PATH (space-separated).
 # Order follows adapter integration depth: claude (deepest) → gemini (newest).
-# Returns the CLI name or exits 1 if none found.
+# Returns 0 if any found, 1 if none.
+# NOTE: Candidates are hardcoded alphanumeric names, safe for sed interpolation.
+# If adding candidates with special characters, update init.sh's sed patterns.
 _auto_detect_agent_cmd() {
   local candidate
+  local found=""
   for candidate in claude opencode codex gemini; do
     if command -v "$candidate" &>/dev/null; then
-      echo "$candidate"
-      return 0
+      found="${found:+$found }$candidate"
     fi
   done
-  return 1
+  if [[ -z "$found" ]]; then
+    return 1
+  fi
+  echo "$found"
+  return 0
 }
 
 # Resolve the effective agent CLI for this session.
@@ -201,22 +207,28 @@ _auto_detect_agent_cmd() {
 _resolve_agent_cmd() {
   local project_path="${1:-}"
   local configured
-  configured="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  configured="$(_config_get "defaults.agent_cmd" "auto" "$project_path")"
 
   if [[ "$configured" == "auto" ]]; then
     local result
     if result="$(_auto_detect_agent_cmd)"; then
+      local first="${result%% *}"
       # Log once per parent process — $$ is stable across $() subshells.
       # Redirect to stderr so $() captures only the CLI name on stdout.
       local flag="${TMPDIR:-/tmp}/.orc-auto-detected-$$"
       if [[ ! -f "$flag" ]]; then
-        _info "Auto-detected agent CLI: $result" >&2
+        if [[ "$result" == *" "* ]]; then
+          local rest="${result#* }"
+          _info "Using $first (also found: ${rest// /, }). Run 'orc config' to change." >&2
+        else
+          _info "Auto-detected agent CLI: $first" >&2
+        fi
         : > "$flag"
       fi
-      echo "$result"
+      echo "$first"
       return 0
     fi
-    _warn "Auto-detection found no installed agent CLI; falling back to 'claude'."
+    _warn "No agent CLI found (checked: claude, opencode, codex, gemini). Falling back to 'claude'."
     echo "claude"
     return 0
   fi

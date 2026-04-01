@@ -289,6 +289,25 @@ _doctor_validate() {
     _info "  orc doctor --interactive    Interactive agent-assisted migration"
   fi
 
+  # ── Agent CLI advisory (non-blocking) ────────────────────────────────
+  local agent_cmd_configured
+  agent_cmd_configured="$(_config_get "defaults.agent_cmd" "auto")"
+  if [[ "$agent_cmd_configured" == "auto" ]]; then
+    local detected_clis
+    detected_clis="$(_auto_detect_agent_cmd 2>/dev/null)" || true
+    if [[ "$detected_clis" == *" "* ]]; then
+      local first_cli="${detected_clis%% *}"
+      echo ""
+      _info "Agent CLI advisory:"
+      _info "  ? Multiple agent CLIs found (${detected_clis// /, }) but agent_cmd is \"auto\"."
+      _info "    Currently using: $first_cli (first in priority order)."
+      _info "    To choose explicitly, set in config.local.toml:"
+      _info "      [defaults]"
+      _info "      agent_cmd = \"<pick one: ${detected_clis// /, }>\""
+      _info "    Or run 'orc init' to choose interactively."
+    fi
+  fi
+
   # ── TUI recommendations (non-blocking) ──────────────────────────────
   local tui_enabled
   tui_enabled="$(_config_get "tui.enabled" "true")"
