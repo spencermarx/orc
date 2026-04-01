@@ -21,26 +21,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
-<!-- OCR:START -->
-# Open Code Review Instructions
-
-These instructions are for AI assistants handling code review in this project.
-
-Always open `.ocr/skills/SKILL.md` when the request:
-- Asks for code review, PR review, or feedback on changes
-- Mentions "review my code" or similar phrases
-- Wants multi-perspective analysis of code quality
-- Asks to map, organize, or navigate a large changeset
-
-Use `.ocr/skills/SKILL.md` to learn:
-- How to run the 8-phase review workflow
-- How to generate a Code Review Map for large changesets
-- Available reviewer personas and their focus areas
-- Session management and output format
-
-Keep this managed block so 'ocr init' can refresh the instructions.
-
-<!-- OCR:END -->
 
 # Migration Changelog
 
@@ -313,3 +293,24 @@ min_pane_height = 10   # Minimum rows before overflow
 ```
 
 Status bar shows aggregate health (goal count + worker states). Window names are stable identifiers — status indicators (● ✓ ✗) are rendered via `@orc_status` user option in the window-status-format, not embedded in names. Pane borders show titles. Activity monitoring highlights active windows. The `orc status` dashboard groups workers under their parent goal for hierarchical visibility.
+
+<!-- OCR:START -->
+# Open Code Review Instructions
+
+These instructions are for AI assistants handling code review in this project.
+
+Always open `.ocr/skills/SKILL.md` when the request:
+- Asks for code review, PR review, or feedback on changes
+- Mentions "review my code" or similar phrases
+- Wants multi-perspective analysis of code quality
+- Asks to map, organize, or navigate a large changeset
+
+Use `.ocr/skills/SKILL.md` to learn:
+- How to run the 8-phase review workflow
+- How to generate a Code Review Map for large changesets
+- Available reviewer personas and their focus areas
+- Session management and output format
+
+Keep this managed block so 'ocr init' can refresh the instructions.
+
+<!-- OCR:END -->
