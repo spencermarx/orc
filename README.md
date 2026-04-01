@@ -86,7 +86,7 @@ Here is what happens next:
 | `bash` 3.2+ | CLI runtime | Pre-installed on macOS and Linux |
 | Agent CLI | Your AI coding agents — `auto` detects what's installed | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 
-Optional: [`gh`](https://cli.github.com/) — only needed if you want orc to auto-create PRs.
+Optional: [`fzf`](https://github.com/junegunn/fzf) for the command palette and window chooser (graceful fallback without it). [`gh`](https://cli.github.com/) for auto-creating PRs.
 
 ### Install
 
@@ -116,6 +116,10 @@ Pressing Enter launches `orc setup myapp` — a conversational agent that discov
 orc myapp             # Start the project orchestrator
 orc myapp --yolo      # Full autonomy — no confirmation prompts
 ```
+
+<p align="center">
+  <img src="assets/orc-splash-screen.png" alt="Orc splash screen" width="700" />
+</p>
 
 [What does `orc add` touch in my project? &rarr;](docs/setup.md) | [YOLO mode &rarr;](docs/yolo-mode.md)
 
@@ -173,7 +177,7 @@ Every field is natural language. Empty = sensible default. [Full lifecycle deep 
 ### Agent Hierarchy
 
 ```
-Root Orchestrator --- cross-project coordination
+Root Orchestrator --- cross-project coordination, message routing
   +-> Project Orchestrator --- creates goals, monitors progress (isolated worktree)
         +-> Goal Orchestrator --- owns one goal, manages the full lifecycle
               +-> Planner (ephemeral) --- creates plan artifacts
@@ -183,7 +187,26 @@ Root Orchestrator --- cross-project coordination
                     +-- Reviewer (ephemeral) --- reviews the work
 ```
 
-[Concepts deep dive &rarr;](docs/concepts.md) | [Supported agent CLIs &rarr;](docs/agent-clis.md)
+Each orchestrator tier routes user messages to the correct level — engineering feedback flows down to goal orchestrators, project-level decisions stay at the project tier, and cross-project coordination happens at root. [Concepts deep dive &rarr;](docs/concepts.md) | [Supported agent CLIs &rarr;](docs/agent-clis.md)
+
+## TUI Navigation
+
+Orc provides a navigation layer on top of tmux so you can move between agents without memorizing tmux keybindings. All features are enabled by default when `tui.enabled = true`.
+
+| Shortcut | Feature | Description |
+|----------|---------|-------------|
+| `^b Space` | **Command Palette** | Fuzzy-search any window or pane by name, role, or status. Live preview. |
+| `^b w` | **Window Chooser** | Hierarchical tree view — projects, goals, engineers — with live status indicators. |
+| `^b m` | **Context Menu** | Role-aware actions for the current pane (also: right-click or click the `⚔` logo). |
+| `^b ?` | **Help Overlay** | All keybindings, status icons, and role legend at a glance. |
+
+**Compact tabs** — Goal window tabs auto-abbreviate: `wrkbelt/WEN-949-booking-flow-builder-mobile-responsiveness` becomes `WEN-949`. Jira-style ticket prefixes are extracted automatically.
+
+**Breadcrumbs** — The status bar shows your position in the hierarchy: `⚔ orc ▸ myapp ▸ fix-auth ▸ bd-a1b2`.
+
+**Opt-in Alt shortcuts** — Set `keybindings.enabled = true` for prefix-free navigation (`Alt+[/]` prev/next, `Alt+p` palette, `Alt+w` chooser, `Alt+s` dashboard). All remappable.
+
+Requires `fzf` for palette and chooser popups — falls back to tmux `choose-tree` without it. Set `tui.enabled = false` to disable everything and use raw tmux. [Full TUI docs &rarr;](docs/tmux-layout.md)
 
 ## CLI Reference
 
@@ -225,7 +248,7 @@ Slash commands are how agents coordinate within orc. Each role has access to spe
 | `/orc:status` | Any | Dashboard |
 | `/orc:plan` | Orchestrator | Decompose into goals or beads |
 | `/orc:dispatch` | Orchestrator | Spawn workers |
-| `/orc:check` | Orchestrator | Poll statuses |
+| `/orc:check` | Orchestrator | Poll statuses, clean orphan panes |
 | `/orc:complete-goal` | Goal Orch | Trigger delivery |
 | `/orc:view` | Orchestrator | tmux layouts |
 | `/orc:done` | Engineer | Signal review |
@@ -349,7 +372,7 @@ Check `packages/cli/lib/adapters/generic.sh` for the full template placeholder r
 | Notifications | [docs/notifications.md](docs/notifications.md) |
 | Project setup & config doctor | [docs/setup.md](docs/setup.md) |
 | Supported agent CLIs | [docs/agent-clis.md](docs/agent-clis.md) |
-| tmux layout & navigation | [docs/tmux-layout.md](docs/tmux-layout.md) |
+| tmux layout & TUI navigation | [docs/tmux-layout.md](docs/tmux-layout.md) |
 | Customizing personas | [docs/personas.md](docs/personas.md) |
 | YOLO mode | [docs/yolo-mode.md](docs/yolo-mode.md) |
 
