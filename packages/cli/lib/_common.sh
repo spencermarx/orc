@@ -207,7 +207,7 @@ _auto_detect_agent_cmd() {
 _resolve_agent_cmd() {
   local project_path="${1:-}"
   local configured
-  configured="$(_config_get "defaults.agent_cmd" "claude" "$project_path")"
+  configured="$(_config_get "defaults.agent_cmd" "auto" "$project_path")"
 
   if [[ "$configured" == "auto" ]]; then
     local result
@@ -219,8 +219,7 @@ _resolve_agent_cmd() {
       if [[ ! -f "$flag" ]]; then
         if [[ "$result" == *" "* ]]; then
           local rest="${result#* }"
-          _info "Using $first (also found: ${rest// /, })" >&2
-          _info "Tip: Run 'orc config' or set defaults.agent_cmd in config.local.toml to change" >&2
+          _info "Using $first (also found: ${rest// /, }). Run 'orc config' to change." >&2
         else
           _info "Auto-detected agent CLI: $first" >&2
         fi
@@ -229,7 +228,7 @@ _resolve_agent_cmd() {
       echo "$first"
       return 0
     fi
-    _warn "Auto-detection found no installed agent CLI; falling back to 'claude'."
+    _warn "No agent CLI found (checked: claude, opencode, codex, gemini). Falling back to 'claude'."
     echo "claude"
     return 0
   fi

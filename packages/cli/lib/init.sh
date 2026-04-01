@@ -98,6 +98,7 @@ if [[ "$existing_agent_cmd" == "auto" ]]; then
     cli_count=0
     for _ in $detected_clis; do ((cli_count++)) || true; done
 
+    selected_cli=""
     if [[ "$cli_count" -gt 1 ]] && [[ -t 0 ]]; then
       # Multiple CLIs + interactive TTY — prompt user to choose
       echo ""
@@ -111,7 +112,7 @@ if [[ "$existing_agent_cmd" == "auto" ]]; then
       choice=""
       while true; do
         printf '\033[0;34m[orc]\033[0m Choose your default CLI [1-%d]: ' "$cli_count"
-        read -r choice
+        read -r choice || break
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= cli_count )); then
           break
         fi
@@ -142,6 +143,8 @@ if [[ "$existing_agent_cmd" == "auto" ]]; then
     # CLI names come from hardcoded candidates (claude opencode codex gemini),
     # so they are safe to interpolate into sed patterns without escaping.
     if [[ -n "$selected_cli" ]]; then
+      # agent_cmd only exists under [defaults] today; grep is safe.
+      # If schema adds agent_cmd elsewhere, scope this to the [defaults] section.
       if grep -q '^agent_cmd[[:space:]]*=' "$local_config" 2>/dev/null; then
         # Replace existing agent_cmd line (avoids duplicates on re-run)
         case "$OSTYPE" in
